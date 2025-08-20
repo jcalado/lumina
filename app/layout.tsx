@@ -6,6 +6,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { getSiteSettings } from '@/lib/settings';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -31,35 +33,41 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          <FavoritesProvider>
-            <NextIntlClientProvider messages={messages}>
-              <div className="min-h-screen bg-background">
-                <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-                  <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center justify-between">
-                      <h1 className="text-2xl font-bold text-primary">
-                        {siteSettings.siteName}
-                      </h1>
-                      <nav className="flex items-center space-x-6">
-                        <a href="/" className="text-muted-foreground hover:text-foreground transition-colors">
-                          Albums
-                        </a>
-                        <a href="/favorites" className="text-muted-foreground hover:text-foreground transition-colors">
-                          Favorites
-                        </a>
-                      </nav>
+        <ThemeProvider
+          defaultTheme="system"
+          storageKey="lumina-ui-theme"
+        >
+          <AuthProvider>
+            <FavoritesProvider>
+              <NextIntlClientProvider messages={messages}>
+                <div className="min-h-screen bg-background">
+                  <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 dark:bg-slate-950/80">
+                    <div className="container mx-auto px-4 py-4">
+                      <div className="flex items-center justify-between">
+                        <h1 className="text-2xl font-bold text-primary">
+                          {siteSettings.siteName}
+                        </h1>
+                        <nav className="flex items-center space-x-6">
+                          <a href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+                            Albums
+                          </a>
+                          <a href="/favorites" className="text-muted-foreground hover:text-foreground transition-colors">
+                            Favorites
+                          </a>
+                          <ThemeToggle />
+                        </nav>
+                      </div>
                     </div>
-                  </div>
-                </header>
-                <main className="container mx-auto px-4 py-8">
-                  {children}
-                </main>
-              </div>
-              <Toaster />
-            </NextIntlClientProvider>
-          </FavoritesProvider>
-        </AuthProvider>
+                  </header>
+                  <main className="container mx-auto px-4 py-8">
+                    {children}
+                  </main>
+                </div>
+                <Toaster />
+              </NextIntlClientProvider>
+            </FavoritesProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
