@@ -44,14 +44,39 @@ export async function GET(
       }
     }
 
-    // Get signed URL for the image
+    // Get the image data directly from S3
     const s3Service = new S3Service();
     
-    // Since bucket is public, construct direct URL instead of signed URL
-    const directUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET}/${s3Key}`;
-
-    // Redirect to the direct URL
-    return NextResponse.redirect(directUrl);
+    try {
+      // Get the image data from S3
+      const imageBuffer = await s3Service.getObject(s3Key);
+      
+      // Determine content type based on file extension
+      const extension = s3Key.toLowerCase().split('.').pop();
+      let contentType = 'image/jpeg'; // default
+      
+      if (extension === 'png') {
+        contentType = 'image/png';
+      } else if (extension === 'gif') {
+        contentType = 'image/gif';
+      } else if (extension === 'webp') {
+        contentType = 'image/webp';
+      }
+      
+      // Return the image data directly
+      return new NextResponse(new Uint8Array(imageBuffer), {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    } catch (s3Error) {
+      console.error('Error fetching from S3:', s3Error);
+      // Fallback to redirect if direct fetch fails
+      const encodedS3Key = encodeURIComponent(s3Key).replace(/%2F/g, '/');
+      const directUrl = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET}/${encodedS3Key}`;
+      return NextResponse.redirect(directUrl);
+    }
   } catch (error) {
     console.error('Error serving photo:', error);
     return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scanner } from '@/lib/filesystem';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
+import { generateThumbnails } from '@/lib/thumbnails';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -138,7 +139,7 @@ async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string
         await s3.uploadFile(s3Key, fileBuffer, mimeType);
         
         // Create database entry
-        await prisma.photo.create({
+        const newPhoto = await prisma.photo.create({
           data: {
             albumId,
             filename: photoData.filename,
@@ -150,7 +151,16 @@ async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string
           },
         });
         
-        console.log(`Uploaded ${photoData.filename} to S3`);
+        // Queue thumbnail generation for this photo
+        await generateThumbnails({
+          photoId: newPhoto.id,
+          originalPath: photoPath,
+          s3Key: s3Key,
+          albumPath: albumPath,
+          filename: photoData.filename,
+        });
+        
+        console.log(`Uploaded ${photoData.filename} to S3 and generated thumbnails`);
       } catch (error) {
         console.error(`Error uploading ${photoData.filename}:`, error);
       }
