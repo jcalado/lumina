@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Save, Settings, Plus, Trash2 } from "lucide-react"
+import { Save, Settings, Plus, Trash2, Palette } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { LiveAccentPreview } from "@/components/LiveAccentPreview"
 
 interface FooterLink {
   name: string
@@ -18,13 +19,15 @@ interface SiteSettings {
   siteName: string
   footerCopyright: string
   footerLinks: FooterLink[]
+  accentColor: string
 }
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: "Lumina Gallery",
     footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
-    footerLinks: []
+    footerLinks: [],
+    accentColor: "#3b82f6"
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,7 +56,8 @@ export default function AdminSettingsPage() {
         setSettings({
           siteName: fetchedSettings.siteName || "Lumina Gallery",
           footerCopyright: fetchedSettings.footerCopyright || `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
-          footerLinks: footerLinks
+          footerLinks: footerLinks,
+          accentColor: fetchedSettings.accentColor || "#3b82f6"
         })
       } else {
         toast({
@@ -161,6 +165,9 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Live preview component for real-time accent color changes */}
+      <LiveAccentPreview accentColor={settings.accentColor} />
+      
       <div className="flex items-center space-x-2">
         <Settings className="h-8 w-8" />
         <h1 className="text-3xl font-bold">Settings</h1>
@@ -188,6 +195,56 @@ export default function AdminSettingsPage() {
               />
               <p className="text-sm text-muted-foreground">
                 This name appears in the top navigation bar and browser title
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="accentColor">Accent Color</Label>
+              <div className="flex items-center space-x-3">
+                <input
+                  id="accentColor"
+                  type="color"
+                  value={settings.accentColor}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                    handleInputChange("accentColor", e.target.value)
+                  }
+                  className="w-12 h-10 rounded border border-input bg-background cursor-pointer"
+                />
+                <Input
+                  value={settings.accentColor}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                    handleInputChange("accentColor", e.target.value)
+                  }
+                  placeholder="#3b82f6"
+                  pattern="^#[0-9A-Fa-f]{6}$"
+                  maxLength={7}
+                  className="font-mono"
+                />
+                <div className="flex space-x-2">
+                  {/* Preset colors */}
+                  {[
+                    "#3b82f6", // Blue
+                    "#ef4444", // Red
+                    "#10b981", // Green
+                    "#f59e0b", // Yellow
+                    "#8b5cf6", // Purple
+                    "#ec4899", // Pink
+                    "#06b6d4", // Cyan
+                    "#84cc16"  // Lime
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="w-8 h-8 rounded border-2 border-white shadow-sm hover:scale-110 transition-transform"
+                      style={{ backgroundColor: color }}
+                      onClick={() => handleInputChange("accentColor", color)}
+                      title={color}
+                    />
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                The primary accent color used throughout the application for buttons, links, and highlights
               </p>
             </div>
             
@@ -303,7 +360,7 @@ export default function AdminSettingsPage() {
             {/* Header Preview */}
             <div className="border rounded-lg p-4 bg-gray-50 mb-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-primary">
+                <h2 className="text-xl font-bold" style={{ color: settings.accentColor }}>
                   {settings.siteName}
                 </h2>
                 <nav className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -311,9 +368,26 @@ export default function AdminSettingsPage() {
                   <span>Favorites</span>
                 </nav>
               </div>
+              <div className="mt-4 flex space-x-2">
+                <button 
+                  className="px-4 py-2 rounded text-white text-sm font-medium"
+                  style={{ backgroundColor: settings.accentColor }}
+                >
+                  Sample Button
+                </button>
+                <button 
+                  className="px-4 py-2 rounded border text-sm font-medium"
+                  style={{ 
+                    borderColor: settings.accentColor, 
+                    color: settings.accentColor 
+                  }}
+                >
+                  Outline Button
+                </button>
+              </div>
             </div>
             <p className="text-sm text-muted-foreground mb-6">
-              Header preview
+              Header and button preview with accent color
             </p>
 
             {/* Footer Preview */}

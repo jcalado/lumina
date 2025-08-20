@@ -4,6 +4,7 @@ export interface SiteSettings {
   siteName: string
   footerCopyright: string
   footerLinks: string // JSON string of links array
+  accentColor: string
 }
 
 const defaultSettings: SiteSettings = {
@@ -13,7 +14,8 @@ const defaultSettings: SiteSettings = {
     { name: "Privacy Policy", url: "/privacy" },
     { name: "Terms of Service", url: "/terms" },
     { name: "Contact", url: "/contact" }
-  ])
+  ]),
+  accentColor: "#3b82f6" // Default blue color
 }
 
 // Cache for settings to avoid frequent DB calls

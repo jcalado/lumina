@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 import { Footer } from '@/components/Footer';
 import { getSiteSettings } from '@/lib/settings';
 
@@ -38,6 +39,7 @@ export default async function RootLayout({
           defaultTheme="system"
           storageKey="lumina-ui-theme"
         >
+          <ThemeCustomizer accentColor={siteSettings.accentColor} />
           <AuthProvider>
             <FavoritesProvider>
               <NextIntlClientProvider messages={messages}>

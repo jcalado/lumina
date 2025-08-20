@@ -9,7 +9,8 @@ const updateSettingsSchema = z.object({
   footerLinks: z.array(z.object({
     name: z.string().min(1).max(100),
     url: z.string().min(1).max(500)
-  })).optional()
+  })).optional(),
+  accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional()
 })
 
 // GET /api/admin/settings - Get all settings
@@ -32,6 +33,7 @@ export async function GET() {
         { name: "Terms of Service", url: "/terms" },
         { name: "Contact", url: "/contact" }
       ]),
+      accentColor: "#3b82f6",
       ...settingsObj
     }
 
@@ -95,6 +97,21 @@ export async function PUT(request: NextRequest) {
         create: { 
           key: "footerLinks", 
           value: JSON.stringify(validatedData.footerLinks)
+        }
+      })
+    }
+
+    // Update accent color if provided
+    if (validatedData.accentColor !== undefined) {
+      await prisma.siteSettings.upsert({
+        where: { key: "accentColor" },
+        update: { 
+          value: validatedData.accentColor,
+          updatedAt: new Date()
+        },
+        create: { 
+          key: "accentColor", 
+          value: validatedData.accentColor
         }
       })
     }
