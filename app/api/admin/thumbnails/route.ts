@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateMissingThumbnails } from '@/lib/thumbnails';
+import { getBatchProcessingSize } from '@/lib/settings';
 
 interface ThumbnailJob {
   id: string;
@@ -206,6 +207,10 @@ async function processJobInBackground(jobId: string) {
   try {
     console.log(`Starting thumbnail job ${jobId}`);
 
+    // Get batch size from settings
+    const batchSize = await getBatchProcessingSize();
+    console.log(`Using batch processing size: ${batchSize}`);
+
     // Try to update job to running, handle case where table doesn't exist
     try {
       await (prisma as any).thumbnailJob?.update({
@@ -243,11 +248,12 @@ async function processJobInBackground(jobId: string) {
     let thumbnailsCreated = 0;
     const errors: string[] = [];
 
-    for (const photo of photosWithoutThumbnails) {
+    // Helper function to process a single photo
+    const processSinglePhoto = async (photo: any) => {
       // Check if job was stopped
       if (runningJobId !== jobId) {
         console.log(`Job ${jobId} was stopped`);
-        break;
+        return { success: false, thumbnailsCreated: 0, stopped: true };
       }
 
       try {
@@ -261,34 +267,67 @@ async function processJobInBackground(jobId: string) {
           filename: photo.filename,
         });
 
-        thumbnailsCreated += result.thumbnailsCreated;
-        processedPhotos++;
-
-        // Update progress
-        const progress = Math.round((processedPhotos / photosWithoutThumbnails.length) * 100);
-        
-        try {
-          await (prisma as any).thumbnailJob?.update({
-            where: { id: jobId },
-            data: {
-              progress,
-              processedPhotos,
-              thumbnailsCreated,
-            },
-          });
-        } catch (error) {
-          console.log('ThumbnailJob table not available yet');
-        }
-
-        console.log(`Processed ${processedPhotos}/${photosWithoutThumbnails.length} photos (${progress}%)`);
-
+        console.log(`Successfully processed: ${photo.filename} (${result.thumbnailsCreated} thumbnails)`);
+        return { success: true, thumbnailsCreated: result.thumbnailsCreated, stopped: false };
       } catch (error) {
         const errorMessage = `Failed to process ${photo.filename}: ${error instanceof Error ? error.message : String(error)}`;
-        errors.push(errorMessage);
         console.error(errorMessage);
-        
-        // Continue processing other photos
-        processedPhotos++;
+        errors.push(errorMessage);
+        return { success: false, thumbnailsCreated: 0, stopped: false };
+      }
+    };
+
+    // Process photos in batches
+    for (let i = 0; i < photosWithoutThumbnails.length; i += batchSize) {
+      // Check if job was stopped
+      if (runningJobId !== jobId) {
+        console.log(`Job ${jobId} was stopped`);
+        break;
+      }
+
+      const batch = photosWithoutThumbnails.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(photosWithoutThumbnails.length / batchSize)} (${batch.length} photos)`);
+
+      // Process batch concurrently
+      const batchResults = await Promise.all(
+        batch.map(photo => processSinglePhoto(photo))
+      );
+
+      // Check if any processing was stopped
+      const stoppedResult = batchResults.find(result => result.stopped);
+      if (stoppedResult) {
+        console.log(`Job ${jobId} was stopped during batch processing`);
+        break;
+      }
+
+      // Update counters
+      const batchProcessed = batchResults.length;
+      const batchThumbnailsCreated = batchResults.reduce((sum, result) => sum + result.thumbnailsCreated, 0);
+      
+      processedPhotos += batchProcessed;
+      thumbnailsCreated += batchThumbnailsCreated;
+
+      // Update progress every batch
+      const progress = Math.round((processedPhotos / photosWithoutThumbnails.length) * 100);
+      
+      try {
+        await (prisma as any).thumbnailJob?.update({
+          where: { id: jobId },
+          data: {
+            progress,
+            processedPhotos,
+            thumbnailsCreated,
+          },
+        });
+      } catch (error) {
+        console.log('ThumbnailJob table not available yet');
+      }
+
+      console.log(`Batch completed: ${processedPhotos}/${photosWithoutThumbnails.length} photos (${progress}%), ${thumbnailsCreated} thumbnails created`);
+
+      // Small delay between batches to prevent overwhelming the system
+      if (i + batchSize < photosWithoutThumbnails.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 

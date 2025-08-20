@@ -5,6 +5,8 @@ export interface SiteSettings {
   footerCopyright: string
   footerLinks: string // JSON string of links array
   accentColor: string
+  photosPerPage?: string
+  batchProcessingSize?: string
 }
 
 const defaultSettings: SiteSettings = {
@@ -15,7 +17,9 @@ const defaultSettings: SiteSettings = {
     { name: "Terms of Service", url: "/terms" },
     { name: "Contact", url: "/contact" }
   ]),
-  accentColor: "#3b82f6" // Default blue color
+  accentColor: "#3b82f6", // Default blue color
+  photosPerPage: "32",
+  batchProcessingSize: "4"
 }
 
 // Cache for settings to avoid frequent DB calls
@@ -56,4 +60,21 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 export function clearSettingsCache() {
   settingsCache = null
   cacheExpiry = 0
+}
+
+export async function getBatchProcessingSize(): Promise<number> {
+  try {
+    const settings = await getSiteSettings()
+    const batchSize = parseInt(settings.batchProcessingSize || "4", 10)
+    
+    // Ensure batch size is within valid range
+    if (batchSize < 1 || batchSize > 12) {
+      return 4 // Default fallback
+    }
+    
+    return batchSize
+  } catch (error) {
+    console.error("Error getting batch processing size:", error)
+    return 4 // Default fallback
+  }
 }

@@ -7,6 +7,7 @@ import { encode } from 'blurhash';
 import dotenv from 'dotenv';
 import fs from 'fs/promises';
 import path from 'path';
+import { getBatchProcessingSize } from '../lib/settings';
 
 // Load environment variables
 dotenv.config();
@@ -178,6 +179,10 @@ async function processBlurhashJob(jobId: string) {
 
     console.log(`✅ Environment validated - S3 Bucket: ${process.env.S3_BUCKET}`);
 
+    // Get batch size from settings
+    const batchSize = await getBatchProcessingSize();
+    console.log(`Using batch processing size: ${batchSize}`);
+
     // Update job status to running
     await prisma.blurhashJob.update({
       where: { id: jobId },
@@ -214,7 +219,41 @@ async function processBlurhashJob(jobId: string) {
     let s3PhotosUsed = 0;
     const errors: string[] = [];
 
-    for (const photo of photos) {
+    // Helper function to process a single photo
+    const processSinglePhoto = async (photo: any) => {
+      try {
+        console.log(`Processing photo ${photo.filename}`);
+
+        // Get image buffer (local file preferred, S3 fallback)
+        const { buffer: imageBuffer, source } = await getPhotoBuffer(photo.originalPath, photo.s3Key);
+        
+        // Track source usage
+        if (source === 'local') {
+          localPhotosUsed++;
+        } else {
+          s3PhotosUsed++;
+        }
+
+        // Generate blurhash
+        const blurhash = await generateBlurhash(imageBuffer);
+
+        // Update photo with blurhash
+        await prisma.photo.update({
+          where: { id: photo.id },
+          data: { blurhash },
+        });
+
+        return { success: true, filename: photo.filename, source };
+      } catch (error) {
+        const errorMessage = `Error processing photo ${photo.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMessage);
+        errors.push(errorMessage);
+        return { success: false, filename: photo.filename, error: errorMessage };
+      }
+    };
+
+    // Process photos in batches
+    for (let i = 0; i < photos.length; i += batchSize) {
       // Check if job should be stopped (either by flag or database status)
       if (shouldStopJob) {
         console.log('🛑 Job stopped by user request (flag)');
@@ -243,47 +282,32 @@ async function processBlurhashJob(jobId: string) {
         return;
       }
 
-      try {
-        console.log(`Processing photo ${photo.filename} (${processedPhotos + 1}/${totalPhotos})`);
+      const batch = photos.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(photos.length / batchSize)} (${batch.length} photos)`);
 
-        // Get image buffer (local file preferred, S3 fallback)
-        const { buffer: imageBuffer, source } = await getPhotoBuffer(photo.originalPath, photo.s3Key);
-        
-        // Track source usage
-        if (source === 'local') {
-          localPhotosUsed++;
-        } else {
-          s3PhotosUsed++;
-        }
+      // Process batch concurrently
+      const batchResults = await Promise.all(
+        batch.map(photo => processSinglePhoto(photo))
+      );
 
-        // Generate blurhash
-        const blurhash = await generateBlurhash(imageBuffer);
+      // Update counters based on batch results
+      processedPhotos += batchResults.length;
 
-        // Update photo with blurhash
-        await prisma.photo.update({
-          where: { id: photo.id },
-          data: { blurhash },
-        });
+      // Update progress after each batch
+      const progress = Math.round((processedPhotos / totalPhotos) * 100);
+      await prisma.blurhashJob.update({
+        where: { id: jobId },
+        data: {
+          progress,
+          processedPhotos,
+        },
+      });
+      
+      console.log(`Batch completed: ${progress}% (${processedPhotos}/${totalPhotos})`);
 
-        processedPhotos++;
-
-        // Update job progress every 10 photos or at the end
-        if (processedPhotos % 10 === 0 || processedPhotos === totalPhotos) {
-          const progress = Math.round((processedPhotos / totalPhotos) * 100);
-          await prisma.blurhashJob.update({
-            where: { id: jobId },
-            data: {
-              progress,
-              processedPhotos,
-            },
-          });
-          console.log(`Progress: ${progress}% (${processedPhotos}/${totalPhotos})`);
-        }
-      } catch (error) {
-        const errorMessage = `Error processing photo ${photo.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        console.error(errorMessage);
-        errors.push(errorMessage);
-        processedPhotos++;
+      // Small delay between batches to prevent overwhelming the system
+      if (i + batchSize < photos.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 

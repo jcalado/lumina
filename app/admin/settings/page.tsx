@@ -21,6 +21,7 @@ interface SiteSettings {
   footerLinks: FooterLink[]
   accentColor: string
   photosPerPage: string
+  batchProcessingSize: string
 }
 
 interface BlurhashJob {
@@ -40,7 +41,8 @@ export default function AdminSettingsPage() {
     footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
     footerLinks: [],
     accentColor: "#3b82f6",
-    photosPerPage: "32"
+    photosPerPage: "32",
+    batchProcessingSize: "4"
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -71,7 +73,8 @@ export default function AdminSettingsPage() {
           footerCopyright: fetchedSettings.footerCopyright || `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
           footerLinks: footerLinks,
           accentColor: fetchedSettings.accentColor || "#3b82f6",
-          photosPerPage: fetchedSettings.photosPerPage || "32"
+          photosPerPage: fetchedSettings.photosPerPage || "32",
+          batchProcessingSize: fetchedSettings.batchProcessingSize || "4"
         })
       } else {
         toast({
@@ -386,6 +389,24 @@ export default function AdminSettingsPage() {
               />
               <p className="text-sm text-muted-foreground">
                 Number of photos to load initially when viewing an album. More photos will load automatically as users scroll down.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="batchProcessingSize">Batch Processing Size</Label>
+              <Input
+                id="batchProcessingSize"
+                type="number"
+                min="1"
+                max="12"
+                value={settings.batchProcessingSize}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                  handleInputChange("batchProcessingSize", e.target.value)
+                }
+                placeholder="4"
+              />
+              <p className="text-sm text-muted-foreground">
+                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources.
               </p>
             </div>
             

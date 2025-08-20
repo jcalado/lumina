@@ -11,7 +11,8 @@ const updateSettingsSchema = z.object({
     url: z.string().min(1).max(500)
   })).optional(),
   accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  photosPerPage: z.string().regex(/^\d+$/).optional()
+  photosPerPage: z.string().regex(/^\d+$/).optional(),
+  batchProcessingSize: z.string().regex(/^([1-9]|1[0-2])$/).optional()
 })
 
 // GET /api/admin/settings - Get all settings
@@ -36,6 +37,7 @@ export async function GET() {
       ]),
       accentColor: "#3b82f6",
       photosPerPage: "32",
+      batchProcessingSize: "4",
       ...settingsObj
     }
 
@@ -129,6 +131,21 @@ export async function PUT(request: NextRequest) {
         create: { 
           key: "photosPerPage", 
           value: validatedData.photosPerPage
+        }
+      })
+    }
+
+    // Update batch processing size if provided
+    if (validatedData.batchProcessingSize !== undefined) {
+      await prisma.siteSettings.upsert({
+        where: { key: "batchProcessingSize" },
+        update: { 
+          value: validatedData.batchProcessingSize,
+          updatedAt: new Date()
+        },
+        create: { 
+          key: "batchProcessingSize", 
+          value: validatedData.batchProcessingSize
         }
       })
     }

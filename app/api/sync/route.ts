@@ -3,6 +3,7 @@ import { scanner } from '@/lib/filesystem';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
 import { generateThumbnails } from '@/lib/thumbnails';
+import { getBatchProcessingSize } from '@/lib/settings';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -116,7 +117,7 @@ async function syncPhotos(jobId: string) {
         });
 
         // Update photos for this album with progress tracking
-        const { filesProcessed, filesUploaded, issues } = await syncAlbumPhotos(
+        const { filesProcessed, filesUploaded, issues } = await syncAlbumPhotosConcurrent(
           album.id, 
           albumData.photos, 
           albumPath, 
@@ -319,6 +320,173 @@ async function syncAlbumPhotos(
     }
     
     // Call progress callback if provided
+    if (progressCallback) {
+      progressCallback(filesProcessed, filesUploaded);
+    }
+  }
+  
+  return { filesProcessed, filesUploaded, issues };
+}
+
+// Helper function to process items in batches with concurrency control
+async function processBatch<T, R>(
+  items: T[],
+  batchSize: number,
+  processor: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(item => processor(item))
+    );
+    results.push(...batchResults);
+  }
+  
+  return results;
+}
+
+// Updated syncAlbumPhotos function with concurrent processing
+async function syncAlbumPhotosConcurrent(
+  albumId: string, 
+  photos: any[], 
+  albumPath: string, 
+  progressCallback?: (processed: number, uploaded: number) => void,
+  logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
+): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
+  // Get batch size from settings
+  const batchSize = await getBatchProcessingSize();
+  logger?.('info', `Using batch processing size: ${batchSize}`);
+
+  // Get existing photos for this album
+  const existingPhotos = await prisma.photo.findMany({
+    where: { albumId },
+    select: { filename: true, id: true, s3Key: true },
+  });
+
+  const existingFilenames = new Set(existingPhotos.map((p: any) => p.filename));
+  const currentFilenames = new Set(photos.map((p: any) => p.filename));
+
+  let filesProcessed = 0;
+  let filesUploaded = 0;
+  const issues: string[] = [];
+
+  // Remove photos that no longer exist
+  const photosToDelete = existingPhotos.filter((p: any) => !currentFilenames.has(p.filename));
+  for (const photo of photosToDelete) {
+    try {
+      // Delete from S3
+      await s3.deleteObject(photo.s3Key);
+      logger?.('info', `Deleted orphaned photo from S3: ${photo.s3Key}`);
+    } catch (error) {
+      const errorMsg = `Error deleting S3 object ${photo.s3Key}: ${error}`;
+      logger?.('error', errorMsg);
+      issues.push(errorMsg);
+    }
+    // Delete from database
+    await prisma.photo.delete({ where: { id: photo.id } });
+  }
+
+  // Separate new photos from existing ones
+  const newPhotos = photos.filter(photo => !existingFilenames.has(photo.filename));
+  const existingPhotosToUpdate = photos.filter(photo => existingFilenames.has(photo.filename));
+
+  // Process new photos in batches with concurrency
+  if (newPhotos.length > 0) {
+    logger?.('info', `Processing ${newPhotos.length} new photos in batches of ${batchSize}`);
+    
+    const processNewPhoto = async (photoData: any) => {
+      const photoPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath, photoData.filename);
+      const s3Key = s3.generateKey(albumPath, photoData.filename);
+      
+      try {
+        logger?.('info', `Uploading new photo: ${photoData.filename}`);
+        
+        // Upload photo to S3
+        const fileBuffer = await fs.readFile(photoPath);
+        const mimeType = getContentType(photoData.filename);
+        
+        await s3.uploadFile(s3Key, fileBuffer, mimeType);
+        
+        // Create database entry
+        const newPhoto = await prisma.photo.create({
+          data: {
+            albumId,
+            filename: photoData.filename,
+            originalPath: photoPath,
+            s3Key: s3Key,
+            metadata: JSON.stringify(photoData),
+            fileSize: photoData.size,
+            takenAt: photoData.takenAt || null,
+          },
+        });
+        
+        // Queue thumbnail generation for this photo
+        await generateThumbnails({
+          photoId: newPhoto.id,
+          originalPath: photoPath,
+          s3Key: s3Key,
+          albumPath: albumPath,
+          filename: photoData.filename,
+        });
+        
+        logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
+        return { success: true, filename: photoData.filename };
+      } catch (error) {
+        const errorMsg = `Failed to upload ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('error', errorMsg);
+        issues.push(errorMsg);
+        return { success: false, filename: photoData.filename, error: errorMsg };
+      }
+    };
+
+    // Process new photos in batches
+    const newPhotoResults = await processBatch(newPhotos, batchSize, processNewPhoto);
+    
+    // Count successful uploads
+    const successfulUploads = newPhotoResults.filter(result => result.success).length;
+    filesUploaded += successfulUploads;
+    filesProcessed += newPhotos.length;
+
+    // Update progress after new photos
+    if (progressCallback) {
+      progressCallback(filesProcessed, filesUploaded);
+    }
+  }
+
+  // Update existing photos metadata (can be done in parallel as well)
+  if (existingPhotosToUpdate.length > 0) {
+    logger?.('info', `Updating metadata for ${existingPhotosToUpdate.length} existing photos`);
+    
+    const updateExistingPhoto = async (photoData: any) => {
+      try {
+        await prisma.photo.updateMany({
+          where: {
+            albumId,
+            filename: photoData.filename,
+          },
+          data: {
+            metadata: JSON.stringify(photoData),
+            fileSize: photoData.size,
+            takenAt: photoData.takenAt || null,
+          },
+        });
+        logger?.('info', `Updated metadata for existing photo: ${photoData.filename}`);
+        return { success: true, filename: photoData.filename };
+      } catch (error) {
+        const errorMsg = `Failed to update metadata for ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('warn', errorMsg);
+        issues.push(errorMsg);
+        return { success: false, filename: photoData.filename, error: errorMsg };
+      }
+    };
+
+    // Process metadata updates in batches (smaller batch size for DB operations)
+    await processBatch(existingPhotosToUpdate, Math.min(batchSize * 2, 10), updateExistingPhoto);
+    filesProcessed += existingPhotosToUpdate.length;
+
+    // Final progress update
     if (progressCallback) {
       progressCallback(filesProcessed, filesUploaded);
     }

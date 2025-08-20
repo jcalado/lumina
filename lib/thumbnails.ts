@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { prisma } from './prisma';
 import { S3Service } from './s3';
+import { getBatchProcessingSize } from './settings';
 import * as fs from 'fs/promises';
 
 // Thumbnail sizes as per CLAUDE.md spec
@@ -120,6 +121,10 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
 // Helper function to generate thumbnails for existing photos without them
 export async function generateMissingThumbnails(): Promise<{ processed: number; total: number }> {
   try {
+    // Get batch size from settings
+    const batchSize = await getBatchProcessingSize();
+    console.log(`Using batch processing size: ${batchSize}`);
+
     // Find all photos that don't have thumbnails yet
     const photosWithoutThumbnails = await prisma.photo.findMany({
       where: {
@@ -142,9 +147,10 @@ export async function generateMissingThumbnails(): Promise<{ processed: number; 
 
     console.log(`Found ${photosWithoutThumbnails.length} photos without thumbnails`);
 
-    // Generate thumbnails for each photo
+    // Process thumbnails for each photo in batches
     let processed = 0;
-    for (const photo of photosWithoutThumbnails) {
+    
+    const processSinglePhoto = async (photo: any) => {
       try {
         await generateThumbnails({
           photoId: photo.id,
@@ -153,9 +159,32 @@ export async function generateMissingThumbnails(): Promise<{ processed: number; 
           albumPath: photo.album.path,
           filename: photo.filename,
         });
-        processed++;
+        return { success: true, filename: photo.filename };
       } catch (error) {
         console.error(`Failed to generate thumbnails for ${photo.filename}:`, error);
+        return { success: false, filename: photo.filename, error };
+      }
+    };
+
+    // Process photos in batches
+    for (let i = 0; i < photosWithoutThumbnails.length; i += batchSize) {
+      const batch = photosWithoutThumbnails.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(photosWithoutThumbnails.length / batchSize)} (${batch.length} photos)`);
+
+      // Process batch concurrently
+      const batchResults = await Promise.all(
+        batch.map(photo => processSinglePhoto(photo))
+      );
+
+      // Count successful thumbnail generations
+      const successfulInBatch = batchResults.filter(result => result.success).length;
+      processed += successfulInBatch;
+
+      console.log(`Batch completed: ${processed}/${photosWithoutThumbnails.length} photos processed`);
+
+      // Small delay between batches to prevent overwhelming the system
+      if (i + batchSize < photosWithoutThumbnails.length) {
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
 
