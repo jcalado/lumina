@@ -178,6 +178,30 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE() {
+  try {
+    // Try to delete all thumbnail jobs, handle case where table doesn't exist
+    try {
+      await (prisma as any).thumbnailJob?.deleteMany({});
+    } catch (error) {
+      console.log('ThumbnailJob table not available yet');
+    }
+
+    runningJobId = null;
+
+    return NextResponse.json({
+      success: true,
+      message: 'Thumbnail job logs cleared',
+    });
+  } catch (error) {
+    console.error('Error clearing thumbnail job logs:', error);
+    return NextResponse.json(
+      { error: 'Failed to clear thumbnail job logs' },
+      { status: 500 }
+    );
+  }
+}
+
 async function processJobInBackground(jobId: string) {
   try {
     console.log(`Starting thumbnail job ${jobId}`);
