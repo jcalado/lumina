@@ -5,6 +5,11 @@ import { z } from "zod"
 
 const updateSettingsSchema = z.object({
   siteName: z.string().min(1).max(100),
+  footerCopyright: z.string().max(500).optional(),
+  footerLinks: z.array(z.object({
+    name: z.string().min(1).max(100),
+    url: z.string().min(1).max(500)
+  })).optional()
 })
 
 // GET /api/admin/settings - Get all settings
@@ -21,6 +26,12 @@ export async function GET() {
     // Provide defaults if not set
     const defaultSettings = {
       siteName: "Lumina Gallery",
+      footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
+      footerLinks: JSON.stringify([
+        { name: "Privacy Policy", url: "/privacy" },
+        { name: "Terms of Service", url: "/terms" },
+        { name: "Contact", url: "/contact" }
+      ]),
       ...settingsObj
     }
 
@@ -57,6 +68,36 @@ export async function PUT(request: NextRequest) {
         value: validatedData.siteName 
       }
     })
+
+    // Update footer copyright if provided
+    if (validatedData.footerCopyright !== undefined) {
+      await prisma.siteSettings.upsert({
+        where: { key: "footerCopyright" },
+        update: { 
+          value: validatedData.footerCopyright,
+          updatedAt: new Date()
+        },
+        create: { 
+          key: "footerCopyright", 
+          value: validatedData.footerCopyright 
+        }
+      })
+    }
+
+    // Update footer links if provided
+    if (validatedData.footerLinks !== undefined) {
+      await prisma.siteSettings.upsert({
+        where: { key: "footerLinks" },
+        update: { 
+          value: JSON.stringify(validatedData.footerLinks),
+          updatedAt: new Date()
+        },
+        create: { 
+          key: "footerLinks", 
+          value: JSON.stringify(validatedData.footerLinks)
+        }
+      })
+    }
 
     // Return updated settings
     const settings = await prisma.siteSettings.findMany()

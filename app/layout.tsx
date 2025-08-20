@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Footer } from '@/components/Footer';
 import { getSiteSettings } from '@/lib/settings';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -62,6 +63,7 @@ export default async function RootLayout({
                   <main className="container mx-auto px-4 py-8">
                     {children}
                   </main>
+                  <Footer />
                 </div>
                 <Toaster />
               </NextIntlClientProvider>

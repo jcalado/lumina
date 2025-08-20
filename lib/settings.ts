@@ -2,10 +2,18 @@ import { prisma } from "@/lib/prisma"
 
 export interface SiteSettings {
   siteName: string
+  footerCopyright: string
+  footerLinks: string // JSON string of links array
 }
 
 const defaultSettings: SiteSettings = {
-  siteName: "Lumina Gallery"
+  siteName: "Lumina Gallery",
+  footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
+  footerLinks: JSON.stringify([
+    { name: "Privacy Policy", url: "/privacy" },
+    { name: "Terms of Service", url: "/terms" },
+    { name: "Contact", url: "/contact" }
+  ])
 }
 
 // Cache for settings to avoid frequent DB calls
