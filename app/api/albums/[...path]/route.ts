@@ -98,21 +98,51 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       for (const subAlbum of subAlbums) {
         if (subAlbum._count.photos > 0) {
           try {
-            const photos = await prisma.photo.findMany({
-              where: {
-                albumId: subAlbum.id,
-              },
-              select: {
-                id: true,
-                filename: true,
-              },
-              take: 5,
-              orderBy: {
-                takenAt: 'asc',
-              },
-            });
+            // Get photos distributed across the timeline for better scrubbing experience
+            const totalPhotos = subAlbum._count.photos;
+            let photos = [];
+            
+            if (totalPhotos <= 5) {
+              // If 5 or fewer photos, get them all
+              photos = await prisma.photo.findMany({
+                where: {
+                  albumId: subAlbum.id,
+                },
+                select: {
+                  id: true,
+                  filename: true,
+                },
+                orderBy: {
+                  takenAt: 'asc',
+                },
+              });
+            } else {
+              // If more than 5 photos, get a distributed sample
+              // Get photos at regular intervals across the timeline
+              const interval = Math.floor(totalPhotos / 5);
+              for (let i = 0; i < 5; i++) {
+                const skip = i * interval;
+                const photo = await prisma.photo.findFirst({
+                  where: {
+                    albumId: subAlbum.id,
+                  },
+                  select: {
+                    id: true,
+                    filename: true,
+                  },
+                  skip: skip,
+                  orderBy: {
+                    takenAt: 'asc',
+                  },
+                });
+                if (photo) {
+                  photos.push(photo);
+                }
+              }
+            }
+            
             (subAlbum as any).photos = photos;
-            console.log(`Sub-album ${subAlbum.name} has ${photos.length} photos`);
+            console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing`);
           } catch (photoError) {
             console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
             (subAlbum as any).photos = [];
@@ -138,12 +168,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         subAlbumsCount: subAlbums.length,
       },
       subAlbums: subAlbums.map((subAlbum: any) => {
-        // Select a random photo for thumbnail if available
-        const randomPhoto = subAlbum.photos && subAlbum.photos.length > 0 
-          ? subAlbum.photos[Math.floor(Math.random() * subAlbum.photos.length)]
-          : null;
+        // Return all photos for scrubbing effect (up to 5)
+        const photos = subAlbum.photos || [];
         
-        console.log(`Sub-album ${subAlbum.name}: ${subAlbum.photos?.length || 0} photos, random photo:`, randomPhoto?.id);
+        console.log(`Sub-album ${subAlbum.name}: ${photos.length} photos available for scrubbing`);
         
         return {
           id: subAlbum.id,
@@ -153,10 +181,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           photoCount: subAlbum._count.photos,
           totalPhotoCount: subAlbum._count.photos,
           subAlbumsCount: 0, // Can be calculated if needed
-          thumbnail: randomPhoto ? {
-            photoId: randomPhoto.id,
-            filename: randomPhoto.filename,
-          } : null,
+          thumbnails: photos.map((photo: any) => ({
+            photoId: photo.id,
+            filename: photo.filename,
+          })),
         };
       }),
       photos: album.photos,

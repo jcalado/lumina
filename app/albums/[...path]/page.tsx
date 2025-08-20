@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Image, Download, Heart, Folder } from 'lucide-react';
+import { ArrowLeft, Image, Download, Heart, Folder, Images } from 'lucide-react';
 import { PhotoImage } from '@/components/PhotoImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
-
 
 import {useTranslations} from 'next-intl';
 
@@ -38,10 +37,10 @@ interface Album {
   photoCount: number;
   totalPhotoCount?: number;
   subAlbumsCount?: number;
-  thumbnail?: {
+  thumbnails: {
     photoId: string;
     filename: string;
-  } | null;
+  }[];
 }
 
 interface AlbumData {
@@ -54,6 +53,96 @@ interface AlbumPageProps {
   params: Promise<{
     path: string[];
   }>;
+}
+
+// Component for scrubbing thumbnails
+interface ScrubThumbnailProps {
+  thumbnails: { photoId: string; filename: string }[];
+  albumName: string;
+}
+
+function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovering, setIsHovering] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current || thumbnails.length <= 1) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    const progress = Math.max(0, Math.min(1, x / width));
+    const index = Math.floor(progress * thumbnails.length);
+    const clampedIndex = Math.max(0, Math.min(thumbnails.length - 1, index));
+    
+    console.log(`Scrubbing: x=${x}, width=${width}, progress=${progress}, index=${clampedIndex}`);
+    setCurrentIndex(clampedIndex);
+  };
+
+  const handleMouseEnter = () => {
+    console.log(`Mouse entered ${albumName} scrub area`);
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    console.log(`Mouse left ${albumName} scrub area`);
+    setIsHovering(false);
+    setCurrentIndex(0); // Reset to first image when not hovering
+  };
+
+  if (thumbnails.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+        <Folder className="w-12 h-12 text-muted-foreground/50" />
+      </div>
+    );
+  }
+
+  const currentThumbnail = thumbnails[currentIndex];
+  console.log(`${albumName}: Rendering thumbnail ${currentIndex + 1}/${thumbnails.length} - ${currentThumbnail?.photoId}`);
+
+  return (
+    <div 
+      ref={containerRef}
+      className="w-full h-full relative overflow-hidden cursor-pointer"
+      onMouseMove={handleMouseMove}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <PhotoImage
+        photoId={currentThumbnail.photoId}
+        filename={currentThumbnail.filename}
+        size="medium"
+        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+        alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
+      />
+      
+      {/* Progress indicator - only show when hovering and multiple images */}
+      {isHovering && thumbnails.length > 1 && (
+        <div className="absolute bottom-2 left-2 right-2">
+          <div className="flex gap-1">
+            {thumbnails.map((_, index) => (
+              <div
+                key={index}
+                className={`h-1 flex-1 rounded-full transition-all duration-200 ${
+                  index === currentIndex ? 'bg-white shadow-lg' : 'bg-white/40'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Image counter - show in top right when hovering */}
+      {/* {isHovering && thumbnails.length > 1 && (
+        <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+          {currentIndex + 1}/{thumbnails.length}
+        </div>
+      )} */}
+
+    </div>
+  );
 }
 
 export default function AlbumPage({ params }: AlbumPageProps) {
@@ -283,40 +372,31 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <h2 className="text-xl font-semibold mb-4">Sub-albums</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
             {subAlbums.map((subAlbum) => (
-              <Link key={subAlbum.id} href={`/albums/${encodeURIComponent(subAlbum.path)}`}>
+              <div key={subAlbum.id} className="relative">
                 <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
                   <CardContent className="p-0">
                     {/* Thumbnail Image */}
                     <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
-                      {subAlbum.thumbnail ? (
-                        <PhotoImage
-                          photoId={subAlbum.thumbnail.photoId}
-                          filename={subAlbum.thumbnail.filename}
-                          size="medium"
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                          alt={`Thumbnail for ${subAlbum.name}`}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
-                          <Folder className="w-12 h-12 text-muted-foreground/50" />
-                        </div>
-                      )}
+                      <ScrubThumbnail 
+                        thumbnails={subAlbum.thumbnails} 
+                        albumName={subAlbum.name} 
+                      />
                       
-                      {/* Overlay with folder icon and badges */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
-                        <div className="absolute top-2 left-2">
+                      {/* Overlay with folder icon and badges - pointer-events-none to allow scrubbing */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
+                        <div className="absolute top-2 left-2 pointer-events-auto">
                           <div className="bg-black/60 rounded-full p-1.5">
-                            <Folder className="w-4 h-4 text-white" />
+                            <Images className="w-4 h-4 text-white" />
                           </div>
                         </div>
-                        <div className="absolute top-2 right-2 flex gap-1">
+                        <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
                           {subAlbum.totalPhotoCount && subAlbum.totalPhotoCount > 0 && (
                             <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
                               <Image className="w-3 h-3 mr-1" />
                               {subAlbum.totalPhotoCount}
                             </Badge>
                           )}
-                          {subAlbum.subAlbumsCount && subAlbum.subAlbumsCount > 0 && (
+                          {subAlbum.subAlbumsCount > 0 && (
                             <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
                               <Folder className="w-3 h-3 mr-1" />
                               {subAlbum.subAlbumsCount}
@@ -326,20 +406,22 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                       </div>
                     </div>
                     
-                    {/* Album Details */}
-                    <div className="p-4">
-                      <h3 className="font-medium text-sm mb-1 line-clamp-2">
-                        {subAlbum.name}
-                      </h3>
-                      {subAlbum.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {subAlbum.description}
-                        </p>
-                      )}
-                    </div>
+                    {/* Album Details - This area will handle the link navigation */}
+                    <Link href={`/albums/${encodeURIComponent(subAlbum.path)}`}>
+                      <div className="p-4 hover:bg-muted/50 transition-colors">
+                        <h3 className="font-medium text-sm mb-1 line-clamp-2">
+                          {subAlbum.name}
+                        </h3>
+                        {subAlbum.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {subAlbum.description}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
                   </CardContent>
                 </Card>
-              </Link>
+              </div>
             ))}
           </div>
         </div>
