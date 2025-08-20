@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Save, Play, Pause, RotateCcw, Activity, Clock, CheckCircle, XCircle } from "lucide-react"
+import { Save, Play, Pause, RotateCcw, Activity, Clock, CheckCircle, XCircle, Image } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface BlurhashJob {
@@ -19,6 +19,19 @@ interface BlurhashJob {
   createdAt: string
 }
 
+interface ThumbnailJob {
+  id: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  progress: number
+  totalPhotos: number
+  processedPhotos: number
+  thumbnailsCreated: number
+  startedAt: string | null
+  completedAt: string | null
+  errors: string | null
+  createdAt: string
+}
+
 interface JobStats {
   totalPhotos: number
   photosWithBlurhash: number
@@ -26,25 +39,40 @@ interface JobStats {
   lastCompletedJob?: BlurhashJob
 }
 
+interface ThumbnailStats {
+  totalPhotos: number
+  photosWithThumbnails: number
+  photosWithoutThumbnails: number
+  totalThumbnails: number
+  completionPercentage: number
+  lastCompletedJob?: ThumbnailJob
+}
+
 export default function AdminJobsPage() {
   const [blurhashJob, setBlurhashJob] = useState<BlurhashJob | null>(null)
+  const [thumbnailJob, setThumbnailJob] = useState<ThumbnailJob | null>(null)
   const [jobStats, setJobStats] = useState<JobStats | null>(null)
+  const [thumbnailStats, setThumbnailStats] = useState<ThumbnailStats | null>(null)
   const [blurhashJobLoading, setBlurhashJobLoading] = useState(false)
+  const [thumbnailJobLoading, setThumbnailJobLoading] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchBlurhashJobs()
+    fetchThumbnailJobs()
     fetchJobStats()
+    fetchThumbnailStats()
     
     // Poll for job updates every 3 seconds if there's a running job
     const interval = setInterval(() => {
-      if (blurhashJob?.status === 'RUNNING') {
+      if (blurhashJob?.status === 'RUNNING' || thumbnailJob?.status === 'RUNNING') {
         fetchBlurhashJobs()
+        fetchThumbnailJobs()
       }
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [blurhashJob?.status])
+  }, [blurhashJob?.status, thumbnailJob?.status])
 
   const fetchBlurhashJobs = async () => {
     try {
@@ -62,6 +90,20 @@ export default function AdminJobsPage() {
     }
   }
 
+  const fetchThumbnailJobs = async () => {
+    try {
+      const response = await fetch("/api/admin/thumbnails")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.jobs && data.jobs.length > 0) {
+          setThumbnailJob(data.jobs[0]) // Get the latest job
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching thumbnail jobs:', error)
+    }
+  }
+
   const fetchJobStats = async () => {
     try {
       const response = await fetch("/api/admin/jobs/stats")
@@ -71,6 +113,20 @@ export default function AdminJobsPage() {
       }
     } catch (error) {
       console.error('Error fetching job stats:', error)
+    }
+  }
+
+  const fetchThumbnailStats = async () => {
+    try {
+      const response = await fetch("/api/thumbnails/status")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.stats) {
+          setThumbnailStats(data.stats)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching thumbnail stats:', error)
     }
   }
 
@@ -145,6 +201,80 @@ export default function AdminJobsPage() {
       })
     } finally {
       setBlurhashJobLoading(false)
+    }
+  }
+
+  const handleStartThumbnailJob = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "start" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Thumbnail processing started"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to start thumbnail job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start thumbnail job",
+        variant: "destructive"
+      })
+    } finally {
+      setThumbnailJobLoading(false)
+    }
+  }
+
+  const handleStopThumbnailJob = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "stop" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Thumbnail processing stop requested"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to stop thumbnail job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to stop thumbnail job",
+        variant: "destructive"
+      })
+    } finally {
+      setThumbnailJobLoading(false)
     }
   }
 
@@ -434,25 +564,234 @@ export default function AdminJobsPage() {
           </CardContent>
         </Card>
 
-        {/* Future Jobs Placeholder */}
-        <Card className="opacity-60">
+        {/* Thumbnail Processing Job */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Clock className="h-5 w-5" />
-              <span>Thumbnail Generation</span>
-              <Badge className="border border-input text-foreground">Coming Soon</Badge>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Image className="h-5 w-5" />
+                <span>Thumbnail Processing</span>
+              </div>
+              {thumbnailJob && getStatusBadge(thumbnailJob.status)}
             </CardTitle>
             <CardDescription>
-              Background thumbnail processing and optimization
+              Background thumbnail processing and optimization for fast image loading
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Future enhancement for processing and optimizing photo thumbnails in the background.
-            </p>
+          <CardContent className="space-y-6">
+            {/* Job Statistics Overview */}
+            {thumbnailStats && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-primary">{thumbnailStats.totalPhotos}</div>
+                  <div className="text-sm text-muted-foreground">Total Photos</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{thumbnailStats.photosWithThumbnails}</div>
+                  <div className="text-sm text-muted-foreground">With Thumbnails</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-600">{thumbnailStats.photosWithoutThumbnails}</div>
+                  <div className="text-sm text-muted-foreground">Remaining</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{thumbnailStats.totalThumbnails}</div>
+                  <div className="text-sm text-muted-foreground">Total Thumbnails</div>
+                </div>
+              </div>
+            )}
+
+            {/* Current Job Status */}
+            {thumbnailJob ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Current Job Status</h4>
+                  <span className="text-sm text-muted-foreground">
+                    Started: {formatDate(thumbnailJob.startedAt)}
+                  </span>
+                </div>
+                
+                {thumbnailJob.status === 'RUNNING' && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress:</span>
+                      <span className="font-medium">{thumbnailJob.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div 
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                        style={{ width: `${thumbnailJob.progress}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Processed:</span>
+                        <div className="font-medium">{thumbnailJob.processedPhotos} / {thumbnailJob.totalPhotos}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Created:</span>
+                        <div className="font-medium">{thumbnailJob.thumbnailsCreated} thumbnails</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Remaining:</span>
+                        <div className="font-medium">{thumbnailJob.totalPhotos - thumbnailJob.processedPhotos}</div>
+                      </div>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Duration:</span>
+                      <span className="ml-2 font-medium">
+                        {formatDuration(thumbnailJob.startedAt, null)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {thumbnailJob.status === 'COMPLETED' && (
+                  <div className="space-y-2 p-4 border rounded-lg bg-green-50">
+                    <div className="flex items-center text-green-700">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Job Completed Successfully</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm text-green-700">
+                      <div>
+                        <span>Processed:</span>
+                        <span className="ml-2 font-medium">{thumbnailJob.processedPhotos} photos</span>
+                      </div>
+                      <div>
+                        <span>Created:</span>
+                        <span className="ml-2 font-medium">{thumbnailJob.thumbnailsCreated} thumbnails</span>
+                      </div>
+                      <div>
+                        <span>Duration:</span>
+                        <span className="ml-2 font-medium">
+                          {formatDuration(thumbnailJob.startedAt, thumbnailJob.completedAt)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-green-700">
+                      <span>Completed:</span>
+                      <span className="ml-2">{formatDate(thumbnailJob.completedAt)}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {thumbnailJob.status === 'FAILED' && (
+                  <div className="space-y-2 p-4 border rounded-lg bg-red-50">
+                    <div className="flex items-center text-red-700">
+                      <XCircle className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Job Failed</span>
+                    </div>
+                    <div className="text-sm text-red-700">
+                      <span>Failed at:</span>
+                      <span className="ml-2">{formatDate(thumbnailJob.completedAt)}</span>
+                    </div>
+                    {thumbnailJob.errors && (
+                      <div className="text-sm text-red-700">
+                        <span>Errors:</span>
+                        <div className="mt-1 p-2 bg-red-100 rounded text-xs font-mono">
+                          {JSON.parse(thumbnailJob.errors).slice(0, 3).map((error: string, index: number) => (
+                            <div key={index}>{error}</div>
+                          ))}
+                          {JSON.parse(thumbnailJob.errors).length > 3 && (
+                            <div>... and {JSON.parse(thumbnailJob.errors).length - 3} more errors</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {thumbnailJob.status === 'PENDING' && (
+                  <div className="p-4 border rounded-lg bg-yellow-50">
+                    <div className="flex items-center text-yellow-700">
+                      <Clock className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Job Pending</span>
+                    </div>
+                    <div className="text-sm text-yellow-700 mt-1">
+                      Waiting to start processing...
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Image className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No thumbnail jobs found</p>
+                <p className="text-sm">Start a new job to generate thumbnails</p>
+              </div>
+            )}
+
+            {/* Last Completed Job Summary */}
+            {thumbnailStats?.lastCompletedJob && thumbnailStats.lastCompletedJob.id !== thumbnailJob?.id && (
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3">Last Completed Job</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <span className="text-muted-foreground">Processed:</span>
+                    <div className="font-medium">{thumbnailStats.lastCompletedJob.processedPhotos} photos</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Created:</span>
+                    <div className="font-medium">{thumbnailStats.lastCompletedJob.thumbnailsCreated} thumbnails</div>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Duration:</span>
+                    <span className="ml-2">
+                      {formatDuration(thumbnailStats.lastCompletedJob.startedAt, thumbnailStats.lastCompletedJob.completedAt)}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Completed:</span>
+                    <span className="ml-2">{formatDate(thumbnailStats.lastCompletedJob.completedAt)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                onClick={handleStartThumbnailJob}
+                disabled={thumbnailJobLoading || thumbnailJob?.status === 'RUNNING'}
+                className="flex items-center space-x-2"
+              >
+                <Play className="h-4 w-4" />
+                <span>
+                  {thumbnailJob?.status === 'RUNNING' 
+                    ? 'Processing...' 
+                    : thumbnailStats?.photosWithoutThumbnails === 0
+                    ? 'Reprocess All Photos'
+                    : `Process ${thumbnailStats?.photosWithoutThumbnails || 0} Remaining Photos`
+                  }
+                </span>
+              </Button>
+
+              {thumbnailJob?.status === 'RUNNING' && (
+                <Button
+                  onClick={handleStopThumbnailJob}
+                  disabled={thumbnailJobLoading}
+                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Pause className="h-4 w-4" />
+                  <span>Stop Processing</span>
+                </Button>
+              )}
+              
+              <Button
+                onClick={() => {
+                  fetchThumbnailJobs()
+                  fetchThumbnailStats()
+                }}
+                className="flex items-center space-x-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span>Refresh</span>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
+        {/* Future Jobs Placeholder */}
         <Card className="opacity-60">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">

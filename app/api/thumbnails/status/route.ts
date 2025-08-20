@@ -14,8 +14,23 @@ export async function GET() {
     });
     
     const photosWithoutThumbnails = totalPhotos - photosWithThumbnails;
-    
     const totalThumbnails = await prisma.thumbnail.count();
+    
+    // Get the last completed thumbnail job (once the database is updated)
+    let lastCompletedJob = null;
+    try {
+      lastCompletedJob = await (prisma as any).thumbnailJob?.findFirst({
+        where: {
+          status: 'COMPLETED',
+        },
+        orderBy: {
+          completedAt: 'desc',
+        },
+      });
+    } catch (error) {
+      // thumbnailJob table doesn't exist yet, ignore
+      console.log('ThumbnailJob table not available yet');
+    }
     
     return NextResponse.json({
       success: true,
@@ -25,6 +40,7 @@ export async function GET() {
         photosWithoutThumbnails,
         totalThumbnails,
         completionPercentage: totalPhotos > 0 ? Math.round((photosWithThumbnails / totalPhotos) * 100) : 100,
+        lastCompletedJob,
       },
     });
   } catch (error) {
