@@ -62,7 +62,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   useEffect(() => {
     const initializePage = async () => {
       const resolvedParams = await params;
-      const path = resolvedParams.path.join('/');
+      // Decode each path segment before joining
+      const decodedSegments = resolvedParams.path.map(segment => decodeURIComponent(segment));
+      const path = decodedSegments.join('/');
+      console.log('Raw URL params:', resolvedParams.path);
+      console.log('Decoded segments:', decodedSegments);
+      console.log('Joined path for albumPath:', path);
+      console.log('albumPath set to:', path);
       setAlbumPath(path);
     };
     
@@ -160,6 +166,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       setIsDownloading(true);
       
       console.log('Starting download for album path:', albumPath);
+      console.log('albumPath type:', typeof albumPath);
+      console.log('albumPath length:', albumPath.length);
+      console.log('albumPath JSON:', JSON.stringify(albumPath));
       
       const response = await fetch('/api/download/album', {
         method: 'POST',

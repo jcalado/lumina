@@ -29,8 +29,16 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('Found album:', album ? album.name : 'null');
+    console.log('Searching for path exactly:', JSON.stringify(albumPath));
 
     if (!album) {
+      // Let's also try to find similar paths for debugging
+      const allAlbums = await prisma.album.findMany({
+        select: { path: true, name: true }
+      });
+      console.log('Available album paths:');
+      allAlbums.forEach((a: any) => console.log(`  "${a.path}" (${a.name})`));
+      
       return NextResponse.json({ error: 'Album not found' }, { status: 404 });
     }
 
