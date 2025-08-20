@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock } from "lucide-react"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface Album {
@@ -16,6 +15,41 @@ interface Album {
   localFilesSafeDelete: boolean
   lastSyncAt: string | null
   photoCount: number
+}
+
+interface AlbumComparison {
+  albumName: string
+  albumPath: string
+  localFiles: string[]
+  s3Files: string[]
+  databaseFiles: string[]
+  localOnly: string[]
+  s3Only: string[]
+  databaseOnly: string[]
+  missing: {
+    localMissingFromS3: string[]
+    localMissingFromDB: string[]
+    s3MissingFromLocal: string[]
+    s3MissingFromDB: string[]
+    dbMissingFromLocal: string[]
+    dbMissingFromS3: string[]
+  }
+  detailedComparison: Array<{
+    filename: string
+    localSize?: number
+    dbSize?: number
+    localModified?: string
+    dbCreated?: string
+    s3Key?: string
+    localError?: string
+  }>
+  summary: {
+    totalLocal: number
+    totalS3: number
+    totalDatabase: number
+    inconsistencies: number
+  }
+  errors: string[]
 }
 
 interface SyncJob {
@@ -38,6 +72,9 @@ export default function SyncPage() {
   const [currentSync, setCurrentSync] = useState<SyncJob | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [comparingAlbums, setComparingAlbums] = useState<Set<string>>(new Set())
+  const [albumComparisons, setAlbumComparisons] = useState<Map<string, AlbumComparison>>(new Map())
+  const [showComparisons, setShowComparisons] = useState(false)
   const { toast } = useToast()
 
   const fetchData = async () => {
@@ -110,6 +147,51 @@ export default function SyncPage() {
     }
   }
 
+  const compareAlbum = async (albumId: string) => {
+    setComparingAlbums(prev => new Set([...prev, albumId]))
+    
+    try {
+      const response = await fetch(`/api/admin/albums/${albumId}/compare`, {
+        method: 'POST'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setAlbumComparisons(prev => new Map([...prev, [albumId, data.comparison]]))
+        setShowComparisons(true)
+        
+        // If album was marked as safe to delete, refresh the albums list
+        if (data.albumUpdated) {
+          await fetchData()
+          toast({
+            title: "Album Updated",
+            description: `Comparison complete with no inconsistencies. Album marked as safe to delete.`
+          })
+        } else {
+          toast({
+            title: "Comparison Complete",
+            description: `Found ${data.comparison.summary.inconsistencies} inconsistencies`
+          })
+        }
+      } else {
+        throw new Error(data.error || 'Comparison failed')
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to compare album",
+        variant: "destructive"
+      })
+    } finally {
+      setComparingAlbums(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(albumId)
+        return newSet
+      })
+    }
+  }
+
   useEffect(() => {
     fetchData()
     const interval = setInterval(fetchData, 2000) // Poll every 2 seconds
@@ -157,7 +239,12 @@ export default function SyncPage() {
                 <span>Overall Progress</span>
                 <span>{currentSync.progress}%</span>
               </div>
-              <Progress value={currentSync.progress} />
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                  style={{ width: `${currentSync.progress}%` }}
+                ></div>
+              </div>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -341,6 +428,182 @@ export default function SyncPage() {
         </CardContent>
       </Card>
 
+      {/* Comparison Results */}
+      {showComparisons && albumComparisons.size > 0 && (
+        <div className="bg-white rounded-lg border shadow">
+          <div className="p-4 border-b">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-semibold">Album Comparison Results</h2>
+                <p className="text-sm text-muted-foreground">
+                  Comparing albums across local filesystem, S3 storage, and database
+                </p>
+              </div>
+              <Button 
+                className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() => setShowComparisons(false)}
+              >
+                Hide Results
+              </Button>
+            </div>
+          </div>
+          
+          <div className="p-4 space-y-6">
+            {Array.from(albumComparisons.entries()).map(([albumId, comparison]) => (
+              <div key={albumId} className="border rounded-lg p-4">
+                <h3 className="text-md font-semibold mb-3">{comparison.albumName}</h3>
+                
+                {/* Summary Stats */}
+                <div className="grid grid-cols-4 gap-4 mb-4">
+                  <div className="text-center p-3 border rounded">
+                    <FileText className="h-6 w-6 mx-auto mb-2 text-blue-500" />
+                    <div className="text-2xl font-bold">{comparison.localFiles.length}</div>
+                    <div className="text-sm text-muted-foreground">Local Files</div>
+                  </div>
+                  <div className="text-center p-3 border rounded">
+                    <Cloud className="h-6 w-6 mx-auto mb-2 text-green-500" />
+                    <div className="text-2xl font-bold">{comparison.s3Files.length}</div>
+                    <div className="text-sm text-muted-foreground">S3 Files</div>
+                  </div>
+                  <div className="text-center p-3 border rounded">
+                    <Database className="h-6 w-6 mx-auto mb-2 text-purple-500" />
+                    <div className="text-2xl font-bold">{comparison.databaseFiles.length}</div>
+                    <div className="text-sm text-muted-foreground">Database Records</div>
+                  </div>
+                  <div className="text-center p-3 border rounded">
+                    <AlertCircle className="h-6 w-6 mx-auto mb-2 text-red-500" />
+                    <div className="text-2xl font-bold">
+                      {comparison.localOnly.length + comparison.s3Only.length + comparison.databaseOnly.length +
+                       (comparison.missing?.localMissingFromS3?.length || 0) +
+                       (comparison.missing?.s3MissingFromLocal?.length || 0) +
+                       (comparison.missing?.dbMissingFromLocal?.length || 0) +
+                       (comparison.missing?.dbMissingFromS3?.length || 0)}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Issues Found</div>
+                  </div>
+                </div>
+
+                {/* Check for any inconsistencies */}
+                {(() => {
+                  const hasInconsistencies = comparison.localOnly.length > 0 || 
+                                           comparison.s3Only.length > 0 || 
+                                           comparison.databaseOnly.length > 0 ||
+                                           (comparison.missing?.localMissingFromS3?.length || 0) > 0 ||
+                                           (comparison.missing?.s3MissingFromLocal?.length || 0) > 0 ||
+                                           (comparison.missing?.dbMissingFromLocal?.length || 0) > 0 ||
+                                           (comparison.missing?.dbMissingFromS3?.length || 0) > 0
+                  
+                  return hasInconsistencies ? (
+                    <div className="space-y-3">
+                      <h4 className="text-md font-semibold text-red-700">Found Issues</h4>
+                      
+                      {comparison.localOnly.length > 0 && (
+                        <div className="p-3 border border-red-200 rounded bg-red-50">
+                          <div className="font-medium text-red-800">Files Only in Local ({comparison.localOnly.length})</div>
+                          <div className="text-sm text-red-700 mt-1">
+                            These files exist locally but are missing from S3 and database
+                          </div>
+                          <div className="text-xs text-red-600 mt-2 max-h-32 overflow-y-auto">
+                            {comparison.localOnly.slice(0, 5).map((file, idx) => (
+                              <div key={idx}>{file}</div>
+                            ))}
+                            {comparison.localOnly.length > 5 && (
+                              <div>... and {comparison.localOnly.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {comparison.s3Only.length > 0 && (
+                        <div className="p-3 border border-yellow-200 rounded bg-yellow-50">
+                          <div className="font-medium text-yellow-800">Files Only in S3 ({comparison.s3Only.length})</div>
+                          <div className="text-sm text-yellow-700 mt-1">
+                            These files exist in S3 but are missing from local filesystem and database
+                          </div>
+                          <div className="text-xs text-yellow-600 mt-2 max-h-32 overflow-y-auto">
+                            {comparison.s3Only.slice(0, 5).map((file, idx) => (
+                              <div key={idx}>{file}</div>
+                            ))}
+                            {comparison.s3Only.length > 5 && (
+                              <div>... and {comparison.s3Only.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {comparison.databaseOnly.length > 0 && (
+                        <div className="p-3 border border-purple-200 rounded bg-purple-50">
+                          <div className="font-medium text-purple-800">Files Only in Database ({comparison.databaseOnly.length})</div>
+                          <div className="text-sm text-purple-700 mt-1">
+                            These files exist in database but are missing from local filesystem and S3
+                          </div>
+                          <div className="text-xs text-purple-600 mt-2 max-h-32 overflow-y-auto">
+                            {comparison.databaseOnly.slice(0, 5).map((file, idx) => (
+                              <div key={idx}>{file}</div>
+                            ))}
+                            {comparison.databaseOnly.length > 5 && (
+                              <div>... and {comparison.databaseOnly.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Missing files between locations */}
+                      {(comparison.missing?.localMissingFromS3?.length || 0) > 0 && (
+                        <div className="p-3 border border-orange-200 rounded bg-orange-50">
+                          <div className="font-medium text-orange-800">Local Files Missing from S3 ({comparison.missing.localMissingFromS3.length})</div>
+                          <div className="text-sm text-orange-700 mt-1">
+                            These files exist locally and in database but are missing from S3
+                          </div>
+                          <div className="text-xs text-orange-600 mt-2 max-h-32 overflow-y-auto">
+                            {comparison.missing.localMissingFromS3.slice(0, 5).map((file, idx) => (
+                              <div key={idx}>{file}</div>
+                            ))}
+                            {comparison.missing.localMissingFromS3.length > 5 && (
+                              <div>... and {comparison.missing.localMissingFromS3.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(comparison.missing?.dbMissingFromS3?.length || 0) > 0 && (
+                        <div className="p-3 border border-blue-200 rounded bg-blue-50">
+                          <div className="font-medium text-blue-800">Database Records Missing from S3 ({comparison.missing.dbMissingFromS3.length})</div>
+                          <div className="text-sm text-blue-700 mt-1">
+                            These files exist in database but are missing from S3
+                          </div>
+                          <div className="text-xs text-blue-600 mt-2 max-h-32 overflow-y-auto">
+                            {comparison.missing.dbMissingFromS3.slice(0, 5).map((file, idx) => (
+                              <div key={idx}>{file}</div>
+                            ))}
+                            {comparison.missing.dbMissingFromS3.length > 5 && (
+                              <div>... and {comparison.missing.dbMissingFromS3.length - 5} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div className="text-green-800 font-medium">All files match perfectly!</div>
+                      </div>
+                      <div className="text-sm text-green-700 mt-1">
+                        Local files, S3 storage, and database records are all in sync.
+                      </div>
+                      <div className="text-xs text-green-600 mt-2 p-2 bg-green-100 rounded">
+                        ✓ This album has been automatically marked as safe for local file deletion.
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Albums List */}
       <div className="grid gap-4">
         <h2 className="text-xl font-semibold">Albums</h2>
@@ -379,6 +642,15 @@ export default function SyncPage() {
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <Button 
+                    className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 rounded-md px-3 text-xs"
+                    onClick={() => compareAlbum(album.id)}
+                    disabled={comparingAlbums.has(album.id)}
+                  >
+                    <Search className="h-4 w-4 mr-2" />
+                    {comparingAlbums.has(album.id) ? 'Comparing...' : 'Compare'}
+                  </Button>
+                  
                   {album.localFilesSafeDelete ? (
                     <Button 
                       className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 h-8 rounded-md px-3 text-xs"
