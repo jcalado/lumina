@@ -13,9 +13,9 @@ const prisma = new PrismaClient();
 
 // Validate required environment variables
 const requiredEnvVars = {
-  S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
-  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  S3_BUCKET: process.env.S3_BUCKET,
+  S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
+  S3_SECRET_KEY: process.env.S3_SECRET_KEY,
 };
 
 function validateEnvironment(): string | null {
@@ -28,10 +28,11 @@ function validateEnvironment(): string | null {
 }
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
+  endpoint: process.env.S3_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.S3_ACCESS_KEY!,
+    secretAccessKey: process.env.S3_SECRET_KEY!,
   },
 });
 
@@ -55,8 +56,15 @@ async function generateBlurhash(imageBuffer: Buffer): Promise<string> {
 
 async function downloadFromS3(s3Key: string): Promise<Buffer> {
   try {
+    // Validate bucket name before making the request
+    if (!process.env.S3_BUCKET) {
+      throw new Error('S3_BUCKET environment variable is not set');
+    }
+
+    console.log(`Downloading from S3: bucket=${process.env.S3_BUCKET}, key=${s3Key}`);
+
     const command = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: process.env.S3_BUCKET,
       Key: s3Key,
     });
 
@@ -79,9 +87,14 @@ async function downloadFromS3(s3Key: string): Promise<Buffer> {
       chunks.push(Buffer.from(response.Body as any));
     }
 
-    return Buffer.concat(chunks);
+    const buffer = Buffer.concat(chunks);
+    console.log(`✅ Successfully downloaded ${s3Key} (${buffer.length} bytes)`);
+    return buffer;
   } catch (error) {
-    console.error(`Error downloading from S3 (${s3Key}):`, error);
+    console.error(`❌ Error downloading from S3 (${s3Key}):`, error);
+    if (error instanceof Error) {
+      throw new Error(`S3 download failed: ${error.message}`);
+    }
     throw error;
   }
 }
@@ -90,6 +103,14 @@ async function processBlurhashJob(jobId: string) {
   console.log(`Starting blurhash job ${jobId}`);
 
   try {
+    // Validate environment variables again before processing
+    const envError = validateEnvironment();
+    if (envError) {
+      throw new Error(`Environment validation failed: ${envError}`);
+    }
+
+    console.log(`✅ Environment validated - S3 Bucket: ${process.env.S3_BUCKET}`);
+
     // Update job status to running
     await prisma.blurhashJob.update({
       where: { id: jobId },
@@ -193,17 +214,29 @@ async function processBlurhashJob(jobId: string) {
 
 async function startBlurhashJob() {
   try {
+    console.log('🔍 Starting blurhash job initialization...');
+    
     // Validate environment variables first
     const envError = validateEnvironment();
     if (envError) {
       console.error('❌ Environment validation failed:', envError);
       console.error('Please ensure the following environment variables are set:');
-      console.error('- S3_BUCKET_NAME');
-      console.error('- AWS_ACCESS_KEY_ID');
-      console.error('- AWS_SECRET_ACCESS_KEY');
-      console.error('- AWS_REGION (optional, defaults to us-east-1)');
+      console.error('- S3_BUCKET');
+      console.error('- S3_ACCESS_KEY');
+      console.error('- S3_SECRET_KEY');
+      console.error('- S3_REGION (optional, defaults to us-east-1)');
+      console.error('\nCurrent environment status:');
+      console.error(`- S3_BUCKET: ${process.env.S3_BUCKET ? '✅ Set' : '❌ Missing'}`);
+      console.error(`- S3_ACCESS_KEY: ${process.env.S3_ACCESS_KEY ? '✅ Set' : '❌ Missing'}`);
+      console.error(`- S3_SECRET_KEY: ${process.env.S3_SECRET_KEY ? '✅ Set' : '❌ Missing'}`);
+      console.error(`- S3_REGION: ${process.env.S3_REGION || 'us-east-1 (default)'}`);
       return;
     }
+
+    console.log('✅ Environment validation passed');
+    console.log(`🪣 S3 Bucket: ${process.env.S3_BUCKET}`);
+    console.log(`🌍 S3 Region: ${process.env.S3_REGION || 'us-east-1'}`);
+    console.log(`🔗 S3 Endpoint: ${process.env.S3_ENDPOINT || 'default AWS endpoint'}`);
 
     // Check if there's already a running job
     const runningJob = await prisma.blurhashJob.findFirst({
@@ -213,7 +246,7 @@ async function startBlurhashJob() {
     });
 
     if (runningJob) {
-      console.log('A blurhash job is already running');
+      console.log('⚠️  A blurhash job is already running');
       return;
     }
 
