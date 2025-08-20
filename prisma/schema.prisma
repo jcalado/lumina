@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Album {
+  id          String   @id @default(cuid())
+  path        String   @unique // filesystem path
+  name        String
+  description String?  // from project.md
+  status      Status   @default(PUBLIC) // PUBLIC | PRIVATE
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  photos      Photo[]
+
+  @@map("albums")
+}
+
+model Photo {
+  id           String      @id @default(cuid())
+  albumId      String
+  filename     String
+  originalPath String
+  s3Key        String
+  metadata     String?     // EXIF data as JSON string
+  fileSize     Int
+  takenAt      DateTime?   // from EXIF
+  createdAt    DateTime    @default(now())
+  album        Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  thumbnails   Thumbnail[]
+
+  @@index([albumId])
+  @@map("photos")
+}
+
+model Thumbnail {
+  id      String        @id @default(cuid())
+  photoId String
+  size    ThumbnailSize
+  s3Key   String
+  width   Int
+  height  Int
+  photo   Photo         @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@unique([photoId, size])
+  @@index([photoId])
+  @@map("thumbnails")
+}
+
+model SyncJob {
+  id          String    @id @default(cuid())
+  status      JobStatus @default(PENDING)
+  progress    Int       @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  errors      String?   // JSON string for error details
+  createdAt   DateTime  @default(now())
+
+  @@map("sync_jobs")
+}
+
+enum Status {
+  PUBLIC
+  PRIVATE
+}
+
+enum ThumbnailSize {
+  SMALL  // 300px grid thumbnails
+  MEDIUM // 800px preview
+  LARGE  // 1200px lightbox
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
