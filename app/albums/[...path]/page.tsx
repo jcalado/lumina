@@ -57,6 +57,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const [albumPath, setAlbumPath] = useState<string>('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const initializePage = async () => {
@@ -76,9 +77,18 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const fetchAlbum = async () => {
     try {
-      const response = await fetch(`/api/albums/${encodeURIComponent(albumPath)}`);
+      // Encode each path segment individually to preserve the URL structure
+      const encodedPath = albumPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+      const url = `/api/albums/${encodedPath}`;
+      console.log('Fetching album from URL:', url);
+      console.log('Album path:', albumPath);
+      
+      const response = await fetch(url);
+      console.log('Response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Album data received:', data);
         setAlbumData(data);
       } else if (response.status === 404) {
         setError('Album not found');
@@ -143,6 +153,56 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     setCurrentPhotoIndex(index);
   };
 
+  const downloadAlbum = async () => {
+    if (!albumData || isDownloading) return;
+    
+    try {
+      setIsDownloading(true);
+      
+      const response = await fetch('/api/download/album', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          albumPath: albumPath
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to download album');
+      }
+      
+      // Get the filename from the Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${albumData.album.name}-photos.zip`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Error downloading album:', error);
+      alert('Failed to download album. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -171,9 +231,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         
         {photos.length > 0 && (
           <div className="flex gap-2">
-            <Button variant="outline">
+            <Button 
+              variant="outline" 
+              onClick={downloadAlbum}
+              disabled={isDownloading}
+            >
               <Download className="h-4 w-4 mr-2" />
-              Download Album
+              {isDownloading ? 'Downloading...' : 'Download Album'}
             </Button>
           </div>
         )}
