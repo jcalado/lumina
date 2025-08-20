@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "worker:thumbnails": "tsx scripts/thumbnail-worker.ts"
+    "worker:thumbnails": "tsx scripts/thumbnail-worker.ts",
+    "worker:blurhash": "tsx scripts/blurhash-worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",
@@ -29,6 +30,7 @@
     "@radix-ui/react-toast": "^1.2.15",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
+    "blurhash": "^2.0.5",
     "bullmq": "^5.34.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -42,6 +44,7 @@
     "next-intl": "^4.3.4",
     "prisma": "^6.1.0",
     "react": "^19.0.0",
+    "react-blurhash": "^0.3.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.33.5",
     "tailwind-merge": "^2.6.0",

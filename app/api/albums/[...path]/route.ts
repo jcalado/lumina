@@ -13,9 +13,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const resolvedParams = await params;
     console.log('Raw path segments:', resolvedParams.path);
     
-    // Get query parameters for sorting
+    // Get query parameters for sorting and pagination
     const { searchParams } = new URL(request.url);
     const sortBy = searchParams.get('sortBy') || 'asc'; // 'asc' or 'desc'
+    const page = parseInt(searchParams.get('page') || '1');
+    const limitParam = searchParams.get('limit');
+    
+    // Get photos per page setting from database, default to 32
+    let photosPerPage = 32;
+    try {
+      const setting = await prisma.siteSettings.findUnique({
+        where: { key: 'photosPerPage' }
+      });
+      if (setting) {
+        photosPerPage = parseInt(setting.value);
+      }
+    } catch (error) {
+      console.log('Using default photos per page value');
+    }
+    
+    // Allow override via query param (for admin/testing)
+    const limit = limitParam ? parseInt(limitParam) : photosPerPage;
+    const offset = (page - 1) * limit;
     
     // Decode each path segment to handle URL encoding
     const decodedPath = resolvedParams.path.map(segment => decodeURIComponent(segment));
@@ -24,6 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.log('Decoded path segments:', decodedPath);
     console.log('Final album path:', albumPath);
     console.log('Sort order:', sortBy);
+    console.log('Pagination:', { page, limit, offset });
     
     const album = await prisma.album.findUnique({
       where: {
@@ -36,6 +56,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           orderBy: {
             takenAt: sortBy === 'desc' ? 'desc' : 'asc',
+          },
+          skip: offset,
+          take: limit,
+        },
+        _count: {
+          select: {
+            photos: true,
           },
         },
       },
@@ -192,7 +219,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         name: album.name,
         description: album.description,
         photoCount: album.photos.length,
-        totalPhotoCount: album.photos.length,
+        totalPhotoCount: album._count.photos,
         subAlbumsCount: subAlbums.length,
       },
       subAlbums: subAlbums.map((subAlbum: any) => {
@@ -217,6 +244,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         };
       }),
       photos: album.photos,
+      pagination: {
+        page,
+        limit,
+        totalPhotos: album._count.photos,
+        totalPages: Math.ceil(album._count.photos / limit),
+        hasMore: offset + album.photos.length < album._count.photos,
+      },
     };
 
     return NextResponse.json(response);

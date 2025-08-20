@@ -22,6 +22,7 @@ interface Photo {
   fileSize: number;
   takenAt: string | null;
   createdAt: string;
+  blurhash?: string | null;
   thumbnails: {
     size: string;
     s3Key: string;
@@ -52,6 +53,13 @@ interface AlbumData {
   album: Album;
   subAlbums: Album[];
   photos: Photo[];
+  pagination?: {
+    page: number;
+    limit: number;
+    totalPhotos: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
 
 interface AlbumPageProps {
@@ -245,7 +253,11 @@ function Breadcrumb({ albumPath }: BreadcrumbProps) {
 export default function AlbumPage({ params }: AlbumPageProps) {
   const router = useRouter();
   const [albumData, setAlbumData] = useState<AlbumData | null>(null);
+  const [allPhotos, setAllPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [albumPath, setAlbumPath] = useState<string>('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -256,6 +268,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const t = useTranslations('albums');
   const { favorites, isFavorite } = useFavorites();
+
+  // Intersection observer ref for infinite scroll
+  const observerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const initializePage = async () => {
@@ -275,20 +290,46 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   useEffect(() => {
     if (albumPath) {
-      fetchAlbum();
+      // Reset pagination when album path or sort order changes
+      setCurrentPage(1);
+      setAllPhotos([]);
+      setHasMore(true);
+      fetchAlbum(1, true);
     }
-  }, [albumPath, sortOrder]); // Remove showFavoritesOnly from dependencies since we filter client-side
+  }, [albumPath, sortOrder]);
 
-  const fetchAlbum = async () => {
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!observerRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          loadMorePhotos();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(observerRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loading]);
+
+  const fetchAlbum = async (page: number = 1, isInitial: boolean = false) => {
     try {
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       // Encode each path segment individually to preserve the URL structure
       const encodedPath = albumPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
       const queryParams = new URLSearchParams();
       queryParams.set('sortBy', sortOrder);
+      queryParams.set('page', page.toString());
       const url = `/api/albums/${encodedPath}?${queryParams.toString()}`;
       console.log('Fetching album from URL:', url);
-      console.log('Album path:', albumPath);
-      console.log('Sort order:', sortOrder);
 
       const response = await fetch(url);
       console.log('Response status:', response.status);
@@ -296,7 +337,22 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       if (response.ok) {
         const data = await response.json();
         console.log('Album data received:', data);
-        setAlbumData(data);
+        
+        if (isInitial) {
+          setAlbumData(data);
+          setAllPhotos(data.photos);
+        } else {
+          // Append new photos for infinite scroll
+          setAllPhotos(prev => [...prev, ...data.photos]);
+        }
+
+        // Update pagination state
+        if (data.pagination) {
+          setHasMore(data.pagination.hasMore);
+          setCurrentPage(data.pagination.page);
+        } else {
+          setHasMore(false);
+        }
       } else if (response.status === 404) {
         setError('Album not found');
       } else if (response.status === 403) {
@@ -316,16 +372,28 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       setError(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMorePhotos = async () => {
+    if (hasMore && !loadingMore) {
+      await fetchAlbum(currentPage + 1, false);
     }
   };
 
   // Filter photos based on favorites selection
-  const filteredPhotos = albumData?.photos.filter(photo => {
+  const filteredPhotos = allPhotos.filter(photo => {
     if (showFavoritesOnly) {
       return isFavorite(photo.id);
     }
     return true;
-  }) || [];
+  });
+
+  // Destructure album data for easier access
+  const album = albumData?.album;
+  const subAlbums = albumData?.subAlbums || [];
+  const photos = filteredPhotos; // For lightbox compatibility
 
   if (loading) {
     return (
@@ -360,12 +428,10 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     return null;
   }
 
-  const { album, subAlbums, photos } = albumData;
-
   const openLightbox = (filteredIndex: number) => {
     // Find the original photo index in the full photos array
     const filteredPhoto = filteredPhotos[filteredIndex];
-    const originalIndex = photos.findIndex(p => p.id === filteredPhoto.id);
+    const originalIndex = allPhotos.findIndex(p => p.id === filteredPhoto.id);
     setCurrentPhotoIndex(originalIndex);
     setLightboxOpen(true);
   };
@@ -455,16 +521,16 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{album.name}</h1>
-          {album.description && (
+          <h1 className="text-3xl font-bold">{album?.name}</h1>
+          {album?.description && (
             <p className="text-muted-foreground mt-1">{album.description}</p>
           )}
           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-            <span>{t('photos_in_this_album', { count: album.photoCount })}</span>
-            {album.totalPhotoCount && album.totalPhotoCount > album.photoCount && (
+            <span>{t('photos_in_this_album', { count: album?.photoCount || 0 })}</span>
+            {album?.totalPhotoCount && album.totalPhotoCount > (album.photoCount || 0) && (
               <span>{album.totalPhotoCount} total photos (including sub-albums)</span>
             )}
-            {album.subAlbumsCount && album.subAlbumsCount > 0 && (
+            {album?.subAlbumsCount && album.subAlbumsCount > 0 && (
               <span>{album.subAlbumsCount} sub-albums</span>
             )}
           </div>
@@ -611,7 +677,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       )}
 
       {/* Photos Grid */}
-      {photos.length === 0 && subAlbums.length === 0 ? (
+      {filteredPhotos.length === 0 && albumData?.subAlbums.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
             <Folder className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
@@ -635,6 +701,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         <div>
           <h2 className="text-xl font-semibold mb-4">
             Photos {showFavoritesOnly && <span className="text-muted-foreground">({filteredPhotos.length} favorites)</span>}
+            {albumData?.pagination && !showFavoritesOnly && (
+              <span className="text-muted-foreground text-base font-normal ml-2">
+                ({filteredPhotos.length} of {albumData.pagination.totalPhotos})
+              </span>
+            )}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {filteredPhotos.map((photo, index) => (
@@ -651,6 +722,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                         filename={photo.filename}
                         className="aspect-square rounded-md"
                         alt={`Photo ${photo.filename}`}
+                        blurhash={photo.blurhash}
                       />
 
                       {/* Favorite button overlay */}
@@ -665,12 +737,32 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               </div>
             ))}
           </div>
+
+          {/* Infinite scroll observer element */}
+          {hasMore && (
+            <div ref={observerRef} className="mt-8 flex justify-center">
+              {loadingMore ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span>Loading more photos...</span>
+                </div>
+              ) : (
+                <div className="h-20" /> // Trigger area for intersection observer
+              )}
+            </div>
+          )}
+
+          {!hasMore && allPhotos.length > 0 && !showFavoritesOnly && (
+            <div className="mt-8 text-center text-muted-foreground">
+              <p>You've seen all {albumData?.pagination?.totalPhotos || allPhotos.length} photos in this album</p>
+            </div>
+          )}
         </div>
       ) : null}
 
       {/* Lightbox */}
       <Lightbox
-        photos={photos}
+        photos={allPhotos}
         currentIndex={currentPhotoIndex}
         isOpen={lightboxOpen}
         onClose={closeLightbox}

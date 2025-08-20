@@ -20,6 +20,18 @@ interface SiteSettings {
   footerCopyright: string
   footerLinks: FooterLink[]
   accentColor: string
+  photosPerPage: string
+}
+
+interface BlurhashJob {
+  id: string
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  progress: number
+  totalPhotos: number
+  processedPhotos: number
+  startedAt?: string
+  completedAt?: string
+  errors?: string
 }
 
 export default function AdminSettingsPage() {
@@ -27,13 +39,17 @@ export default function AdminSettingsPage() {
     siteName: "Lumina Gallery",
     footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
     footerLinks: [],
-    accentColor: "#3b82f6"
+    accentColor: "#3b82f6",
+    photosPerPage: "32"
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [blurhashJob, setBlurhashJob] = useState<BlurhashJob | null>(null)
+  const [blurhashJobLoading, setBlurhashJobLoading] = useState(false)
 
   useEffect(() => {
     fetchSettings()
+    fetchBlurhashJobs()
   }, [])
 
   const fetchSettings = async () => {
@@ -57,7 +73,8 @@ export default function AdminSettingsPage() {
           siteName: fetchedSettings.siteName || "Lumina Gallery",
           footerCopyright: fetchedSettings.footerCopyright || `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
           footerLinks: footerLinks,
-          accentColor: fetchedSettings.accentColor || "#3b82f6"
+          accentColor: fetchedSettings.accentColor || "#3b82f6",
+          photosPerPage: fetchedSettings.photosPerPage || "32"
         })
       } else {
         toast({
@@ -140,6 +157,64 @@ export default function AdminSettingsPage() {
         i === index ? { ...link, [field]: value } : link
       )
     }))
+  }
+
+  const fetchBlurhashJobs = async () => {
+    try {
+      const response = await fetch("/api/admin/blurhash")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.jobs && data.jobs.length > 0) {
+          setBlurhashJob(data.jobs[0]) // Get the latest job
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching blurhash jobs:', error)
+    }
+  }
+
+  const handleStartBlurhashJob = async () => {
+    setBlurhashJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/blurhash", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "start" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Blurhash processing started"
+        })
+        
+        // Start polling for job status
+        const pollInterval = setInterval(async () => {
+          await fetchBlurhashJobs()
+          
+          // Stop polling if job is completed or failed
+          if (blurhashJob && (blurhashJob.status === 'COMPLETED' || blurhashJob.status === 'FAILED')) {
+            clearInterval(pollInterval)
+          }
+        }, 2000)
+        
+        // Clear interval after 5 minutes to prevent infinite polling
+        setTimeout(() => clearInterval(pollInterval), 300000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to start blurhash job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start blurhash job",
+        variant: "destructive"
+      })
+    } finally {
+      setBlurhashJobLoading(false)
+    }
   }
 
   if (loading) {
@@ -345,6 +420,124 @@ export default function AdminSettingsPage() {
                 <Save className="h-4 w-4" />
                 <span>{saving ? "Saving..." : "Save Settings"}</span>
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Gallery Configuration</CardTitle>
+            <CardDescription>
+              Configure gallery display and performance settings
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="photosPerPage">Photos Per Page</Label>
+              <Input
+                id="photosPerPage"
+                type="number"
+                min="1"
+                max="100"
+                value={settings.photosPerPage}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                  handleInputChange("photosPerPage", e.target.value)
+                }
+                placeholder="32"
+              />
+              <p className="text-sm text-muted-foreground">
+                Number of photos to load initially when viewing an album. More photos will load automatically as users scroll down.
+              </p>
+            </div>
+            
+            <div className="flex justify-end">
+              <Button 
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center space-x-2"
+              >
+                <Save className="h-4 w-4" />
+                <span>{saving ? "Saving..." : "Save Settings"}</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Blurhash Processing</CardTitle>
+            <CardDescription>
+              Generate blur placeholders for smooth image loading experience
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Blurhash creates small blur placeholders that display while photos are loading from storage. 
+                This provides a better user experience with smooth transitions.
+              </p>
+              
+              <div className="space-y-2">
+                <Button
+                  onClick={handleStartBlurhashJob}
+                  disabled={blurhashJobLoading || blurhashJob?.status === 'RUNNING'}
+                  className="flex items-center space-x-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>
+                    {blurhashJob?.status === 'RUNNING' 
+                      ? 'Processing...' 
+                      : 'Generate Blurhash for All Photos'
+                    }
+                  </span>
+                </Button>
+                
+                {blurhashJob && (
+                  <div className="space-y-2 p-4 border rounded-lg bg-gray-50">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Latest Job Status:</span>
+                      <span className={`px-2 py-1 rounded text-sm ${
+                        blurhashJob.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                        blurhashJob.status === 'RUNNING' ? 'bg-blue-100 text-blue-800' :
+                        blurhashJob.status === 'FAILED' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {blurhashJob.status}
+                      </span>
+                    </div>
+                    
+                    {blurhashJob.status === 'RUNNING' && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Progress:</span>
+                          <span>{blurhashJob.progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${blurhashJob.progress}%` }}
+                          />
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {blurhashJob.processedPhotos} / {blurhashJob.totalPhotos} photos processed
+                        </div>
+                      </div>
+                    )}
+                    
+                    {blurhashJob.status === 'COMPLETED' && (
+                      <div className="text-sm text-green-700">
+                        Processed {blurhashJob.processedPhotos} photos successfully
+                      </div>
+                    )}
+                    
+                    {blurhashJob.status === 'FAILED' && (
+                      <div className="text-sm text-red-700">
+                        Job failed. Check logs for details.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

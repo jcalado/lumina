@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
+import { Blurhash } from 'react-blurhash';
 
 interface PhotoImageProps {
   photoId: string;
@@ -11,6 +12,7 @@ interface PhotoImageProps {
   alt?: string;
   size?: 'small' | 'medium' | 'large';
   lazy?: boolean;
+  blurhash?: string | null;
 }
 
 export function PhotoImage({ 
@@ -19,7 +21,8 @@ export function PhotoImage({
   className = '', 
   alt, 
   size = 'small',
-  lazy = true 
+  lazy = true,
+  blurhash = null
 }: PhotoImageProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +77,20 @@ export function PhotoImage({
 
   return (
     <div ref={imgRef} className={`relative overflow-hidden ${className}`}>
-      {loading && (
+      {/* Blurhash placeholder - shown when loading and blurhash is available */}
+      {loading && blurhash && (
+        <div className="absolute inset-0">
+          <Blurhash
+            hash={blurhash}
+            width="100%"
+            height="100%"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+      )}
+
+      {/* Generic loading spinner - shown when no blurhash available */}
+      {loading && !blurhash && (
         <div className="absolute inset-0 bg-muted flex items-center justify-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
         </div>

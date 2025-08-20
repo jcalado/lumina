@@ -10,7 +10,8 @@ const updateSettingsSchema = z.object({
     name: z.string().min(1).max(100),
     url: z.string().min(1).max(500)
   })).optional(),
-  accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional()
+  accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  photosPerPage: z.string().regex(/^\d+$/).optional()
 })
 
 // GET /api/admin/settings - Get all settings
@@ -34,6 +35,7 @@ export async function GET() {
         { name: "Contact", url: "/contact" }
       ]),
       accentColor: "#3b82f6",
+      photosPerPage: "32",
       ...settingsObj
     }
 
@@ -112,6 +114,21 @@ export async function PUT(request: NextRequest) {
         create: { 
           key: "accentColor", 
           value: validatedData.accentColor
+        }
+      })
+    }
+
+    // Update photos per page if provided
+    if (validatedData.photosPerPage !== undefined) {
+      await prisma.siteSettings.upsert({
+        where: { key: "photosPerPage" },
+        update: { 
+          value: validatedData.photosPerPage,
+          updatedAt: new Date()
+        },
+        create: { 
+          key: "photosPerPage", 
+          value: validatedData.photosPerPage
         }
       })
     }

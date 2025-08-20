@@ -36,6 +36,7 @@ model Photo {
   metadata     String?     // EXIF data as JSON string
   fileSize     Int
   takenAt      DateTime?   // from EXIF
+  blurhash     String?     // BlurHash for loading placeholder
   createdAt    DateTime    @default(now())
   album        Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
   thumbnails   Thumbnail[]
@@ -74,6 +75,21 @@ model SyncJob {
   createdAt       DateTime  @default(now())
 
   @@map("sync_jobs")
+}
+
+model BlurhashJob {
+  id              String    @id @default(cuid())
+  status          JobStatus @default(PENDING)
+  progress        Int       @default(0)
+  totalPhotos     Int       @default(0)
+  processedPhotos Int       @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errors          String?   // JSON string for error details
+  logs            String?   // JSON array of detailed log entries
+  createdAt       DateTime  @default(now())
+
+  @@map("blurhash_jobs")
 }
 
 model SiteSettings {
