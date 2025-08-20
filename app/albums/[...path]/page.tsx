@@ -38,6 +38,10 @@ interface Album {
   photoCount: number;
   totalPhotoCount?: number;
   subAlbumsCount?: number;
+  thumbnail?: {
+    photoId: string;
+    filename: string;
+  } | null;
 }
 
 interface AlbumData {
@@ -280,33 +284,59 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
             {subAlbums.map((subAlbum) => (
               <Link key={subAlbum.id} href={`/albums/${encodeURIComponent(subAlbum.path)}`}>
-                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <Folder className="w-6 h-6 text-blue-600" />
-                      <div className="flex gap-1">
-                        {subAlbum.totalPhotoCount && subAlbum.totalPhotoCount > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Image className="w-3 h-3 mr-1" />
-                            {subAlbum.totalPhotoCount}
-                          </Badge>
-                        )}
-                        {subAlbum.subAlbumsCount && subAlbum.subAlbumsCount > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            <Folder className="w-3 h-3 mr-1" />
-                            {subAlbum.subAlbumsCount}
-                          </Badge>
-                        )}
+                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+                  <CardContent className="p-0">
+                    {/* Thumbnail Image */}
+                    <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
+                      {subAlbum.thumbnail ? (
+                        <PhotoImage
+                          photoId={subAlbum.thumbnail.photoId}
+                          filename={subAlbum.thumbnail.filename}
+                          size="medium"
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          alt={`Thumbnail for ${subAlbum.name}`}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+                          <Folder className="w-12 h-12 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      
+                      {/* Overlay with folder icon and badges */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
+                        <div className="absolute top-2 left-2">
+                          <div className="bg-black/60 rounded-full p-1.5">
+                            <Folder className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          {subAlbum.totalPhotoCount && subAlbum.totalPhotoCount > 0 && (
+                            <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                              <Image className="w-3 h-3 mr-1" />
+                              {subAlbum.totalPhotoCount}
+                            </Badge>
+                          )}
+                          {subAlbum.subAlbumsCount && subAlbum.subAlbumsCount > 0 && (
+                            <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                              <Folder className="w-3 h-3 mr-1" />
+                              {subAlbum.subAlbumsCount}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <h3 className="font-medium text-sm mb-1 line-clamp-2">
-                      {subAlbum.name}
-                    </h3>
-                    {subAlbum.description && (
-                      <p className="text-xs text-gray-600 line-clamp-2">
-                        {subAlbum.description}
-                      </p>
-                    )}
+                    
+                    {/* Album Details */}
+                    <div className="p-4">
+                      <h3 className="font-medium text-sm mb-1 line-clamp-2">
+                        {subAlbum.name}
+                      </h3>
+                      {subAlbum.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {subAlbum.description}
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
