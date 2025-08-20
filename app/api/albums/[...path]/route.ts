@@ -111,6 +111,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 select: {
                   id: true,
                   filename: true,
+                  takenAt: true,
                 },
                 orderBy: {
                   takenAt: 'asc',
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   select: {
                     id: true,
                     filename: true,
+                    takenAt: true,
                   },
                   skip: skip,
                   orderBy: {
@@ -141,7 +143,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               }
             }
             
+            // Get date range for the album
+            const dateRange = await prisma.photo.aggregate({
+              where: {
+                albumId: subAlbum.id,
+                takenAt: {
+                  not: null,
+                },
+              },
+              _min: {
+                takenAt: true,
+              },
+              _max: {
+                takenAt: true,
+              },
+            });
+            
             (subAlbum as any).photos = photos;
+            (subAlbum as any).dateRange = {
+              earliest: dateRange._min.takenAt,
+              latest: dateRange._max.takenAt,
+            };
             console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing`);
           } catch (photoError) {
             console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
@@ -185,6 +207,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             photoId: photo.id,
             filename: photo.filename,
           })),
+          dateRange: subAlbum.dateRange || null,
         };
       }),
       photos: album.photos,
