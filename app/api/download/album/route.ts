@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
         console.error('Archive error:', err);
         reject(err);
       });
+
+      // Add a timeout to prevent hanging
+      setTimeout(() => {
+        reject(new Error('Archive creation timeout'));
+      }, 60000); // 60 second timeout
     });
 
     // Add photos to the archive
@@ -92,10 +97,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Finalize the archive
+    console.log('Finalizing archive...');
     archive.finalize();
 
     // Wait for archive to complete
     const archiveBuffer = await archivePromise;
+    console.log('Archive completed, returning response');
 
     return new NextResponse(new Uint8Array(archiveBuffer), { headers });
 

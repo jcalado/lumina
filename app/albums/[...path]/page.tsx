@@ -159,6 +159,8 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     try {
       setIsDownloading(true);
       
+      console.log('Starting download for album path:', albumPath);
+      
       const response = await fetch('/api/download/album', {
         method: 'POST',
         headers: {
@@ -169,8 +171,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         }),
       });
       
+      console.log('Download response status:', response.status);
+      console.log('Download response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
-        throw new Error('Failed to download album');
+        const errorText = await response.text();
+        console.error('Download failed with status:', response.status, 'Error:', errorText);
+        throw new Error(`Failed to download album: ${response.status} - ${errorText}`);
       }
       
       // Get the filename from the Content-Disposition header
@@ -185,15 +192,24 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       }
       
       // Create blob and download
+      console.log('Creating blob from response...');
       const blob = await response.blob();
+      console.log('Blob created, size:', blob.size, 'type:', blob.type);
+      
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
+      console.log('Starting download with filename:', filename);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      console.log('Download completed successfully');
       
     } catch (error) {
       console.error('Error downloading album:', error);
