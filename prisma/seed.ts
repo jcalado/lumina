@@ -5,6 +5,22 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database...');
   
+  // Create default site settings if they don't exist
+  const settingsCount = await prisma.siteSettings.count();
+  
+  if (settingsCount === 0) {
+    console.log('Creating default site settings...');
+    
+    await prisma.siteSettings.create({
+      data: {
+        key: 'siteName',
+        value: 'Lumina Gallery',
+      },
+    });
+    
+    console.log('Default site settings created.');
+  }
+  
   // Create some sample albums if none exist
   const albumCount = await prisma.album.count();
   

@@ -6,14 +6,19 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
+import { getSiteSettings } from '@/lib/settings';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: 'Lumina Photo Gallery',
-  description: 'A beautiful photo gallery for organizing and sharing your photography',
-  keywords: ['photography', 'gallery', 'photos', 'albums'],
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const siteSettings = await getSiteSettings();
+  
+  return {
+    title: siteSettings.siteName,
+    description: 'A beautiful photo gallery for organizing and sharing your photography',
+    keywords: ['photography', 'gallery', 'photos', 'albums'],
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -21,6 +26,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const messages = await getMessages();
+  const siteSettings = await getSiteSettings();
 
   return (
     <html lang="en">
@@ -33,7 +39,7 @@ export default async function RootLayout({
                   <div className="container mx-auto px-4 py-4">
                     <div className="flex items-center justify-between">
                       <h1 className="text-2xl font-bold text-primary">
-                        Lumina Gallery
+                        {siteSettings.siteName}
                       </h1>
                       <nav className="flex items-center space-x-6">
                         <a href="/" className="text-muted-foreground hover:text-foreground transition-colors">
