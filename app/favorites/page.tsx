@@ -17,6 +17,7 @@ interface Photo {
   fileSize: number;
   takenAt: string | null;
   createdAt: string;
+  url: string;
   album: {
     id: string;
     name: string;
@@ -44,8 +45,20 @@ export default function FavoritesPage() {
 
     try {
       setLoading(true);
-      // For now, we'll just show empty state since we need to implement the batch photos API
-      setPhotos([]);
+      const response = await fetch('/api/photos/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ photoIds: favorites }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch favorite photos');
+      }
+
+      const data = await response.json();
+      setPhotos(data.photos || []);
     } catch (error) {
       console.error('Error fetching favorite photos:', error);
       setPhotos([]);
@@ -107,16 +120,60 @@ export default function FavoritesPage() {
             </CardDescription>
           </CardContent>
         </Card>
-      ) : (
+      ) : photos.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
             <Heart className="h-16 w-16 mx-auto text-red-500 fill-red-500 mb-4" />
-            <CardTitle className="mb-2">Favorites Feature Ready</CardTitle>
+            <CardTitle className="mb-2">Favorite Photos Not Available</CardTitle>
             <CardDescription>
-              You have {favorites.length} favorite photos. The display functionality will be completed in the next phase.
+              Some of your favorite photos may no longer be accessible or may have been moved.
             </CardDescription>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+          {photos.map((photo, index) => (
+            <div key={photo.id} className="relative group">
+              <div 
+                className="relative aspect-square overflow-hidden rounded-lg cursor-pointer"
+                onClick={() => openLightbox(index)}
+              >
+                <PhotoImage
+                  photoId={photo.id}
+                  filename={photo.filename}
+                  alt={photo.filename}
+                  size="medium"
+                  className="object-cover w-full h-full transition-transform group-hover:scale-105"
+                />
+                
+                {/* Overlay with photo info */}
+                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200" />
+                
+                {/* Favorite button */}
+                <div className="absolute top-2 right-2">
+                  <FavoriteButton 
+                    photoId={photo.id}
+                  />
+                </div>
+                
+                {/* Photo info overlay */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-white text-sm font-medium truncate">
+                    {photo.filename}
+                  </p>
+                  <p className="text-white/80 text-xs truncate">
+                    {photo.album.name}
+                  </p>
+                  {photo.takenAt && (
+                    <p className="text-white/70 text-xs">
+                      {new Date(photo.takenAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Lightbox - for future use */}

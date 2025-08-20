@@ -11,6 +11,9 @@ import { PhotoImage } from '@/components/PhotoImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
 
+
+import {useTranslations} from 'next-intl';
+
 interface Photo {
   id: string;
   filename: string;
@@ -58,6 +61,8 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  const t = useTranslations('albums');
 
   useEffect(() => {
     const initializePage = async () => {
@@ -243,7 +248,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               <p className="text-muted-foreground mt-1">{album.description}</p>
             )}
             <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-              <span>{album.photoCount} photos in this album</span>
+              <span>{t('photos_in_this_album', { count: album.photoCount })}</span>
               {album.totalPhotoCount && album.totalPhotoCount > album.photoCount && (
                 <span>{album.totalPhotoCount} total photos (including sub-albums)</span>
               )}
@@ -324,7 +329,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       ) : photos.length > 0 ? (
         <div>
           <h2 className="text-xl font-semibold mb-4">Photos</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {photos.map((photo, index) => (
               <div 
                 key={photo.id} 
@@ -332,8 +337,8 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 onClick={() => openLightbox(index)}
               >
                 <Card className="group hover:shadow-lg transition-shadow">
-                  <CardContent className="p-2">
-                    <div className="aspect-square bg-muted rounded-md mb-2 relative overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="aspect-square bg-muted rounded-md relative overflow-hidden">
                       <PhotoImage
                         photoId={photo.id}
                         filename={photo.filename}
@@ -347,16 +352,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
                       />
                     </div>
-                    
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium truncate">{photo.filename}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {photo.takenAt 
-                          ? new Date(photo.takenAt).toLocaleDateString()
-                          : new Date(photo.createdAt).toLocaleDateString()
-                        }
-                      </p>
-                    </div>
+
                   </CardContent>
                 </Card>
               </div>

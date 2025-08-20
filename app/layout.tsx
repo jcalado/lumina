@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { FavoritesProvider } from '@/contexts/FavoritesContext';
+import {NextIntlClientProvider} from 'next-intl';
+import {getMessages} from 'next-intl/server';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -11,15 +13,18 @@ export const metadata: Metadata = {
   keywords: ['photography', 'gallery', 'photos', 'albums'],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const messages = await getMessages();
+
   return (
     <html lang="en">
       <body className={inter.className}>
         <FavoritesProvider>
+            <NextIntlClientProvider messages={messages}>
           <div className="min-h-screen bg-background">
             <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
               <div className="container mx-auto px-4 py-4">
@@ -42,6 +47,7 @@ export default function RootLayout({
               {children}
             </main>
           </div>
+          </NextIntlClientProvider>
         </FavoritesProvider>
       </body>
     </html>
