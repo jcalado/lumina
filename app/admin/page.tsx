@@ -107,7 +107,7 @@ export default function AdminDashboardPage() {
           <Button asChild>
             <Link href="/admin/sync">
               <RefreshCw className="h-4 w-4 mr-2" />
-              Sync Now
+              Sync Management
             </Link>
           </Button>
         </div>
@@ -126,16 +126,16 @@ export default function AdminDashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button asChild variant="outline" className="w-full justify-start">
+            <Button asChild className="w-full justify-start border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
               <Link href="/admin/albums">
                 <FolderOpen className="h-4 w-4 mr-2" />
                 Manage Albums
               </Link>
             </Button>
-            <Button asChild variant="outline" className="w-full justify-start">
+            <Button asChild className="w-full justify-start border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
               <Link href="/admin/sync">
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Sync Photos
+                Sync Management
               </Link>
             </Button>
           </CardContent>

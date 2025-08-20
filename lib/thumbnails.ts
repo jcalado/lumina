@@ -25,21 +25,29 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
   try {
     console.log(`Processing thumbnails for photo: ${filename}`);
     
-    // Check if original file exists
+    const s3Service = new S3Service();
+    let imageBuffer: Buffer;
+    
+    // Try to read from local file first, fall back to S3
     try {
       await fs.access(originalPath);
+      imageBuffer = await fs.readFile(originalPath);
+      console.log(`Reading image from local path: ${originalPath}`);
     } catch (error) {
-      throw new Error(`Original file not found: ${originalPath}`);
+      console.log(`Local file not found, fetching from S3: ${s3Key}`);
+      try {
+        imageBuffer = await s3Service.getObject(s3Key);
+      } catch (s3Error) {
+        throw new Error(`Failed to read image from both local and S3: ${error} | ${s3Error}`);
+      }
     }
     
-    const s3Service = new S3Service();
     const thumbnailsCreated = [];
     
     // Generate thumbnails for each size
     for (const [sizeName, config] of Object.entries(THUMBNAIL_SIZES)) {
       try {
-        // Read and process image
-        const imageBuffer = await fs.readFile(originalPath);
+        // Process image
         const processedImage = sharp(imageBuffer);
         
         // Get original dimensions

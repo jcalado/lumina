@@ -27,7 +27,13 @@ export async function GET() {
       orderBy: { createdAt: "desc" }
     })
 
-    return NextResponse.json({ albums })
+    const formattedAlbums = albums.map((album: any) => ({
+      ...album,
+      photoCount: album._count.photos,
+      lastSyncAt: album.lastSyncAt?.toISOString() || null
+    }))
+
+    return NextResponse.json({ albums: formattedAlbums })
   } catch (error) {
     console.error("Error fetching albums:", error)
     return NextResponse.json(

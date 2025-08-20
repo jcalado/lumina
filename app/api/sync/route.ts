@@ -33,7 +33,22 @@ export async function POST() {
 }
 
 async function syncPhotos(jobId: string) {
+  const logs: Array<{timestamp: string, level: string, message: string, details?: any}> = [];
+  
+  const addLog = (level: 'info' | 'warn' | 'error', message: string, details?: any) => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      details
+    };
+    logs.push(logEntry);
+    console.log(`[${level.toUpperCase()}] ${message}`, details || '');
+  };
+
   try {
+    addLog('info', 'Starting sync process');
+    
     await prisma.syncJob.update({
       where: { id: jobId },
       data: { status: 'RUNNING', progress: 0 },
@@ -43,10 +58,40 @@ async function syncPhotos(jobId: string) {
     const albumPaths = await scanner.getAllAlbums();
     let progress = 0;
     const totalAlbums = albumPaths.length;
+    let totalFilesProcessed = 0;
+    let totalFilesUploaded = 0;
+    
+    addLog('info', `Found ${totalAlbums} albums to sync`);
+    
+    // Initialize job with album count
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: { 
+        totalAlbums,
+        completedAlbums: 0,
+        filesProcessed: 0,
+        filesUploaded: 0,
+        logs: JSON.stringify(logs)
+      },
+    });
+
+    const albumProgress: Record<string, any> = {};
 
     for (const albumPath of albumPaths) {
       try {
+        addLog('info', `Processing album: ${albumPath}`);
         const albumData = await scanner.scanDirectory(albumPath);
+        
+        // Track album start
+        albumProgress[albumPath] = {
+          status: 'PROCESSING',
+          photosTotal: albumData.photos.length,
+          photosProcessed: 0,
+          photosUploaded: 0,
+          issues: []
+        };
+        
+        addLog('info', `Album "${albumData.name}" contains ${albumData.photos.length} photos`);
         
         // Upsert album
         const album = await prisma.album.upsert({
@@ -55,6 +100,9 @@ async function syncPhotos(jobId: string) {
             name: albumData.name,
             description: albumData.description,
             updatedAt: new Date(),
+            // Reset sync status when starting new sync
+            syncedToS3: false,
+            localFilesSafeDelete: false,
           },
           create: {
             path: albumPath,
@@ -62,21 +110,78 @@ async function syncPhotos(jobId: string) {
             description: albumData.description,
             status: 'PUBLIC',
             enabled: true,
+            syncedToS3: false,
+            localFilesSafeDelete: false,
           },
         });
 
-        // Update photos for this album
-        await syncAlbumPhotos(album.id, albumData.photos, albumPath);
+        // Update photos for this album with progress tracking
+        const { filesProcessed, filesUploaded, issues } = await syncAlbumPhotos(
+          album.id, 
+          albumData.photos, 
+          albumPath, 
+          (processed: number, uploaded: number) => {
+            albumProgress[albumPath].photosProcessed = processed;
+            albumProgress[albumPath].photosUploaded = uploaded;
+          },
+          addLog
+        );
+        
+        totalFilesProcessed += filesProcessed;
+        totalFilesUploaded += filesUploaded;
+        
+        // Store any issues that occurred during this album sync
+        albumProgress[albumPath].issues = issues;
+        
+        // Mark album as synced - files are safe to delete only if all uploads succeeded
+        const allFilesUploaded = filesUploaded === albumData.photos.length;
+        const hasIssues = issues.length > 0;
+        
+        await prisma.album.update({
+          where: { id: album.id },
+          data: {
+            syncedToS3: true,
+            localFilesSafeDelete: allFilesUploaded && !hasIssues, // Only mark safe if ALL files uploaded and no issues
+            lastSyncAt: new Date(),
+          },
+        });
+        
+        albumProgress[albumPath].status = 'COMPLETED';
+        albumProgress[albumPath].safeToDelete = allFilesUploaded && !hasIssues;
+        
+        if (!allFilesUploaded || hasIssues) {
+          const reason = !allFilesUploaded ? 
+            `Only ${filesUploaded}/${albumData.photos.length} files uploaded successfully` :
+            `Upload completed but with ${issues.length} issue(s)`;
+          addLog('warn', `Album "${albumData.name}" requires verification: ${reason}`);
+          albumProgress[albumPath].verificationNeeded = reason;
+        } else {
+          addLog('info', `Album "${albumData.name}" fully synced - safe for local deletion`);
+        }
         
         progress++;
         const progressPercent = Math.round((progress / totalAlbums) * 100);
         
         await prisma.syncJob.update({
           where: { id: jobId },
-          data: { progress: progressPercent },
+          data: { 
+            progress: progressPercent,
+            completedAlbums: progress,
+            filesProcessed: totalFilesProcessed,
+            filesUploaded: totalFilesUploaded,
+            albumProgress: JSON.stringify(albumProgress),
+            logs: JSON.stringify(logs)
+          },
         });
+        
+        addLog('info', `✅ Album "${albumData.name}" processed (${filesUploaded}/${filesProcessed} files uploaded)`);
       } catch (error) {
-        console.error(`Error syncing album ${albumPath}:`, error);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        addLog('error', `Failed to sync album ${albumPath}`, { error: errorMsg });
+        albumProgress[albumPath] = {
+          status: 'ERROR',
+          error: errorMsg
+        };
       }
     }
 
@@ -87,22 +192,35 @@ async function syncPhotos(jobId: string) {
         status: 'COMPLETED',
         progress: 100,
         completedAt: new Date(),
+        albumProgress: JSON.stringify(albumProgress),
+        logs: JSON.stringify(logs)
       },
     });
+    
+    addLog('info', `🎉 Sync completed! ${totalFilesUploaded}/${totalFilesProcessed} files uploaded across ${totalAlbums} albums`);
   } catch (error) {
-    console.error('Sync job failed:', error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    addLog('error', 'Sync job failed', { error: errorMsg });
+    
     await prisma.syncJob.update({
       where: { id: jobId },
       data: {
         status: 'FAILED',
         completedAt: new Date(),
-        errors: JSON.stringify({ error: error.message }),
+        errors: errorMsg,
+        logs: JSON.stringify(logs)
       },
     });
   }
 }
 
-async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string) {
+async function syncAlbumPhotos(
+  albumId: string, 
+  photos: any[], 
+  albumPath: string, 
+  progressCallback?: (processed: number, uploaded: number) => void,
+  logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
+): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
   // Get existing photos for this album
   const existingPhotos = await prisma.photo.findMany({
     where: { albumId },
@@ -112,14 +230,21 @@ async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string
   const existingFilenames = new Set(existingPhotos.map((p: any) => p.filename));
   const currentFilenames = new Set(photos.map((p: any) => p.filename));
 
+  let filesProcessed = 0;
+  let filesUploaded = 0;
+  const issues: string[] = [];
+
   // Remove photos that no longer exist
   const photosToDelete = existingPhotos.filter((p: any) => !currentFilenames.has(p.filename));
   for (const photo of photosToDelete) {
     try {
       // Delete from S3
       await s3.deleteObject(photo.s3Key);
+      logger?.('info', `Deleted orphaned photo from S3: ${photo.s3Key}`);
     } catch (error) {
-      console.error(`Error deleting S3 object ${photo.s3Key}:`, error);
+      const errorMsg = `Error deleting S3 object ${photo.s3Key}: ${error}`;
+      logger?.('error', errorMsg);
+      issues.push(errorMsg);
     }
     // Delete from database
     await prisma.photo.delete({ where: { id: photo.id } });
@@ -130,8 +255,12 @@ async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string
     const photoPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath, photoData.filename);
     const s3Key = s3.generateKey(albumPath, photoData.filename);
     
+    filesProcessed++;
+    
     if (!existingFilenames.has(photoData.filename)) {
       try {
+        logger?.('info', `Uploading new photo: ${photoData.filename}`);
+        
         // Upload photo to S3
         const fileBuffer = await fs.readFile(photoPath);
         const mimeType = getContentType(photoData.filename);
@@ -160,25 +289,42 @@ async function syncAlbumPhotos(albumId: string, photos: any[], albumPath: string
           filename: photoData.filename,
         });
         
-        console.log(`Uploaded ${photoData.filename} to S3 and generated thumbnails`);
+        filesUploaded++;
+        logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
       } catch (error) {
-        console.error(`Error uploading ${photoData.filename}:`, error);
+        const errorMsg = `Failed to upload ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('error', errorMsg);
+        issues.push(errorMsg);
       }
     } else {
       // Update existing photo metadata (no need to re-upload unless file changed)
-      await prisma.photo.updateMany({
-        where: {
-          albumId,
-          filename: photoData.filename,
-        },
-        data: {
-          metadata: JSON.stringify(photoData),
-          fileSize: photoData.size,
-          takenAt: photoData.takenAt || null,
-        },
-      });
+      try {
+        await prisma.photo.updateMany({
+          where: {
+            albumId,
+            filename: photoData.filename,
+          },
+          data: {
+            metadata: JSON.stringify(photoData),
+            fileSize: photoData.size,
+            takenAt: photoData.takenAt || null,
+          },
+        });
+        logger?.('info', `Updated metadata for existing photo: ${photoData.filename}`);
+      } catch (error) {
+        const errorMsg = `Failed to update metadata for ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('warn', errorMsg);
+        issues.push(errorMsg);
+      }
+    }
+    
+    // Call progress callback if provided
+    if (progressCallback) {
+      progressCallback(filesProcessed, filesUploaded);
     }
   }
+  
+  return { filesProcessed, filesUploaded, issues };
 }
 
 function getContentType(filename: string): string {

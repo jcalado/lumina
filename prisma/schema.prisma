@@ -11,15 +11,18 @@ datasource db {
 }
 
 model Album {
-  id          String   @id @default(cuid())
-  path        String   @unique // filesystem path
-  name        String
-  description String?  // from project.md
-  status      Status   @default(PUBLIC) // PUBLIC | PRIVATE
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  photos      Photo[]
+  id                    String   @id @default(cuid())
+  path                  String   @unique // filesystem path
+  name                  String
+  description           String?  // from project.md
+  status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
+  enabled               Boolean  @default(true)
+  syncedToS3            Boolean  @default(false) // All photos uploaded to S3
+  localFilesSafeDelete  Boolean  @default(false) // Safe to delete local files
+  lastSyncAt            DateTime? // Last successful sync
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  photos                Photo[]
 
   @@map("albums")
 }
@@ -56,13 +59,19 @@ model Thumbnail {
 }
 
 model SyncJob {
-  id          String    @id @default(cuid())
-  status      JobStatus @default(PENDING)
-  progress    Int       @default(0)
-  startedAt   DateTime?
-  completedAt DateTime?
-  errors      String?   // JSON string for error details
-  createdAt   DateTime  @default(now())
+  id              String    @id @default(cuid())
+  status          JobStatus @default(PENDING)
+  progress        Int       @default(0)
+  albumProgress   String?   // JSON with per-album progress
+  totalAlbums     Int       @default(0)
+  completedAlbums Int       @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errors          String?   // JSON string for error details
+  filesProcessed  Int       @default(0)
+  filesUploaded   Int       @default(0)
+  logs            String?   // JSON array of detailed log entries
+  createdAt       DateTime  @default(now())
 
   @@map("sync_jobs")
 }
