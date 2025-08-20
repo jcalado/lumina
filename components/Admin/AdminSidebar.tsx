@@ -8,7 +8,8 @@ import {
   FolderOpen, 
   Settings, 
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from "lucide-react"
 
 const navigationItems = [
@@ -21,6 +22,11 @@ const navigationItems = [
     name: "Albums",
     href: "/admin/albums",
     icon: FolderOpen,
+  },
+  {
+    name: "Jobs",
+    href: "/admin/jobs",
+    icon: Activity,
   },
   {
     name: "Sync",
