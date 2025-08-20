@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Image, Download, Heart, Folder, Images } from 'lucide-react';
+import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home } from 'lucide-react';
 import { PhotoImage } from '@/components/PhotoImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
@@ -174,6 +174,71 @@ function formatDateRange(dateRange: { earliest: string | null; latest: string | 
 
   // Different years
   return `${earliestMonth} ${earliestYear} - ${latestMonth} ${latestYear}`;
+}
+
+// Breadcrumb component
+interface BreadcrumbProps {
+  albumPath: string;
+}
+
+function Breadcrumb({ albumPath }: BreadcrumbProps) {
+  const pathSegments = albumPath ? albumPath.split('/') : [];
+  
+  // Build breadcrumb items
+  const breadcrumbItems = [
+    {
+      name: 'Home',
+      path: '',
+      href: '/',
+      icon: Home,
+    },
+  ];
+
+  // Add each path segment as a breadcrumb item
+  let currentPath = '';
+  pathSegments.forEach((segment, index) => {
+    currentPath += (currentPath ? '/' : '') + segment;
+    breadcrumbItems.push({
+      name: decodeURIComponent(segment),
+      path: currentPath,
+      href: `/albums/${encodeURIComponent(currentPath)}`,
+      icon: Folder,
+    });
+  });
+
+  return (
+    <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-4">
+      {breadcrumbItems.map((item, index) => {
+        const isLast = index === breadcrumbItems.length - 1;
+        const Icon = item.icon;
+        
+        return (
+          <div key={item.path} className="flex items-center">
+            {index > 0 && (
+              <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground/50" />
+            )}
+            
+            {isLast ? (
+              // Current page - not clickable
+              <div className="flex items-center text-foreground font-medium">
+                <Icon className="h-4 w-4 mr-1" />
+                {item.name}
+              </div>
+            ) : (
+              // Clickable breadcrumb link
+              <Link 
+                href={item.href}
+                className="flex items-center hover:text-foreground transition-colors"
+              >
+                <Icon className="h-4 w-4 mr-1" />
+                {item.name}
+              </Link>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
 }
 
 export default function AlbumPage({ params }: AlbumPageProps) {
@@ -359,32 +424,29 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb Navigation */}
+      <Breadcrumb albumPath={albumPath} />
+      
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">{album.name}</h1>
-            {album.description && (
-              <p className="text-muted-foreground mt-1">{album.description}</p>
+        <div>
+          <h1 className="text-3xl font-bold">{album.name}</h1>
+          {album.description && (
+            <p className="text-muted-foreground mt-1">{album.description}</p>
+          )}
+          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
+            <span>{t('photos_in_this_album', { count: album.photoCount })}</span>
+            {album.totalPhotoCount && album.totalPhotoCount > album.photoCount && (
+              <span>{album.totalPhotoCount} total photos (including sub-albums)</span>
             )}
-            <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-              <span>{t('photos_in_this_album', { count: album.photoCount })}</span>
-              {album.totalPhotoCount && album.totalPhotoCount > album.photoCount && (
-                <span>{album.totalPhotoCount} total photos (including sub-albums)</span>
-              )}
-              {album.subAlbumsCount > 0 && (
-                <span>{album.subAlbumsCount} sub-albums</span>
-              )}
-            </div>
+            {album.subAlbumsCount && album.subAlbumsCount > 0 && (
+              <span>{album.subAlbumsCount} sub-albums</span>
+            )}
           </div>
         </div>
 
         {photos.length > 0 && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push('/')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
             <Button
               variant="outline"
               onClick={downloadAlbum}
