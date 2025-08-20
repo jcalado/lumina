@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Folder, Image } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+
+
 
 interface Album {
   id: string;
@@ -23,6 +26,8 @@ export default function HomePage() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  const t = useTranslations('home');
 
   useEffect(() => {
     fetchAlbums();
@@ -74,9 +79,9 @@ export default function HomePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Photo Albums</h1>
+          <h1 className="text-3xl font-bold">{t('photo_albums')}</h1>
           <p className="text-muted-foreground">
-            Browse your photo collection organized in albums
+            {t('description')}
           </p>
         </div>
         <Button 
