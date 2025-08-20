@@ -111,6 +111,43 @@ export default function AdminJobsPage() {
     }
   }
 
+  const handleStopBlurhashJob = async () => {
+    setBlurhashJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/blurhash", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "stop" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Blurhash processing stop requested"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchBlurhashJobs()
+          fetchJobStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to stop blurhash job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to stop blurhash job",
+        variant: "destructive"
+      })
+    } finally {
+      setBlurhashJobLoading(false)
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'RUNNING':
@@ -371,14 +408,24 @@ export default function AdminJobsPage() {
                   }
                 </span>
               </Button>
+
+              {blurhashJob?.status === 'RUNNING' && (
+                <Button
+                  onClick={handleStopBlurhashJob}
+                  disabled={blurhashJobLoading}
+                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Pause className="h-4 w-4" />
+                  <span>Stop Processing</span>
+                </Button>
+              )}
               
               <Button
-                variant="outline"
                 onClick={() => {
                   fetchBlurhashJobs()
                   fetchJobStats()
                 }}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
               >
                 <RotateCcw className="h-4 w-4" />
                 <span>Refresh</span>
@@ -393,7 +440,7 @@ export default function AdminJobsPage() {
             <CardTitle className="flex items-center space-x-2">
               <Clock className="h-5 w-5" />
               <span>Thumbnail Generation</span>
-              <Badge variant="outline">Coming Soon</Badge>
+              <Badge className="border border-input text-foreground">Coming Soon</Badge>
             </CardTitle>
             <CardDescription>
               Background thumbnail processing and optimization
@@ -411,7 +458,7 @@ export default function AdminJobsPage() {
             <CardTitle className="flex items-center space-x-2">
               <Clock className="h-5 w-5" />
               <span>Album Synchronization</span>
-              <Badge variant="outline">Coming Soon</Badge>
+              <Badge className="border border-input text-foreground">Coming Soon</Badge>
             </CardTitle>
             <CardDescription>
               Sync local photo directories with cloud storage

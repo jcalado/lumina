@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { startBlurhashJob } from '@/scripts/blurhash-worker';
+import { startBlurhashJob, requestJobStop } from '@/scripts/blurhash-worker';
 
 export async function GET() {
   try {
@@ -47,6 +47,39 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ 
         message: 'Blurhash job started successfully' 
+      });
+    }
+
+    if (action === 'stop') {
+      // Check if there's a running job
+      const runningJob = await prisma.blurhashJob.findFirst({
+        where: {
+          status: 'RUNNING',
+        },
+      });
+
+      if (!runningJob) {
+        return NextResponse.json(
+          { error: 'No blurhash job is currently running' },
+          { status: 400 }
+        );
+      }
+
+      // Request the job to stop
+      requestJobStop();
+
+      // Immediately update the job status to indicate stop was requested
+      await prisma.blurhashJob.update({
+        where: { id: runningJob.id },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          errors: JSON.stringify(['Job stopped by user request']),
+        },
+      });
+
+      return NextResponse.json({ 
+        message: 'Blurhash job stopped successfully' 
       });
     }
 

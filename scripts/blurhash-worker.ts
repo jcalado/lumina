@@ -13,6 +13,20 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 
+// Global flag to control job stopping
+let shouldStopJob = false;
+
+// Function to request job to stop
+export function requestJobStop() {
+  shouldStopJob = true;
+  console.log('🛑 Job stop requested');
+}
+
+// Function to reset the stop flag
+export function resetStopFlag() {
+  shouldStopJob = false;
+}
+
 // Validate required environment variables
 const requiredEnvVars = {
   S3_BUCKET: process.env.S3_BUCKET,
@@ -64,8 +78,18 @@ async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
       return null;
     }
 
-    // Construct full local path
-    const fullPath = path.join(photosRoot, originalPath);
+    let fullPath: string;
+    
+    // Check if originalPath is already absolute
+    if (path.isAbsolute(originalPath)) {
+      // Use the path as-is if it's already absolute
+      fullPath = originalPath;
+      console.log(`Using absolute path: ${fullPath}`);
+    } else {
+      // Join with PHOTOS_ROOT_PATH if it's relative
+      fullPath = path.join(photosRoot, originalPath);
+      console.log(`Joining relative path: ${photosRoot} + ${originalPath} = ${fullPath}`);
+    }
     
     // Check if file exists
     await fs.access(fullPath);
@@ -76,7 +100,7 @@ async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
     return buffer;
   } catch (error) {
     // File doesn't exist locally or can't be read
-    console.log(`❌ Local file not available: ${originalPath}`);
+    console.log(`❌ Local file not available: ${originalPath} (${error instanceof Error ? error.message : 'Unknown error'})`);
     return null;
   }
 }
@@ -191,6 +215,34 @@ async function processBlurhashJob(jobId: string) {
     const errors: string[] = [];
 
     for (const photo of photos) {
+      // Check if job should be stopped (either by flag or database status)
+      if (shouldStopJob) {
+        console.log('🛑 Job stopped by user request (flag)');
+        await prisma.blurhashJob.update({
+          where: { id: jobId },
+          data: {
+            status: 'FAILED',
+            completedAt: new Date(),
+            errors: JSON.stringify(['Job stopped by user request']),
+            processedPhotos,
+          },
+        });
+        resetStopFlag();
+        return;
+      }
+
+      // Also check database status in case it was updated by the API
+      const currentJob = await prisma.blurhashJob.findUnique({
+        where: { id: jobId },
+        select: { status: true }
+      });
+      
+      if (currentJob?.status !== 'RUNNING') {
+        console.log('🛑 Job stopped by user request (database)');
+        resetStopFlag();
+        return;
+      }
+
       try {
         console.log(`Processing photo ${photo.filename} (${processedPhotos + 1}/${totalPhotos})`);
 
@@ -269,6 +321,9 @@ async function processBlurhashJob(jobId: string) {
 async function startBlurhashJob() {
   try {
     console.log('🔍 Starting blurhash job initialization...');
+    
+    // Reset stop flag when starting a new job
+    resetStopFlag();
     
     // Validate environment variables first
     const envError = validateEnvironment();
