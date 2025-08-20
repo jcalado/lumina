@@ -8,16 +8,22 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let albumPath = '';
   try {
     const resolvedParams = await params;
     console.log('Raw path segments:', resolvedParams.path);
     
+    // Get query parameters for sorting
+    const { searchParams } = new URL(request.url);
+    const sortBy = searchParams.get('sortBy') || 'asc'; // 'asc' or 'desc'
+    
     // Decode each path segment to handle URL encoding
     const decodedPath = resolvedParams.path.map(segment => decodeURIComponent(segment));
-    const albumPath = decodedPath.join('/');
+    albumPath = decodedPath.join('/');
     
     console.log('Decoded path segments:', decodedPath);
     console.log('Final album path:', albumPath);
+    console.log('Sort order:', sortBy);
     
     const album = await prisma.album.findUnique({
       where: {
@@ -29,7 +35,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             thumbnails: true,
           },
           orderBy: {
-            takenAt: 'asc',
+            takenAt: sortBy === 'desc' ? 'desc' : 'asc',
           },
         },
       },
@@ -186,7 +192,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         name: album.name,
         description: album.description,
         photoCount: album.photos.length,
-        totalPhotoCount: album.photos.length, // Can be calculated differently if needed
+        totalPhotoCount: album.photos.length,
         subAlbumsCount: subAlbums.length,
       },
       subAlbums: subAlbums.map((subAlbum: any) => {
@@ -216,8 +222,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('Error fetching album:', error);
+    console.error('Album path that failed:', albumPath);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json(
-      { error: 'Failed to fetch album' },
+      { error: 'Failed to fetch album', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

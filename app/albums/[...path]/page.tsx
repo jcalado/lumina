@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home } from 'lucide-react';
+import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home, ArrowUpDown, Filter } from 'lucide-react';
 import { PhotoImage } from '@/components/PhotoImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
+import { useFavorites } from '@/contexts/FavoritesContext';
 
 import { useTranslations } from 'next-intl';
 
@@ -250,8 +251,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const t = useTranslations('albums');
+  const { favorites, isFavorite } = useFavorites();
 
   useEffect(() => {
     const initializePage = async () => {
@@ -273,15 +277,18 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     if (albumPath) {
       fetchAlbum();
     }
-  }, [albumPath]);
+  }, [albumPath, sortOrder]); // Remove showFavoritesOnly from dependencies since we filter client-side
 
   const fetchAlbum = async () => {
     try {
       // Encode each path segment individually to preserve the URL structure
       const encodedPath = albumPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-      const url = `/api/albums/${encodedPath}`;
+      const queryParams = new URLSearchParams();
+      queryParams.set('sortBy', sortOrder);
+      const url = `/api/albums/${encodedPath}?${queryParams.toString()}`;
       console.log('Fetching album from URL:', url);
       console.log('Album path:', albumPath);
+      console.log('Sort order:', sortOrder);
 
       const response = await fetch(url);
       console.log('Response status:', response.status);
@@ -295,15 +302,30 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       } else if (response.status === 403) {
         setError('Album not accessible');
       } else {
-        setError('Failed to load album');
+        // Try to get error details from response
+        try {
+          const errorData = await response.json();
+          console.error('Server error response:', errorData);
+          setError(`Failed to load album: ${errorData.details || errorData.error || 'Unknown error'}`);
+        } catch {
+          setError(`Failed to load album (Status: ${response.status})`);
+        }
       }
     } catch (error) {
       console.error('Error fetching album:', error);
-      setError('Failed to load album');
+      setError(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   };
+
+  // Filter photos based on favorites selection
+  const filteredPhotos = albumData?.photos.filter(photo => {
+    if (showFavoritesOnly) {
+      return isFavorite(photo.id);
+    }
+    return true;
+  }) || [];
 
   if (loading) {
     return (
@@ -340,8 +362,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const { album, subAlbums, photos } = albumData;
 
-  const openLightbox = (index: number) => {
-    setCurrentPhotoIndex(index);
+  const openLightbox = (filteredIndex: number) => {
+    // Find the original photo index in the full photos array
+    const filteredPhoto = filteredPhotos[filteredIndex];
+    const originalIndex = photos.findIndex(p => p.id === filteredPhoto.id);
+    setCurrentPhotoIndex(originalIndex);
     setLightboxOpen(true);
   };
 
@@ -445,19 +470,77 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           </div>
         </div>
 
-        {photos.length > 0 && (
+        {filteredPhotos.length > 0 && (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
+            <button
+              className="border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm h-9 px-4 py-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
               onClick={downloadAlbum}
               disabled={isDownloading}
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="h-4 w-4" />
               {isDownloading ? 'Downloading...' : 'Download Album'}
-            </Button>
+            </button>
           </div>
         )}
       </div>
+
+      {/* Filter and Sort Controls */}
+      {photos.length > 0 && (
+        <div className="flex gap-2 items-center p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Sort by date:</span>
+            <button
+              className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
+                sortOrder === 'asc' 
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                  : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
+              }`}
+              onClick={() => setSortOrder('asc')}
+            >
+              Oldest first
+            </button>
+            <button
+              className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
+                sortOrder === 'desc' 
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                  : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
+              }`}
+              onClick={() => setSortOrder('desc')}
+            >
+              Newest first
+            </button>
+          </div>
+          
+          <div className="h-4 w-px bg-border mx-2" />
+          
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Show:</span>
+            <button
+              className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
+                !showFavoritesOnly 
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                  : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
+              }`}
+              onClick={() => setShowFavoritesOnly(false)}
+            >
+              All photos
+            </button>
+            <button
+              className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium gap-1 ${
+                showFavoritesOnly 
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                  : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
+              }`}
+              onClick={() => setShowFavoritesOnly(true)}
+            >
+              <Heart className="h-3 w-3" />
+              Favorites only
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sub-albums */}
       {subAlbums.length > 0 && (
@@ -538,11 +621,23 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             </CardDescription>
           </CardContent>
         </Card>
-      ) : photos.length > 0 ? (
+      ) : showFavoritesOnly && filteredPhotos.length === 0 ? (
+        <Card className="text-center py-16">
+          <CardContent>
+            <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+            <CardTitle className="mb-2">No Favorites</CardTitle>
+            <CardDescription>
+              You haven't marked any photos as favorites in this album yet.
+            </CardDescription>
+          </CardContent>
+        </Card>
+      ) : filteredPhotos.length > 0 ? (
         <div>
-          <h2 className="text-xl font-semibold mb-4">Photos</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            Photos {showFavoritesOnly && <span className="text-muted-foreground">({filteredPhotos.length} favorites)</span>}
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {photos.map((photo, index) => (
+            {filteredPhotos.map((photo, index) => (
               <div
                 key={photo.id}
                 className="cursor-pointer"
