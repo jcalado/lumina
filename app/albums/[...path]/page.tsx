@@ -14,6 +14,7 @@ import { DownloadSelectionButton } from '@/components/Download/DownloadSelection
 import { SelectedPhotosDownload } from '@/components/Download/SelectedPhotosDownload';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
+import { ResponsiveBreadcrumb, type BreadcrumbItemData } from '@/components/ui/responsive-breadcrumb';
 
 import { useTranslations } from 'next-intl';
 
@@ -108,7 +109,7 @@ interface BreadcrumbProps {
 }
 
 function Breadcrumb({ albumPath }: BreadcrumbProps) {
-  const [breadcrumbItems, setBreadcrumbItems] = useState([
+  const [breadcrumbItems, setBreadcrumbItems] = useState<BreadcrumbItemData[]>([
     {
       name: 'Home',
       path: '',
@@ -120,7 +121,7 @@ function Breadcrumb({ albumPath }: BreadcrumbProps) {
   useEffect(() => {
     const buildBreadcrumbs = async () => {
       const pathSegments = albumPath ? albumPath.split('/') : [];
-      const items = [
+      const items: BreadcrumbItemData[] = [
         {
           name: 'Home',
           path: '',
@@ -194,39 +195,7 @@ function Breadcrumb({ albumPath }: BreadcrumbProps) {
     buildBreadcrumbs();
   }, [albumPath]);
 
-  return (
-    <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-4">
-      {breadcrumbItems.map((item, index) => {
-        const isLast = index === breadcrumbItems.length - 1;
-        const Icon = item.icon;
-        
-        return (
-          <div key={item.path} className="flex items-center">
-            {index > 0 && (
-              <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground/50" />
-            )}
-            
-            {isLast ? (
-              // Current page - not clickable
-              <div className="flex items-center text-foreground font-medium">
-                <Icon className="h-4 w-4 mr-1" />
-                {item.name}
-              </div>
-            ) : (
-              // Clickable breadcrumb link
-              <Link 
-                href={item.href}
-                className="flex items-center hover:text-foreground transition-colors"
-              >
-                <Icon className="h-4 w-4 mr-1" />
-                {item.name}
-              </Link>
-            )}
-          </div>
-        );
-      })}
-    </nav>
-  );
+  return <ResponsiveBreadcrumb items={breadcrumbItems} />;
 }
 
 export default function AlbumPage({ params }: AlbumPageProps) {
