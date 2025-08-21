@@ -51,12 +51,66 @@ export async function GET() {
           },
         });
 
+        // Get 5 random photos for thumbnails from this album and its sub-albums
+        let thumbnailPhotos: { id: string; filename: string }[] = [];
+        
+        // First try to get photos from sub-albums (more diverse)
+        if (subAlbumsCount > 0) {
+          const subAlbumPhotos = await prisma.photo.findMany({
+            where: {
+              album: {
+                status: 'PUBLIC',
+                enabled: true,
+                path: {
+                  startsWith: album.path + '/',
+                },
+              },
+            },
+            select: {
+              id: true,
+              filename: true,
+            },
+            take: 100, // Get more to randomize
+            orderBy: {
+              takenAt: 'asc',
+            },
+          });
+          
+          // Randomize and take 5
+          if (subAlbumPhotos.length > 0) {
+            const shuffled = subAlbumPhotos.sort(() => 0.5 - Math.random());
+            thumbnailPhotos = shuffled.slice(0, 5);
+          }
+        }
+        
+        // If we don't have enough from sub-albums, get from the main album
+        if (thumbnailPhotos.length < 5 && photoCount > 0) {
+          const albumPhotos = await prisma.photo.findMany({
+            where: {
+              albumId: album.id,
+            },
+            select: {
+              id: true,
+              filename: true,
+            },
+            take: 5 - thumbnailPhotos.length,
+            orderBy: {
+              takenAt: 'asc',
+            },
+          });
+          
+          thumbnailPhotos.push(...albumPhotos);
+        }
+
         return {
           ...album,
           photoCount,
           totalPhotoCount: photoCount + subAlbumPhotos,
           subAlbumsCount,
-          thumbnails: [], // Simplified for now
+          thumbnails: thumbnailPhotos.map(photo => ({
+            photoId: photo.id,
+            filename: photo.filename,
+          })),
         };
       })
     );
