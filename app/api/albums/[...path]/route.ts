@@ -146,16 +146,67 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       
       console.log('Found direct sub-albums:', subAlbums.length);
       
-      // Get thumbnail photos for sub-albums that have photos
+      // Get thumbnail photos for sub-albums
       for (const subAlbum of subAlbums) {
-        if (subAlbum._count.photos > 0) {
-          try {
-            // Get photos distributed across the timeline for better scrubbing experience
+        try {
+          // First check if this sub-album has its own sub-albums
+          const subAlbumHasChildren = await prisma.album.count({
+            where: {
+              status: 'PUBLIC',
+              enabled: true,
+              path: {
+                startsWith: subAlbum.path + '/',
+              },
+            },
+          });
+
+          let photos: { id: string; filename: string; takenAt: Date | null }[] = [];
+          
+          if (subAlbumHasChildren > 0) {
+            // This sub-album has children, so get photos from its sub-albums instead
+            console.log(`Sub-album ${subAlbum.name} has ${subAlbumHasChildren} children, getting photos from sub-albums`);
+            
+            const subAlbumPhotos = await prisma.photo.findMany({
+              where: {
+                album: {
+                  status: 'PUBLIC',
+                  enabled: true,
+                  path: {
+                    startsWith: subAlbum.path + '/',
+                  },
+                },
+              },
+              select: {
+                id: true,
+                filename: true,
+                takenAt: true,
+              },
+              orderBy: {
+                takenAt: 'asc',
+              },
+            });
+
+            // Get distributed sample from sub-album photos
+            if (subAlbumPhotos.length > 0) {
+              if (subAlbumPhotos.length <= 5) {
+                photos = subAlbumPhotos;
+              } else {
+                const interval = Math.floor(subAlbumPhotos.length / 5);
+                for (let i = 0; i < 5; i++) {
+                  const index = i * interval;
+                  if (index < subAlbumPhotos.length) {
+                    photos.push(subAlbumPhotos[index]);
+                  }
+                }
+              }
+            }
+          } else if (subAlbum._count.photos > 0) {
+            // No children, get photos from this album directly
+            console.log(`Sub-album ${subAlbum.name} has no children, getting direct photos`);
+            
             const totalPhotos = subAlbum._count.photos;
-            let photos = [];
             
             if (totalPhotos <= 5) {
-              // If 5 or fewer photos, get them all
               photos = await prisma.photo.findMany({
                 where: {
                   albumId: subAlbum.id,
@@ -170,8 +221,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               });
             } else {
-              // If more than 5 photos, get a distributed sample
-              // Get photos at regular intervals across the timeline
+              // Get distributed sample from direct photos
               const interval = Math.floor(totalPhotos / 5);
               for (let i = 0; i < 5; i++) {
                 const skip = i * interval;
@@ -194,34 +244,62 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 }
               }
             }
-            
-            // Get date range for the album
-            const dateRange = await prisma.photo.aggregate({
-              where: {
-                albumId: subAlbum.id,
-                takenAt: {
-                  not: null,
+          }
+
+          // Store the photos for scrubbing
+          (subAlbum as SubAlbumWithPhotos).photos = photos;
+          
+          // Calculate total photo count including sub-albums
+          const totalPhotoCount = subAlbum._count.photos + (subAlbumHasChildren > 0 ? await prisma.photo.count({
+            where: {
+              album: {
+                status: 'PUBLIC',
+                enabled: true,
+                path: {
+                  startsWith: subAlbum.path + '/',
                 },
               },
-              _min: {
-                takenAt: true,
+            },
+          }) : 0);
+
+          // Get date range for the album (including sub-albums if any)
+          const dateRange = await prisma.photo.aggregate({
+            where: {
+              OR: [
+                { albumId: subAlbum.id },
+                ...(subAlbumHasChildren > 0 ? [{
+                  album: {
+                    status: 'PUBLIC' as const,
+                    enabled: true,
+                    path: {
+                      startsWith: subAlbum.path + '/',
+                    },
+                  },
+                }] : [])
+              ],
+              takenAt: {
+                not: null,
               },
-              _max: {
-                takenAt: true,
-              },
-            });
-            
-            (subAlbum as SubAlbumWithPhotos).photos = photos;
-            (subAlbum as SubAlbumWithPhotos).dateRange = {
-              earliest: dateRange._min.takenAt,
-              latest: dateRange._max.takenAt,
-            };
-            console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing`);
-          } catch (photoError) {
-            console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
-            (subAlbum as SubAlbumWithPhotos).photos = [];
-          }
-        } else {
+            },
+            _min: {
+              takenAt: true,
+            },
+            _max: {
+              takenAt: true,
+            },
+          });
+          
+          (subAlbum as SubAlbumWithPhotos).dateRange = {
+            earliest: dateRange._min.takenAt || null,
+            latest: dateRange._max.takenAt || null,
+          };
+          
+          // Update the photo count to include sub-albums
+          (subAlbum as SubAlbumWithPhotos)._count.photos = totalPhotoCount;
+          
+          console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing (total: ${totalPhotoCount})`);
+        } catch (photoError) {
+          console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
           (subAlbum as SubAlbumWithPhotos).photos = [];
         }
       }
@@ -241,11 +319,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         totalPhotoCount: album._count.photos,
         subAlbumsCount: subAlbums.length,
       },
-      subAlbums: subAlbums.map((subAlbum: SubAlbumWithPhotos) => {
+      subAlbums: await Promise.all(subAlbums.map(async (subAlbum: SubAlbumWithPhotos) => {
         // Return all photos for scrubbing effect (up to 5)
         const photos = subAlbum.photos || [];
         
-        console.log(`Sub-album ${subAlbum.name}: ${photos.length} photos available for scrubbing`);
+        // Calculate subAlbumsCount for this sub-album
+        const subAlbumsCount = await prisma.album.count({
+          where: {
+            status: 'PUBLIC',
+            enabled: true,
+            path: {
+              startsWith: subAlbum.path + '/',
+            },
+          },
+        });
+        
+        console.log(`Sub-album ${subAlbum.name}: ${photos.length} photos available for scrubbing, ${subAlbumsCount} sub-albums`);
         
         return {
           id: subAlbum.id,
@@ -254,7 +343,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           description: subAlbum.description,
           photoCount: subAlbum._count.photos,
           totalPhotoCount: subAlbum._count.photos,
-          subAlbumsCount: 0, // Can be calculated if needed
+          subAlbumsCount,
           thumbnails: photos.map((photo) => ({
             photoId: photo.id,
             filename: photo.filename,
@@ -264,7 +353,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             latest: subAlbum.dateRange.latest?.toISOString() || null,
           } : null,
         };
-      }),
+      })),
       photos: album.photos,
       pagination: {
         page,

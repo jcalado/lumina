@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Folder, Image } from 'lucide-react';
+import { RefreshCw, Folder, Image, Images } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
 
 
 
@@ -18,6 +19,7 @@ interface Album {
   photoCount: number;
   totalPhotoCount?: number;
   subAlbumsCount?: number;
+  thumbnails?: { photoId: string; filename: string }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -102,46 +104,69 @@ export default function HomePage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {albums.map((album) => (
             <Link key={album.id} href={`/albums/${album.path}`}>
-              <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Folder className="h-5 w-5" />
-                    {album.name}
-                  </CardTitle>
-                  {album.description && (
-                    <CardDescription className="line-clamp-2">
-                      {album.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Image className="h-4 w-4" />
-                      {album.photoCount} direct photos
+              <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+                {/* Thumbnail Image */}
+                <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
+                  {album.thumbnails && album.thumbnails.length > 0 ? (
+                    <ScrubThumbnail
+                      thumbnails={album.thumbnails}
+                      albumName={album.name}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+                      <Folder className="w-12 h-12 text-muted-foreground/50" />
                     </div>
-                    <div className="flex gap-1">
-                      {album.totalPhotoCount && album.totalPhotoCount > album.photoCount && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Image className="h-3 w-3 mr-1" />
-                          {album.totalPhotoCount} total
+                  )}
+
+                  {/* Overlay with folder icon and badges - pointer-events-none to allow scrubbing */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
+                    <div className="absolute top-2 left-2 pointer-events-auto">
+                      <div className="bg-black/60 rounded-full p-1.5">
+                        <Images className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
+                      {album.totalPhotoCount && album.totalPhotoCount > 0 && (
+                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                          <Image className="w-3 h-3 mr-1" />
+                          {album.totalPhotoCount}
                         </Badge>
                       )}
                       {album.subAlbumsCount && album.subAlbumsCount > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          <Folder className="h-3 w-3 mr-1" />
-                          {album.subAlbumsCount} sub-albums
+                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                          <Folder className="w-3 h-3 mr-1" />
+                          {album.subAlbumsCount}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Updated {new Date(album.updatedAt).toLocaleDateString()}
-                  </p>
-                </CardContent>
+                </div>
+
+                {/* Album Details */}
+                <div className="p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <h3 className="font-medium text-sm line-clamp-2 flex-1">
+                      {album.name}
+                    </h3>
+                  </div>
+                  {album.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                      {album.description}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Image className="h-3 w-3" />
+                      {album.photoCount} direct photos
+                    </div>
+                    <span>
+                      Updated {new Date(album.updatedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
               </Card>
             </Link>
           ))}
