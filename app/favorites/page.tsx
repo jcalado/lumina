@@ -17,6 +17,8 @@ interface Photo {
   fileSize: number;
   takenAt: string | null;
   createdAt: string;
+  orientation?: number;
+  metadata?: string | null; // JSON string containing EXIF data
   url: string;
   album: {
     id: string;
@@ -143,6 +145,7 @@ export default function FavoritesPage() {
                   filename={photo.filename}
                   alt={photo.filename}
                   size="medium"
+                  orientation={photo.orientation}
                   className="object-cover w-full h-full transition-transform group-hover:scale-105"
                 />
                 

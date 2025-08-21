@@ -3,6 +3,7 @@ import { prisma } from './prisma';
 import { S3Service } from './s3';
 import { getBatchProcessingSize } from './settings';
 import * as fs from 'fs/promises';
+import * as exifr from 'exifr';
 
 // Thumbnail sizes as per CLAUDE.md spec
 export const THUMBNAIL_SIZES = {
@@ -45,13 +46,21 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
     
     const thumbnailsCreated = [];
     
+    // We'll use Sharp's built-in auto-rotation which reads EXIF orientation automatically
+    
     // Generate thumbnails for each size
     for (const [sizeName, config] of Object.entries(THUMBNAIL_SIZES)) {
       try {
-        // Process image
-        const processedImage = sharp(imageBuffer);
+        // Process image with automatic orientation correction
+        let processedImage = sharp(imageBuffer, { 
+          failOnError: false,
+          limitInputPixels: false
+        })
+        .rotate(); // This automatically applies EXIF orientation and removes EXIF data
         
-        // Get original dimensions
+        console.log(`Applied auto-orientation to ${filename}`);
+        
+        // Get original dimensions (after orientation correction)
         const metadata = await processedImage.metadata();
         
         // Calculate dimensions maintaining aspect ratio
@@ -194,6 +203,111 @@ export async function generateMissingThumbnails(): Promise<{ processed: number; 
     };
   } catch (error) {
     console.error('Error generating missing thumbnails:', error);
+    throw error;
+  }
+}
+
+// Function to delete all existing thumbnails and regenerate them
+export async function reprocessAllThumbnails(): Promise<{ processed: number; total: number; deleted: number }> {
+  try {
+    console.log('Starting reprocessing of all thumbnails...');
+    const s3Service = new S3Service();
+
+    // Get all photos with their thumbnails
+    const allPhotos = await prisma.photo.findMany({
+      select: {
+        id: true,
+        filename: true,
+        originalPath: true,
+        s3Key: true,
+        metadata: true,
+        thumbnails: {
+          select: {
+            id: true,
+            s3Key: true,
+          },
+        },
+        album: {
+          select: {
+            path: true,
+          },
+        },
+      },
+    });
+
+    console.log(`Found ${allPhotos.length} photos to reprocess`);
+
+    // Delete all existing thumbnails
+    let deletedCount = 0;
+    for (const photo of allPhotos) {
+      if (photo.thumbnails.length > 0) {
+        // Delete thumbnail files from S3
+        for (const thumbnail of photo.thumbnails) {
+          try {
+            await s3Service.deleteObject(thumbnail.s3Key);
+            deletedCount++;
+          } catch (error) {
+            console.error(`Failed to delete thumbnail from S3: ${thumbnail.s3Key}`, error);
+          }
+        }
+
+        // Delete thumbnail records from database
+        await prisma.thumbnail.deleteMany({
+          where: { photoId: photo.id },
+        });
+      }
+    }
+
+    console.log(`Deleted ${deletedCount} thumbnail files from S3 and database`);
+
+    // Get batch size from settings
+    const batchSize = await getBatchProcessingSize();
+    console.log(`Using batch processing size: ${batchSize}`);
+
+    // Regenerate thumbnails for all photos in batches
+    let processed = 0;
+
+    const processSinglePhoto = async (photo: any) => {
+      try {
+        await generateThumbnails({
+          photoId: photo.id,
+          originalPath: photo.originalPath,
+          s3Key: photo.s3Key,
+          albumPath: photo.album.path,
+          filename: photo.filename,
+          // We don't need to manually extract orientation anymore - Sharp handles this automatically
+        });
+
+        processed++;
+        console.log(`Regenerated thumbnails for ${photo.filename} (${processed}/${allPhotos.length})`);
+      } catch (error) {
+        console.error(`Failed to regenerate thumbnails for ${photo.filename}:`, error);
+      }
+    };
+
+    // Process photos in batches
+    for (let i = 0; i < allPhotos.length; i += batchSize) {
+      const batch = allPhotos.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allPhotos.length / batchSize)}: ${batch.length} photos`);
+
+      // Process all photos in the current batch concurrently
+      await Promise.all(batch.map(processSinglePhoto));
+
+      // Small delay between batches to prevent overwhelming the system
+      if (i + batchSize < allPhotos.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    console.log(`Reprocessing completed: ${processed} photos processed, ${deletedCount} old thumbnails deleted`);
+
+    return {
+      processed,
+      total: allPhotos.length,
+      deleted: deletedCount,
+    };
+  } catch (error) {
+    console.error('Error reprocessing all thumbnails:', error);
     throw error;
   }
 }

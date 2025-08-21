@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { Image as ImageIcon } from 'lucide-react';
 import { Blurhash } from 'react-blurhash';
+import { getOrientationTransform, requiresDimensionSwap } from '@/lib/photo-orientation';
 
 interface PhotoImageProps {
   photoId: string;
@@ -13,6 +14,7 @@ interface PhotoImageProps {
   size?: 'small' | 'medium' | 'large';
   lazy?: boolean;
   blurhash?: string | null;
+  orientation?: number;
 }
 
 export function PhotoImage({ 
@@ -22,7 +24,8 @@ export function PhotoImage({
   alt, 
   size = 'small',
   lazy = true,
-  blurhash = null
+  blurhash = null,
+  orientation = 1
 }: PhotoImageProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,6 +111,10 @@ export function PhotoImage({
           alt={alt || filename}
           fill
           className="object-cover"
+          style={{
+            transform: getOrientationTransform(orientation),
+            transformOrigin: 'center'
+          }}
           sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
           onLoad={handleImageLoad}
           onError={handleImageError}

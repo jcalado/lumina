@@ -24,6 +24,8 @@ interface Photo {
   takenAt: string | null;
   createdAt: string;
   blurhash?: string | null;
+  orientation?: number; // EXIF orientation value (1-8)
+  metadata?: string | null; // JSON string containing EXIF data
   thumbnails: {
     size: string;
     s3Key: string;
@@ -698,6 +700,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                         className="aspect-square rounded-md"
                         alt={`Photo ${photo.filename}`}
                         blurhash={photo.blurhash}
+                        orientation={photo.orientation}
                       />
 
                       {/* Favorite button overlay */}

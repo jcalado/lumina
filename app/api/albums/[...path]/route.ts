@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { slugPathToPath, pathToSlugPath } from '@/lib/slug-paths';
+import { getPhotoOrientation } from '@/lib/photo-orientation';
 
 interface RouteParams {
   params: Promise<{
@@ -381,7 +382,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           } : null,
         };
       })),
-      photos: album.photos,
+      photos: album.photos.map(photo => ({
+        ...photo,
+        orientation: getPhotoOrientation(photo.metadata)
+      })),
       pagination: {
         page,
         limit,

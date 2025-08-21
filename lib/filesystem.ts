@@ -10,6 +10,7 @@ export interface PhotoMetadata {
   takenAt?: Date;
   camera?: string;
   lens?: string;
+  orientation?: number; // EXIF orientation value (1-8)
   settings?: {
     iso?: number;
     aperture?: string;
@@ -85,7 +86,7 @@ export class FileSystemScanner {
           'DateTimeOriginal', 'CreateDate', 'ModifyDate',
           'Make', 'Model', 'LensModel',
           'ISO', 'FNumber', 'ExposureTime', 'FocalLength',
-          'GPSLatitude', 'GPSLongitude'
+          'GPSLatitude', 'GPSLongitude', 'Orientation'
         ]
       });
       
@@ -110,6 +111,11 @@ export class FileSystemScanner {
       
       if (exifData?.LensModel) {
         metadata.lens = exifData.LensModel;
+      }
+      
+      // Extract orientation
+      if (exifData?.Orientation) {
+        metadata.orientation = exifData.Orientation;
       }
       
       // Extract camera settings

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, Download, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { PhotoExifInfo } from './PhotoExifInfo';
 
 interface Photo {
   id: string;
@@ -13,6 +14,8 @@ interface Photo {
   fileSize: number;
   takenAt: string | null;
   createdAt: string;
+  metadata?: string | null;
+  orientation?: number;
 }
 
 interface LightboxProps {
@@ -192,37 +195,9 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
 
       {/* Metadata panel */}
       {showMetadata && (
-        <Card className="absolute bottom-4 right-4 w-80 max-h-64 overflow-auto">
-          <CardContent className="p-4">
-            <h3 className="font-semibold mb-2">Photo Information</h3>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="font-medium">Filename:</span>
-                <span className="ml-2 text-muted-foreground">{currentPhoto.filename}</span>
-              </div>
-              <div>
-                <span className="font-medium">File Size:</span>
-                <span className="ml-2 text-muted-foreground">
-                  {(currentPhoto.fileSize / 1024 / 1024).toFixed(2)} MB
-                </span>
-              </div>
-              {currentPhoto.takenAt && (
-                <div>
-                  <span className="font-medium">Date Taken:</span>
-                  <span className="ml-2 text-muted-foreground">
-                    {new Date(currentPhoto.takenAt).toLocaleString()}
-                  </span>
-                </div>
-              )}
-              <div>
-                <span className="font-medium">Date Added:</span>
-                <span className="ml-2 text-muted-foreground">
-                  {new Date(currentPhoto.createdAt).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="absolute bottom-4 right-4 z-20">
+          <PhotoExifInfo photo={currentPhoto} />
+        </div>
       )}
 
       {/* Footer with thumbnails - disabled */}

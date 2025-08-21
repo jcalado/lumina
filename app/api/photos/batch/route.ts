@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
+import { getPhotoOrientation } from '@/lib/photo-orientation';
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
         const signedUrl = await s3.getSignedUrl(photo.s3Key, 3600); // 1 hour expiry
         return {
           ...photo,
+          orientation: getPhotoOrientation(photo.metadata),
           url: signedUrl,
         };
       })

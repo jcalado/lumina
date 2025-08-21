@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Save, Play, Pause, RotateCcw, Activity, Clock, CheckCircle, XCircle, Image } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Save, Play, Pause, RotateCcw, Activity, Clock, CheckCircle, XCircle, Image, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface BlurhashJob {
@@ -271,6 +272,82 @@ export default function AdminJobsPage() {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to stop thumbnail job",
+        variant: "destructive"
+      })
+    } finally {
+      setThumbnailJobLoading(false)
+    }
+  }
+
+  const handleReprocessThumbnails = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "reprocess" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "All thumbnails are being reprocessed. This may take a while."
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to start thumbnail reprocessing")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start thumbnail reprocessing",
+        variant: "destructive"
+      })
+    } finally {
+      setThumbnailJobLoading(false)
+    }
+  }
+
+  const handleCleanupJobs = async () => {
+    try {
+      setThumbnailJobLoading(true)
+
+      const response = await fetch("/api/admin/thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "cleanup" })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast({
+          title: "Success",
+          description: data.message || "Job cleanup completed"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to cleanup jobs")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cleanup jobs",
         variant: "destructive"
       })
     } finally {
@@ -776,6 +853,51 @@ export default function AdminJobsPage() {
                   <span>Stop Processing</span>
                 </Button>
               )}
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    disabled={thumbnailJobLoading || thumbnailJob?.status === 'RUNNING'}
+                    className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Reprocess All Thumbnails</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reprocess All Thumbnails</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to reprocess all thumbnails? This will:
+                      <br />
+                      • Delete all existing thumbnails from storage
+                      <br />
+                      • Generate new thumbnails for all {thumbnailStats?.totalPhotos || 0} photos
+                      <br />
+                      <br />
+                      This operation may take a long time and cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleReprocessThumbnails}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      Reprocess All Thumbnails
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              
+              <Button
+                onClick={handleCleanupJobs}
+                disabled={thumbnailJobLoading}
+                className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Cleanup Stuck Jobs</span>
+              </Button>
               
               <Button
                 onClick={() => {
