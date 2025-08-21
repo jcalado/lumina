@@ -301,17 +301,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 💬 Support
 
 - 📖 [Documentation](docs/)
-- 💬 [Discussions](https://github.com/username/lumina/discussions)
-- 🐛 [Issues](https://github.com/username/lumina/issues)
-- 📧 [Email](mailto:support@lumina-gallery.com)
+- 💬 [Discussions](https://github.com/jcalado/lumina/discussions)
+- 🐛 [Issues](https://github.com/jcalado/lumina/issues)
+- 📧 [Email](mailto:me@jcalado.com)
 
 ---
 
 <div align="center">
 
-**Built with ❤️ by the Lumina team**
+**Built with ❤️ by Joel Calado**
 
-[Website](https://lumina-gallery.com) • [Demo](https://demo.lumina-gallery.com) • [Sponsor](https://github.com/sponsors/username)
+[Website](https://jcalado.com) • [Demo](https://demo.lumina-gallery.com) • [Sponsor](https://github.com/sponsors/jcalado)
 
 </div>
 
