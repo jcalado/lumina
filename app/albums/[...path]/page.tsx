@@ -531,7 +531,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
       {/* Filter and Sort Controls */}
       {photos.length > 0 && (
-        <div className="flex gap-2 items-center p-4 bg-muted/50 rounded-lg">
+        <div className="flex gap-2 items-center p-4 bg-muted/50 rounded-lg flex-col sm:flex-row">
           <div className="flex items-center gap-2">
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">{t('sort_by_date')}</span>
@@ -591,7 +591,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       {subAlbums.length > 0 && (
         <div>
           <h2 className="text-xl font-semibold mb-4">Albums</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
             {subAlbums.map((subAlbum) => (
               <div key={subAlbum.id} className="relative">
                 <Link href={`/albums/${subAlbum.slugPath || encodeURIComponent(subAlbum.path)}`}>
@@ -686,7 +686,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               </span>
             )}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {filteredPhotos.map((photo, index) => (
               <div
                 key={photo.id}
