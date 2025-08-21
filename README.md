@@ -1,164 +1,317 @@
 # Lumina Photo Gallery
 
-A beautiful, modern photo gallery web application built with Next.js 15.5, designed for photographers and photo enthusiasts to organize and share their work.
+<div align="center">
 
-## Features
+<img src="app-logo.png" height="200px" width="200px" />
 
-### Phase 1 (Current) - Core Infrastructure
-- ✅ Next.js 15.5 with TypeScript and App Router
-- ✅ SQLite database with Prisma ORM
-- ✅ S3-compatible storage integration
-- ✅ File system scanner for photo discovery
-- ✅ Basic API routes for albums and sync
-- ✅ Responsive UI with Tailwind CSS and shadcn/ui
+**A beautiful, modern photo gallery web application built with Next.js 15.5**
 
-### Planned Features
-- Photo lightbox with keyboard navigation
-- Album favorites system
-- Admin dashboard with authentication
-- Background thumbnail generation
-- Zip download with progress tracking
-- EXIF data display
-- Sort and filter options
+</div>
 
-## Getting Started
+> ⚠️ **VIBE CODING WARNING**
+> 
+> This project is a "VIBE CODING" app — the result of guiding copilot with Claude Sonnet 4. It depleted 47% of my monthly "premium" copilot requests budget. Expect experimental, whimsical design choices and rapidly changing APIs. Use for inspiration and fun; not guaranteed production-ready.
+
+*Designed for photographers and photo enthusiasts to organize and share their work*
+
+[![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-Latest-2D3748?logo=prisma)](https://www.prisma.io/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+[Demo](https://lumina-demo.example.com) • [Documentation](docs/) • [Contributing](CONTRIBUTING.md) • [Issues](https://github.com/username/lumina/issues)
+
+## ✨ Features
+
+### 🖼️ Photo Management
+- **Smart Organization**: Automatic album discovery through file system scanning
+- **Nested Albums**: Support for hierarchical album structures
+- **EXIF Data**: Automatic extraction and display of photo metadata
+- **Multiple Formats**: Support for JPG, PNG, and RAW files
+- **Bulk Operations**: Process hundreds to thousands of photos efficiently
+
+### 🚀 Performance & Storage
+- **S3 Integration**: Compatible with AWS S3, MinIO, DigitalOcean Spaces
+- **Smart Thumbnails**: Automatic generation in 3 sizes (300px, 800px, 1200px)
+- **Background Processing**: Async thumbnail and blurhash generation
+- **Optimized Loading**: Lazy loading with blurhash placeholders
+- **Concurrent Processing**: Configurable batch processing (1-12 photos)
+
+### 🎨 User Experience
+- **Responsive Design**: Mobile-first approach with touch-friendly interactions
+- **Photo Lightbox**: Full-screen viewing with keyboard navigation
+- **Favorites System**: LocalStorage-based photo bookmarking
+- **Advanced Sorting**: Sort by date taken, filename, or custom criteria
+- **Search & Filter**: Find photos quickly with powerful filtering
+- **Download Options**: Single photos or entire albums as ZIP files
+
+### 🔧 Admin Features
+- **Dashboard**: Comprehensive admin panel with real-time statistics
+- **Job Monitoring**: Track thumbnail generation and sync operations
+- **Album Management**: Public/private visibility controls
+- **Background Tasks**: Scheduled sync at 3AM with manual triggers
+- **Error Handling**: Detailed logging and error recovery
+- **Settings**: Configurable batch sizes and processing options
+
+### 🌐 Technical Excellence
+- **Modern Stack**: Next.js 15.5 with App Router and TypeScript
+- **Database**: SQLite with Prisma ORM (PostgreSQL migration ready)
+- **Authentication**: NextAuth.js integration for secure admin access
+- **UI Components**: Beautiful UI with Tailwind CSS and shadcn/ui
+- **Internationalization**: Multi-language support with next-intl
+
+## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 18+ 
-- Redis server (for background jobs)
+- npm or yarn
 - S3-compatible storage (AWS S3, MinIO, etc.)
+- Git
 
 ### Installation
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd lumina-photo-gallery
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/username/lumina-photo-gallery.git
+   cd lumina-photo-gallery
+   ```
 
-2. Install dependencies:
-```bash
-npm install
-```
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env.local
+   ```
+   
+   Edit `.env.local` with your configuration:
+   ```env
+   # Database
+   DATABASE_URL="file:./dev.db"
+   
+   # S3 Configuration
+   S3_ENDPOINT="https://s3.amazonaws.com"
+   S3_BUCKET="your-photo-bucket"
+   S3_ACCESS_KEY="your-access-key"
+   S3_SECRET_KEY="your-secret-key"
+   S3_REGION="us-east-1"
+   
+   # Authentication
+   NEXTAUTH_SECRET="your-secure-secret"
+   NEXTAUTH_URL="http://localhost:3000"
+   ADMIN_EMAIL="admin@example.com"
+   ADMIN_PASSWORD="secure-password"
+   
+   # File System
+   PHOTOS_ROOT_PATH="/path/to/your/photos"
+   ```
 
-4. Initialize the database:
-```bash
-npx prisma generate
-npx prisma db push
-npx prisma db seed
-```
+4. **Initialize the database**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
 
-5. Start the development server:
-```bash
-npm run dev
-```
+5. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-Visit `http://localhost:3000` to see the application.
+6. **Access the application**
+   - Gallery: http://localhost:3000
+   - Admin: http://localhost:3000/admin
 
-## Environment Variables
-
-Create a `.env` file with the following variables:
-
-```env
-# Database
-DATABASE_URL="file:./dev.db"
-
-# S3 Configuration
-S3_ENDPOINT="https://s3.amazonaws.com"
-S3_BUCKET="your-bucket-name"
-S3_ACCESS_KEY="your-access-key"
-S3_SECRET_KEY="your-secret-key"
-S3_REGION="us-east-1"
-
-# Redis (for BullMQ)
-REDIS_URL="redis://localhost:6379"
-
-# Authentication
-NEXTAUTH_SECRET="generate-a-secure-secret-key"
-NEXTAUTH_URL="http://localhost:3000"
-ADMIN_EMAIL="admin@yourdomain.com"
-ADMIN_PASSWORD="create-a-secure-password"
-
-# File System
-PHOTOS_ROOT_PATH="/path/to/your/photos/directory"
-
-# Sync Schedule (cron format)
-SYNC_CRON="0 3 * * *"
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
+lumina/
 ├── app/                    # Next.js App Router
-│   ├── api/               # API routes
-│   ├── albums/            # Album pages
-│   └── page.tsx           # Home page
+│   ├── (admin)/           # Admin dashboard routes
+│   ├── (public)/          # Public gallery routes
+│   ├── api/               # API endpoints
+│   └── globals.css        # Global styles
 ├── components/            # React components
-│   └── ui/               # shadcn/ui components
-├── lib/                  # Utility libraries
+│   ├── Gallery/           # Photo display components
+│   ├── Admin/             # Admin interface components
+│   ├── Favorites/         # Favorites functionality
+│   └── ui/                # shadcn/ui components
+├── lib/                   # Core utilities
+│   ├── thumbnails.ts      # Image processing
+│   ├── s3.ts             # Storage operations
 │   ├── prisma.ts         # Database client
-│   ├── s3.ts             # S3 operations
-│   ├── filesystem.ts     # Photo scanning
-│   └── utils.ts          # Helper functions
-├── prisma/               # Database schema and migrations
-└── public/               # Static assets
+│   └── auth.ts           # Authentication
+├── prisma/               # Database schema & migrations
+├── scripts/              # Utility scripts
+└── messages/             # Internationalization
 ```
 
-## Usage
+## 🛠️ Configuration
 
-### Organizing Photos
+### Environment Variables
 
-1. Create folders in your designated photos directory
-2. Add photos (JPG, PNG) to these folders
-3. Optionally add a `project.md` file in each folder for descriptions
-4. Use the "Sync Photos" button to scan for new content
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | SQLite database path | `file:./dev.db` |
+| `S3_ENDPOINT` | S3-compatible endpoint | Required |
+| `S3_BUCKET` | Storage bucket name | Required |
+| `PHOTOS_ROOT_PATH` | Local photos directory | Required |
+| `SYNC_CRON` | Background sync schedule | `0 3 * * *` |
 
-### API Endpoints
+### Album Management
 
-- `GET /api/albums` - List all public albums
-- `GET /api/albums/[...path]` - Get specific album with photos
-- `POST /api/sync` - Trigger photo sync
+Place a `project.md` file in any photo directory to add descriptions:
 
-## Development
+```markdown
+# Wedding Photography Session
+Beautiful moments captured during Sarah & John's wedding ceremony.
+```
 
-### Database Operations
+## 🔧 Development
+
+### Available Scripts
 
 ```bash
-# Generate Prisma client
-npx prisma generate
-
-# Push schema changes
-npx prisma db push
-
-# View database
-npx prisma studio
-
-# Reset database
-npx prisma db push --force-reset
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
+npm run db:generate  # Generate Prisma client
+npm run db:push      # Push schema to database
+npm run db:studio    # Open Prisma Studio
 ```
 
-### Adding Components
+### Adding New Features
 
-This project uses shadcn/ui for components:
+1. **API Routes**: Add to `app/api/`
+2. **Components**: Use TypeScript and follow existing patterns
+3. **Database**: Update `prisma/schema.prisma` and run migrations
+4. **Styling**: Use Tailwind CSS classes and shadcn/ui components
+
+## 📚 API Documentation
+
+### Public Endpoints
+
+- `GET /api/albums` - List public albums
+- `GET /api/albums/[...path]` - Get album details and photos
+- `GET /api/photos/[id]/serve` - Serve photo with size parameter
+
+### Admin Endpoints
+
+- `POST /api/admin/sync` - Trigger photo synchronization
+- `POST /api/admin/thumbnails` - Start thumbnail generation
+- `PUT /api/admin/albums/[id]` - Update album settings
+
+## 🚀 Deployment
+
+### Vercel (Recommended)
+
+1. Fork this repository
+2. Connect to Vercel
+3. Add environment variables
+4. Deploy!
+
+### Docker
 
 ```bash
-npx shadcn@latest add [component-name]
+# Build image
+docker build -t lumina-gallery .
+
+# Run container
+docker run -p 3000:3000 lumina-gallery
 ```
 
-## License
+### Traditional Hosting
 
-This project is licensed under the MIT License.
+1. Build the project: `npm run build`
+2. Upload `dist/` directory
+3. Configure environment variables
+4. Start with: `npm start`
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Please read the contributing guidelines before submitting PRs.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## Support
+### Development Setup
 
-For support and questions, please open an issue in the GitHub repository.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `npm test`
+5. Commit changes: `git commit -m 'Add amazing feature'`
+6. Push to branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+### Reporting Issues
+
+Found a bug? Have a feature request? Please [open an issue](https://github.com/username/lumina/issues) with:
+
+- Clear description of the problem
+- Steps to reproduce
+- Expected vs actual behavior
+- Screenshots if applicable
+- Environment details
+
+## 📊 Performance
+
+- **Scalability**: Handles thousands of photos per album
+- **Optimization**: Automatic image optimization and lazy loading
+- **Caching**: Intelligent caching strategies for optimal performance
+- **Background Jobs**: Non-blocking thumbnail generation
+
+## 🔒 Security
+
+- **Authentication**: Secure admin access with NextAuth.js
+- **Input Validation**: All user inputs are sanitized
+- **File Security**: Safe file path handling and validation
+- **Environment**: Secure environment variable management
+
+## 🌍 Roadmap
+
+### Version 2.0
+- [ ] User accounts and permissions
+- [ ] Advanced search with AI tagging
+- [ ] Mobile app (React Native)
+- [ ] Social sharing integration
+- [ ] Comments and ratings
+
+### Version 1.x
+- [x] Basic photo gallery ✅
+- [x] Admin dashboard ✅
+- [x] Thumbnail generation ✅
+- [x] S3 integration ✅
+- [ ] Video support
+- [ ] Watermarking
+- [ ] Analytics dashboard
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Next.js](https://nextjs.org/) - The React framework for production
+- [Prisma](https://prisma.io/) - Next-generation ORM
+- [Sharp](https://sharp.pixelplumbing.com/) - High performance image processing
+- [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
+- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
+
+## 💬 Support
+
+- 📖 [Documentation](docs/)
+- 💬 [Discussions](https://github.com/username/lumina/discussions)
+- 🐛 [Issues](https://github.com/username/lumina/issues)
+- 📧 [Email](mailto:support@lumina-gallery.com)
+
+---
+
+<div align="center">
+
+**Built with ❤️ by the Lumina team**
+
+[Website](https://lumina-gallery.com) • [Demo](https://demo.lumina-gallery.com) • [Sponsor](https://github.com/sponsors/username)
+
+</div>
+
