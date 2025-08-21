@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -113,6 +113,27 @@ export class S3Service {
 
     const response = await getS3Client().send(command);
     return response.Contents?.map((obj: any) => obj.Key || '') || [];
+  }
+
+  async objectExists(key: string): Promise<boolean> {
+    this.initializeBucket();
+    
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      });
+
+      await getS3Client().send(command);
+      return true;
+    } catch (error: any) {
+      // If object doesn't exist, S3 returns NoSuchKey error
+      if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+        return false;
+      }
+      // Re-throw other errors (network issues, auth problems, etc.)
+      throw error;
+    }
   }
 
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {

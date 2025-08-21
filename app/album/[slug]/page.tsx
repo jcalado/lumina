@@ -2,52 +2,79 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home, ArrowUpDown, Filter } from 'lucide-react';
-import { PhotoImage } from '@/components/PhotoImage';
-import { Lightbox } from '@/components/Gallery/Lightbox';
-import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
-import { useFavorites } from '@/contexts/FavoritesContext';
-import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
-import { useTranslations } from 'next-intl';
+import { Home } from 'lucide-react';
 
-interface Photo {
-  id: string;
-  filename: string;
-  originalPath: string;
-  s3Key: string;
-  fileSize: number;
-  takenAt: string | null;
-  createdAt: string;
-  blurhash?: string | null;
-  thumbnails: {
-    size: string;
-    s3Key: string;
-    width: number;
-    height: number;
-  }[];
-}
+export default function AlbumSlugPage() {
+  const params = useParams();
+  const router = useRouter();
+  const slug = params.slug as string;
 
-interface Album {
-  id: string;
-  path: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  photoCount: number;
-  totalPhotoCount?: number;
-  subAlbumsCount?: number;
-  thumbnails: {
-    photoId: string;
-    filename: string;
-  }[];
-  dateRange?: {
-    earliest: string | null;
-    latest: string | null;
-  } | null;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAndRedirect = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get the album by slug to get the path
+        const slugResponse = await fetch(`/api/albums/by-slug/${slug}`);
+        if (!slugResponse.ok) {
+          if (slugResponse.status === 404) {
+            setError('Album not found');
+          } else {
+            throw new Error('Failed to fetch album');
+          }
+          return;
+        }
+        
+        const slugData = await slugResponse.json();
+        const albumPath = slugData.album.path;
+        
+        // Redirect to the hierarchical URL
+        router.push(`/albums/${encodeURIComponent(albumPath)}`);
+      } catch (error) {
+        console.error('Error fetching album:', error);
+        setError('Failed to load album');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (slug) {
+      fetchAndRedirect();
+    }
+  }, [slug, router]);
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">Redirecting...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <h2 className="text-xl font-semibold mb-2">Error</h2>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => router.push('/')} variant="outline">
+              <Home className="h-4 w-4 mr-2" />
+              Go Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export default function AlbumSlugPage() {
@@ -57,6 +84,7 @@ export default function AlbumSlugPage() {
   const slug = params.slug as string;
 
   const [album, setAlbum] = useState<Album | null>(null);
+  const [subAlbums, setSubAlbums] = useState<SubAlbum[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,25 +96,55 @@ export default function AlbumSlugPage() {
   const { favorites } = useFavorites();
 
   useEffect(() => {
+    const fetchAndRedirect = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get the album by slug to get the path
+        const slugResponse = await fetch(`/api/albums/by-slug/${slug}`);
+        if (!slugResponse.ok) {
+          if (slugResponse.status === 404) {
+            setError('Album not found');
+          } else {
+            throw new Error('Failed to fetch album');
+          }
+          return;
+        }
+        
+        const slugData = await slugResponse.json();
+        const albumPath = slugData.album.path;
+        
+        // Redirect to the hierarchical URL
+        router.push(`/albums/${encodeURIComponent(albumPath)}`);
+      } catch (error) {
+        console.error('Error fetching album:', error);
+        setError('Failed to load album');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (slug) {
-      fetchAlbumBySlug();
+      fetchAndRedirect();
     }
-  }, [slug]);
+  }, [slug, router]);
 
   useEffect(() => {
-    if (album) {
+    if (album && album.photoCount > 0) {
       fetchPhotos();
     }
   }, [album, showFavoritesOnly, sortOrder]);
 
-  const fetchAlbumBySlug = async () => {
+  const fetchAlbumDataBySlug = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`/api/albums/by-slug/${slug}`);
-      if (!response.ok) {
-        if (response.status === 404) {
+      // First get the album by slug to get the path
+      const slugResponse = await fetch(`/api/albums/by-slug/${slug}`);
+      if (!slugResponse.ok) {
+        if (slugResponse.status === 404) {
           setError('Album not found');
         } else {
           throw new Error('Failed to fetch album');
@@ -94,8 +152,19 @@ export default function AlbumSlugPage() {
         return;
       }
       
-      const data = await response.json();
-      setAlbum(data.album);
+      const slugData = await slugResponse.json();
+      const albumPath = slugData.album.path;
+      
+      // Now get the full album data with sub-albums using the path-based API
+      const pathResponse = await fetch(`/api/albums/${encodeURIComponent(albumPath)}`);
+      if (!pathResponse.ok) {
+        throw new Error('Failed to fetch album details');
+      }
+      
+      const pathData = await pathResponse.json();
+      setAlbum(pathData.album);
+      setSubAlbums(pathData.subAlbums || []);
+      setPhotos(pathData.photos || []);
     } catch (error) {
       console.error('Error fetching album:', error);
       setError('Failed to load album');
@@ -105,15 +174,17 @@ export default function AlbumSlugPage() {
   };
 
   const fetchPhotos = async () => {
+    // Photos are now fetched as part of the main album data
+    // This function can be used for refreshing photos with different filters/sorting
     if (!album) return;
 
     try {
       const params = new URLSearchParams({
-        sort: sortOrder === 'newest' ? 'newest' : 'oldest',
+        sortBy: sortOrder === 'newest' ? 'desc' : 'asc',
         ...(showFavoritesOnly && { favorites: 'true' })
       });
 
-      const response = await fetch(`/api/albums/${album.id}/photos?${params}`);
+      const response = await fetch(`/api/albums/${encodeURIComponent(album.path)}?${params}`);
       if (!response.ok) {
         throw new Error('Failed to fetch photos');
       }
@@ -177,14 +248,37 @@ export default function AlbumSlugPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Breadcrumb */}
-      <nav className="flex items-center space-x-2 text-sm text-muted-foreground mb-6">
-        <Link href="/" className="hover:text-foreground">
-          <Home className="h-4 w-4" />
-        </Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground font-medium">{album.name}</span>
-      </nav>
+      {/* Breadcrumb Navigation */}
+      {album && (
+        <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-6">
+          <Link href="/" className="flex items-center hover:text-foreground transition-colors">
+            <Home className="h-4 w-4 mr-1" />
+            Home
+          </Link>
+          
+          {album.path.split('/').map((segment, index, segments) => {
+            const isLast = index === segments.length - 1;
+            // Build the path up to this segment
+            const pathUpToSegment = segments.slice(0, index + 1).join('/');
+            
+            return (
+              <div key={index} className="flex items-center">
+                <ChevronRight className="h-4 w-4 mx-1 text-muted-foreground/50" />
+                {isLast ? (
+                  <span className="text-foreground font-medium">{decodeURIComponent(segment)}</span>
+                ) : (
+                  <Link 
+                    href={`/albums/${encodeURIComponent(pathUpToSegment)}`}
+                    className="hover:text-foreground transition-colors"
+                  >
+                    {decodeURIComponent(segment)}
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Album Header */}
       <div className="mb-8">
@@ -199,6 +293,12 @@ export default function AlbumSlugPage() {
                 <Image className="h-4 w-4" />
                 <span>{t('photos_in_this_album', { count: album.photoCount })}</span>
               </div>
+              {subAlbums.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <Folder className="h-4 w-4" />
+                  <span>{subAlbums.length} sub-album{subAlbums.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -229,6 +329,56 @@ export default function AlbumSlugPage() {
         </div>
       </div>
 
+      {/* Sub-albums Grid */}
+      {subAlbums.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Folder className="h-5 w-5" />
+            Sub-albums
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {subAlbums.map((subAlbum) => {
+              const href = `/albums/${encodeURIComponent(subAlbum.path)}`;
+              return (
+                <Link key={subAlbum.id} href={href}>
+                  <Card className="group hover:shadow-md transition-shadow cursor-pointer">
+                    <CardContent className="p-4">
+                      <div className="aspect-video bg-muted rounded-lg mb-3 overflow-hidden">
+                        {subAlbum.thumbnails.length > 0 ? (
+                        <ScrubThumbnail
+                          thumbnails={subAlbum.thumbnails}
+                          albumName={subAlbum.name}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Folder className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <h3 className="font-medium group-hover:text-blue-600 transition-colors line-clamp-2">
+                      {subAlbum.name}
+                    </h3>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                      <div className="flex items-center gap-1">
+                        <Images className="h-3 w-3" />
+                        <span>{subAlbum.totalPhotoCount || subAlbum.photoCount}</span>
+                      </div>
+                      {subAlbum.subAlbumsCount > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Folder className="h-3 w-3" />
+                          <span>{subAlbum.subAlbumsCount}</span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Photos Grid */}
       {filteredPhotos.length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
@@ -254,20 +404,20 @@ export default function AlbumSlugPage() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : filteredPhotos.length === 0 && subAlbums.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Image className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">No photos found</h3>
+            <h3 className="text-lg font-semibold mb-2">No content found</h3>
             <p className="text-muted-foreground">
               {showFavoritesOnly 
                 ? "No favorite photos in this album"
-                : "This album doesn't contain any photos yet."
+                : "This album doesn't contain any photos or sub-albums yet."
               }
             </p>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Lightbox */}
       <Lightbox

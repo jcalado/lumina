@@ -394,6 +394,57 @@ async function syncAlbumPhotosConcurrent(
   const newPhotos = photos.filter(photo => !existingFilenames.has(photo.filename));
   const existingPhotosToUpdate = photos.filter(photo => existingFilenames.has(photo.filename));
 
+  // Check existing photos to ensure their S3 files still exist and re-upload if missing
+  const photosNeedingReupload: any[] = [];
+  
+  if (existingPhotosToUpdate.length > 0) {
+    logger?.('info', `Checking ${existingPhotosToUpdate.length} existing photos for S3 presence`);
+    
+    // Process existence checks in batches to avoid overwhelming S3
+    const checkBatchSize = Math.min(10, batchSize);
+    
+    const checkPhotoExists = async (photoData: any) => {
+      const existingPhoto = existingPhotos.find(p => p.filename === photoData.filename);
+      if (existingPhoto && existingPhoto.s3Key) {
+        try {
+          const existsInS3 = await s3.objectExists(existingPhoto.s3Key);
+          if (!existsInS3) {
+            logger?.('warn', `Existing photo missing from S3, will re-upload: ${photoData.filename}`);
+            return { needsReupload: true, photo: photoData };
+          }
+          return { needsReupload: false, photo: photoData };
+        } catch (error) {
+          logger?.('error', `Error checking S3 existence for ${photoData.filename}: ${error}`);
+          // If we can't check, assume it's missing and re-upload
+          return { needsReupload: true, photo: photoData };
+        }
+      }
+      return { needsReupload: false, photo: photoData };
+    };
+
+    const existenceCheckResults = await processBatch(existingPhotosToUpdate, checkBatchSize, checkPhotoExists);
+    
+    // Separate photos that need re-upload from those that just need metadata updates
+    for (const result of existenceCheckResults) {
+      if (result.needsReupload) {
+        photosNeedingReupload.push(result.photo);
+      }
+    }
+    
+    // Remove photos needing re-upload from existingPhotosToUpdate
+    const photosNeedingReuploadFilenames = new Set(photosNeedingReupload.map(p => p.filename));
+    const filteredExistingPhotos = existingPhotosToUpdate.filter(p => !photosNeedingReuploadFilenames.has(p.filename));
+    existingPhotosToUpdate.length = 0;
+    existingPhotosToUpdate.push(...filteredExistingPhotos);
+    
+    // Add photos needing re-upload to newPhotos array
+    newPhotos.push(...photosNeedingReupload);
+    
+    if (photosNeedingReupload.length > 0) {
+      logger?.('warn', `Found ${photosNeedingReupload.length} existing photos missing from S3 that will be re-uploaded`);
+    }
+  }
+
   // Process new photos in batches with concurrency
   if (newPhotos.length > 0) {
     logger?.('info', `Processing ${newPhotos.length} new photos in batches of ${batchSize}`);
@@ -403,13 +454,20 @@ async function syncAlbumPhotosConcurrent(
       const s3Key = s3.generateKey(albumPath, photoData.filename);
       
       try {
-        logger?.('info', `Uploading new photo: ${photoData.filename}`);
+        // Check if file already exists in S3 before uploading
+        const existsInS3 = await s3.objectExists(s3Key);
         
-        // Upload photo to S3
-        const fileBuffer = await fs.readFile(photoPath);
-        const mimeType = getContentType(photoData.filename);
-        
-        await s3.uploadFile(s3Key, fileBuffer, mimeType);
+        if (existsInS3) {
+          logger?.('info', `Photo already exists in S3, skipping upload: ${photoData.filename}`);
+        } else {
+          logger?.('info', `Uploading new photo: ${photoData.filename}`);
+          
+          // Upload photo to S3
+          const fileBuffer = await fs.readFile(photoPath);
+          const mimeType = getContentType(photoData.filename);
+          
+          await s3.uploadFile(s3Key, fileBuffer, mimeType);
+        }
         
         // Create database entry
         const newPhoto = await prisma.photo.create({

@@ -10,6 +10,7 @@ interface RouteParams {
 interface SubAlbumWithPhotos {
   id: string;
   path: string;
+  slug?: string;
   name: string;
   description: string | null;
   _count: {
@@ -146,6 +147,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       
       console.log('Found direct sub-albums:', subAlbums.length);
       
+      // Get slugs for sub-albums (workaround for TypeScript/Prisma issue)
+      for (const subAlbum of subAlbums) {
+        try {
+          const albumWithSlug = await prisma.$queryRaw`
+            SELECT slug FROM albums WHERE id = ${subAlbum.id}
+          ` as Array<{slug: string}>;
+          
+          if (albumWithSlug.length > 0) {
+            (subAlbum as any).slug = albumWithSlug[0].slug;
+          } else {
+            (subAlbum as any).slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          }
+        } catch (error) {
+          console.error('Error fetching slug for album:', subAlbum.id, error);
+          (subAlbum as any).slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+      }
+      
       // Get thumbnail photos for sub-albums
       for (const subAlbum of subAlbums) {
         try {
@@ -164,7 +183,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           
           if (subAlbumHasChildren > 0) {
             // This sub-album has children, so get photos from its sub-albums instead
-            console.log(`Sub-album ${subAlbum.name} has ${subAlbumHasChildren} children, getting photos from sub-albums`);
             
             const subAlbumPhotos = await prisma.photo.findMany({
               where: {
@@ -202,7 +220,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }
           } else if (subAlbum._count.photos > 0) {
             // No children, get photos from this album directly
-            console.log(`Sub-album ${subAlbum.name} has no children, getting direct photos`);
             
             const totalPhotos = subAlbum._count.photos;
             
@@ -296,8 +313,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           
           // Update the photo count to include sub-albums
           (subAlbum as SubAlbumWithPhotos)._count.photos = totalPhotoCount;
-          
-          console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing (total: ${totalPhotoCount})`);
         } catch (photoError) {
           console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
           (subAlbum as SubAlbumWithPhotos).photos = [];
@@ -334,13 +349,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
         });
         
-        console.log(`Sub-album ${subAlbum.name}: ${photos.length} photos available for scrubbing, ${subAlbumsCount} sub-albums`);
-        
         return {
           id: subAlbum.id,
           path: subAlbum.path,
           name: subAlbum.name,
           description: subAlbum.description,
+          slug: (subAlbum as any).slug,
           photoCount: subAlbum._count.photos,
           totalPhotoCount: subAlbum._count.photos,
           subAlbumsCount,

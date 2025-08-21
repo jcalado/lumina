@@ -13,7 +13,7 @@ datasource db {
 model Album {
   id                    String   @id @default(cuid())
   path                  String   @unique // filesystem path
-  slug                  String   @unique // URL-friendly slug
+  slug                  String   // URL-friendly slug (unique within parent context)
   name                  String
   description           String?  // from project.md
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
@@ -25,6 +25,8 @@ model Album {
   updatedAt             DateTime @updatedAt
   photos                Photo[]
 
+  // Composite unique constraint for path-based uniqueness
+  @@unique([path, slug])
   @@map("albums")
 }
 

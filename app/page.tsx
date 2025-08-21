@@ -107,7 +107,7 @@ export default function HomePage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {albums.map((album) => (
-            <Link key={album.id} href={`/album/${album.slug}`}>
+            <Link key={album.id} href={`/albums/${encodeURIComponent(album.path)}`}>
               <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
                 {/* Thumbnail Image */}
                 <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
