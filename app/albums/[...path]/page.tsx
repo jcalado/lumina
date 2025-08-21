@@ -467,7 +467,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       <Breadcrumb albumPath={albumPath} />
       
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex sm:items-center justify-between flex-col sm:flex-row">
         <div>
           <h1 className="text-3xl font-bold">{album?.name}</h1>
           {album?.description && (
