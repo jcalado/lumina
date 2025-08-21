@@ -1,10 +1,10 @@
 {
     "albums": {
-        "all_photos": "Todas as fotos",
-        "favorites_only": "Apenas favoritos",
+        "all_photos": "Todas",
+        "favorites_only": "Favoritos",
         "download_album": "Descarregar",
-        "oldest_first": "Mais antigas primeiro",
-        "newest_first": "Mais recentes primeiro",
+        "oldest_first": "Antigas primeiro",
+        "newest_first": "Recentes primeiro",
         "photos": "fotos",
         "photos_in_this_album": "{count, plural, =0 {Sem fotos} =1 {uma foto} other {# fotos}} neste álbum.",
         "show": "Mostrar",
