@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
 import { generateThumbnails } from '@/lib/thumbnails';
 import { getBatchProcessingSize } from '@/lib/settings';
+import { generateUniqueSlug } from '@/lib/slugs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -107,6 +108,7 @@ async function syncPhotos(jobId: string) {
           },
           create: {
             path: albumPath,
+            slug: await generateUniqueSlug(albumData.name),
             name: albumData.name,
             description: albumData.description,
             status: 'PUBLIC',

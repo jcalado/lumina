@@ -19,6 +19,7 @@ interface Album {
   name: string
   description: string | null
   path: string
+  slug: string
   status: "PUBLIC" | "PRIVATE"
   enabled: boolean
   syncedToS3: boolean
@@ -46,6 +47,7 @@ export default function AdminAlbumsPage() {
   const [editForm, setEditForm] = useState({
     name: "",
     description: "",
+    slug: "",
     status: "PUBLIC" as "PUBLIC" | "PRIVATE",
     enabled: true
   })
@@ -253,6 +255,22 @@ export default function AdminAlbumsPage() {
                   </div>
                   
                   <div className="space-y-2">
+                    <Label htmlFor="slug">URL Slug</Label>
+                    <Input
+                      id="slug"
+                      value={editForm.slug}
+                      onChange={(e) => 
+                        setEditForm({ ...editForm, slug: e.target.value })
+                      }
+                      placeholder="url-friendly-name"
+                      pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      URL-friendly identifier (lowercase letters, numbers, and hyphens only)
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
                     <Label htmlFor="status">Visibility</Label>
                     <Select
                       value={editForm.status}
@@ -369,6 +387,7 @@ export default function AdminAlbumsPage() {
     setEditForm({
       name: album.name,
       description: album.description || "",
+      slug: album.slug,
       status: album.status,
       enabled: album.enabled
     })

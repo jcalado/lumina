@@ -13,6 +13,7 @@ datasource db {
 model Album {
   id                    String   @id @default(cuid())
   path                  String   @unique // filesystem path
+  slug                  String   @unique // URL-friendly slug
   name                  String
   description           String?  // from project.md
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
