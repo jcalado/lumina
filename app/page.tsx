@@ -71,7 +71,7 @@ export default function HomePage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading albums...</p>
+          <p className="mt-2 text-muted-foreground">{t('loading_albums')} </p>
         </div>
       </div>
     );
@@ -158,12 +158,9 @@ export default function HomePage() {
                     </p>
                   )}
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Image className="h-3 w-3" />
-                      {album.photoCount} direct photos
-                    </div>
+
                     <span>
-                      Updated {new Date(album.updatedAt).toLocaleDateString()}
+                      {new Date(album.updatedAt).toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                 </div>

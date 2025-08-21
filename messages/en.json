@@ -5,6 +5,11 @@
   "home": {
     "title": "Lumina Gallery",
     "description": "Browse your photo collection organized in albums",
-    "photo_albums": "Photo Albums"
+    "photo_albums": "Photo Albums",
+    "loading_albums": "Loading albums..."
+  },
+  "nav": {
+    "albums": "Albums",
+    "favorites": "Favorites"
   }
 }
