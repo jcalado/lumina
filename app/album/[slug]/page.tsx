@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Home } from 'lucide-react';
+import { pathToSlugPath } from '@/lib/slug-paths';
 
 export default function AlbumSlugPage() {
   const params = useParams();

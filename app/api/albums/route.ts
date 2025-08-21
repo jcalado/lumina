@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET() {
   try {
@@ -107,6 +108,7 @@ export async function GET() {
           photoCount,
           totalPhotoCount: photoCount + subAlbumPhotos,
           subAlbumsCount,
+          slugPath: await pathToSlugPath(album.path),
           thumbnails: thumbnailPhotos.map(photo => ({
             photoId: photo.id,
             filename: photo.filename,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { slugPathToPath, pathToSlugPath } from '@/lib/slug-paths';
 
 interface RouteParams {
   params: Promise<{
@@ -58,10 +59,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     
     // Decode each path segment to handle URL encoding
     const decodedPath = resolvedParams.path.map(segment => decodeURIComponent(segment));
-    albumPath = decodedPath.join('/');
+    const slugPath = decodedPath.join('/');
     
-    console.log('Decoded path segments:', decodedPath);
-    console.log('Final album path:', albumPath);
+    // Convert slug path back to filesystem path for database query
+    const convertedPath = await slugPathToPath(slugPath);
+    if (convertedPath === null) {
+      return NextResponse.json(
+        { error: 'Invalid album path' },
+        { status: 404 }
+      );
+    }
+    albumPath = convertedPath;
+    
+    console.log('Slug path segments:', decodedPath);
+    console.log('Slug path:', slugPath);
+    console.log('Converted filesystem path:', albumPath);
     console.log('Sort order:', sortBy);
     console.log('Pagination:', { page, limit, offset });
     
@@ -352,6 +364,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return {
           id: subAlbum.id,
           path: subAlbum.path,
+          slugPath: await pathToSlugPath(subAlbum.path),
           name: subAlbum.name,
           description: subAlbum.description,
           slug: (subAlbum as any).slug,

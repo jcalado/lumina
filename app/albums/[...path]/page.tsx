@@ -35,6 +35,7 @@ interface Photo {
 interface Album {
   id: string;
   path: string;
+  slugPath?: string;
   name: string;
   description: string | null;
   photoCount: number;
@@ -103,29 +104,91 @@ interface BreadcrumbProps {
 }
 
 function Breadcrumb({ albumPath }: BreadcrumbProps) {
-  const pathSegments = albumPath ? albumPath.split('/') : [];
-  
-  // Build breadcrumb items
-  const breadcrumbItems = [
+  const [breadcrumbItems, setBreadcrumbItems] = useState([
     {
       name: 'Home',
       path: '',
       href: '/',
       icon: Home,
     },
-  ];
+  ]);
 
-  // Add each path segment as a breadcrumb item
-  let currentPath = '';
-  pathSegments.forEach((segment, index) => {
-    currentPath += (currentPath ? '/' : '') + segment;
-    breadcrumbItems.push({
-      name: decodeURIComponent(segment),
-      path: currentPath,
-      href: `/albums/${encodeURIComponent(currentPath)}`,
-      icon: Folder,
-    });
-  });
+  useEffect(() => {
+    const buildBreadcrumbs = async () => {
+      const pathSegments = albumPath ? albumPath.split('/') : [];
+      const items = [
+        {
+          name: 'Home',
+          path: '',
+          href: '/',
+          icon: Home,
+        },
+      ];
+
+      if (pathSegments.length === 0) {
+        setBreadcrumbItems(items);
+        return;
+      }
+
+      // Build all path combinations for breadcrumbs
+      const paths = [];
+      for (let i = 0; i < pathSegments.length; i++) {
+        const currentPath = pathSegments.slice(0, i + 1).join('/');
+        paths.push(currentPath);
+      }
+
+      try {
+        // Call the API to get album names and slug paths
+        const response = await fetch('/api/albums/breadcrumbs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ paths }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          data.breadcrumbs.forEach((breadcrumb: any) => {
+            items.push({
+              name: breadcrumb.name,
+              path: breadcrumb.path,
+              href: breadcrumb.href,
+              icon: Folder,
+            });
+          });
+        } else {
+          // Fallback to path segments if API fails
+          pathSegments.forEach((segment, index) => {
+            const currentPath = pathSegments.slice(0, index + 1).join('/');
+            items.push({
+              name: decodeURIComponent(segment),
+              path: currentPath,
+              href: `/albums/${encodeURIComponent(currentPath)}`,
+              icon: Folder,
+            });
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching breadcrumb data:', error);
+        // Fallback to path segments
+        pathSegments.forEach((segment, index) => {
+          const currentPath = pathSegments.slice(0, index + 1).join('/');
+          items.push({
+            name: decodeURIComponent(segment),
+            path: currentPath,
+            href: `/albums/${encodeURIComponent(currentPath)}`,
+            icon: Folder,
+          });
+        });
+      }
+
+      setBreadcrumbItems(items);
+    };
+
+    buildBreadcrumbs();
+  }, [albumPath]);
 
   return (
     <nav className="flex items-center space-x-1 text-sm text-muted-foreground mb-4">
@@ -527,7 +590,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
             {subAlbums.map((subAlbum) => (
               <div key={subAlbum.id} className="relative">
-                <Link href={`/albums/${encodeURIComponent(subAlbum.path)}`}>
+                <Link href={`/albums/${subAlbum.slugPath || encodeURIComponent(subAlbum.path)}`}>
                   <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
                     <CardContent className="p-0">
                       {/* Thumbnail Image */}
