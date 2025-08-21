@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
+import { slugPathToPath } from '@/lib/slug-paths';
 import archiver from 'archiver';
 
 export async function POST(request: NextRequest) {
@@ -11,11 +12,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Album path is required' }, { status: 400 });
     }
 
-    console.log('Download request for album path:', albumPath);
+    console.log('Download request for album path (slug path):', albumPath);
+
+    // Convert slug path to filesystem path
+    const filesystemPath = await slugPathToPath(albumPath);
+    if (filesystemPath === null) {
+      return NextResponse.json({ error: 'Invalid album path' }, { status: 404 });
+    }
+
+    console.log('Converted filesystem path:', filesystemPath);
 
     // Get album and its photos
     const album = await prisma.album.findFirst({
-      where: { path: albumPath },
+      where: { path: filesystemPath },
       include: {
         photos: {
           select: {
