@@ -103,7 +103,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-95 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 !mt-0 !mb-0 bg-black bg-opacity-95 flex items-center justify-center">
       {/* Background overlay */}
       <div 
         className="absolute inset-0" 
@@ -225,8 +225,8 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
         </Card>
       )}
 
-      {/* Footer with thumbnails */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/50 to-transparent">
+      {/* Footer with thumbnails - disabled */}
+      {/* <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/50 to-transparent">
         <div className="flex gap-2 overflow-x-auto justify-center">
           {photos.map((photo, index) => (
             <button
@@ -246,7 +246,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
             </button>
           ))}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

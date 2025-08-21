@@ -1,0 +1,23 @@
+{
+    "albums": {
+        "all_photos": "Todas as fotos",
+        "favorites_only": "Apenas favoritos",
+        "download_album": "Descarregar",
+        "oldest_first": "Mais antigas primeiro",
+        "newest_first": "Mais recentes primeiro",
+        "photos": "fotos",
+        "photos_in_this_album": "{count, plural, =0 {Sem fotos} =1 {uma foto} other {# fotos}} neste álbum.",
+        "show": "Mostrar",
+        "sort_by_date": "Ordenar por data"
+    },
+    "home": {
+        "title": "Galeria Lumina",
+        "description": "Navegue pela sua coleção de fotos organizada em álbuns",
+        "photo_albums": "Álbuns de Fotos",
+        "loading_albums": "Carregando álbuns..."
+    },
+    "nav": {
+        "albums": "Álbuns",
+        "favorites": "Favoritos"
+    }
+}

@@ -438,13 +438,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             <p className="text-muted-foreground mt-1">{album.description}</p>
           )}
           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-            <span>{t('photos_in_this_album', { count: album?.photoCount || 0 })}</span>
+            {/* <span>{t('photos_in_this_album', { count: album?.photoCount || 0 })}</span> */}
             {album?.totalPhotoCount && album.totalPhotoCount > (album.photoCount || 0) && (
-              <span>{album.totalPhotoCount} total photos (including sub-albums)</span>
+              <span>{album.totalPhotoCount} {t('photos')}</span>
             )}
-            {album?.subAlbumsCount && album.subAlbumsCount > 0 && (
+            {/* {album?.subAlbumsCount && album.subAlbumsCount > 0 && (
               <span>{album.subAlbumsCount} sub-albums</span>
-            )}
+            )} */}
           </div>
         </div>
 
@@ -456,7 +456,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               disabled={isDownloading}
             >
               <Download className="h-4 w-4" />
-              {isDownloading ? 'Downloading...' : 'Download Album'}
+              {isDownloading ? 'Downloading...' : t('download_album')}
             </button>
           </div>
         )}
@@ -467,7 +467,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         <div className="flex gap-2 items-center p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-2">
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Sort by date:</span>
+            <span className="text-sm font-medium">{t('sort_by_date')}</span>
             <button
               className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
                 sortOrder === 'asc' 
@@ -476,7 +476,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               }`}
               onClick={() => setSortOrder('asc')}
             >
-              Oldest first
+              {t('oldest_first')}
             </button>
             <button
               className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
@@ -486,7 +486,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               }`}
               onClick={() => setSortOrder('desc')}
             >
-              Newest first
+              {t('newest_first')}
             </button>
           </div>
           
@@ -494,7 +494,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Show:</span>
+            <span className="text-sm font-medium">{t('show')}</span>
             <button
               className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium ${
                 !showFavoritesOnly 
@@ -503,7 +503,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               }`}
               onClick={() => setShowFavoritesOnly(false)}
             >
-              All photos
+              {t('all_photos')}
             </button>
             <button
               className={`h-8 rounded-md px-3 text-xs inline-flex items-center justify-center transition-colors font-medium gap-1 ${
@@ -514,7 +514,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               onClick={() => setShowFavoritesOnly(true)}
             >
               <Heart className="h-3 w-3" />
-              Favorites only
+              {t('favorites_only')}
             </button>
           </div>
         </div>
