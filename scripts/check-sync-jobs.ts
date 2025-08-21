@@ -19,8 +19,8 @@ async function checkSyncJobs() {
       console.log(`Created: ${job.createdAt}`);
       console.log(`Started: ${job.startedAt}`);
       console.log(`Completed: ${job.completedAt}`);
-      if (job.error) {
-        console.log(`Error: ${job.error}`);
+      if (job.errors) {
+        console.log(`Errors: ${job.errors}`);
       }
       console.log(`Files processed: ${job.filesProcessed}`);
       console.log(`Files uploaded: ${job.filesUploaded}`);

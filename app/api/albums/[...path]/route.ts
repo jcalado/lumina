@@ -7,6 +7,25 @@ interface RouteParams {
   }>;
 }
 
+interface SubAlbumWithPhotos {
+  id: string;
+  path: string;
+  name: string;
+  description: string | null;
+  _count: {
+    photos: number;
+  };
+  photos?: {
+    id: string;
+    filename: string;
+    takenAt: Date | null;
+  }[];
+  dateRange?: {
+    earliest: Date | null;
+    latest: Date | null;
+  } | null;
+}
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   let albumPath = '';
   try {
@@ -83,7 +102,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get sub-albums (albums whose path starts with this album's path + '/')
-    let subAlbums = [];
+    let subAlbums: SubAlbumWithPhotos[] = [];
     try {
       console.log('Searching for sub-albums of:', albumPath);
       
@@ -110,7 +129,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
       
       // Filter to get only direct children
-      subAlbums = allSubAlbums.filter((album: any) => {
+      subAlbums = allSubAlbums.filter((album: SubAlbumWithPhotos) => {
         if (albumPath === '') {
           // For root albums, get albums that don't contain '/'
           return !album.path.includes('/');
@@ -192,18 +211,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             });
             
-            (subAlbum as any).photos = photos;
-            (subAlbum as any).dateRange = {
+            (subAlbum as SubAlbumWithPhotos).photos = photos;
+            (subAlbum as SubAlbumWithPhotos).dateRange = {
               earliest: dateRange._min.takenAt,
               latest: dateRange._max.takenAt,
             };
             console.log(`Sub-album ${subAlbum.name} has ${photos.length} distributed photos for scrubbing`);
           } catch (photoError) {
             console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
-            (subAlbum as any).photos = [];
+            (subAlbum as SubAlbumWithPhotos).photos = [];
           }
         } else {
-          (subAlbum as any).photos = [];
+          (subAlbum as SubAlbumWithPhotos).photos = [];
         }
       }
     } catch (subAlbumError) {
@@ -222,7 +241,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         totalPhotoCount: album._count.photos,
         subAlbumsCount: subAlbums.length,
       },
-      subAlbums: subAlbums.map((subAlbum: any) => {
+      subAlbums: subAlbums.map((subAlbum: SubAlbumWithPhotos) => {
         // Return all photos for scrubbing effect (up to 5)
         const photos = subAlbum.photos || [];
         
@@ -236,11 +255,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           photoCount: subAlbum._count.photos,
           totalPhotoCount: subAlbum._count.photos,
           subAlbumsCount: 0, // Can be calculated if needed
-          thumbnails: photos.map((photo: any) => ({
+          thumbnails: photos.map((photo) => ({
             photoId: photo.id,
             filename: photo.filename,
           })),
-          dateRange: subAlbum.dateRange || null,
+          dateRange: subAlbum.dateRange ? {
+            earliest: subAlbum.dateRange.earliest?.toISOString() || null,
+            latest: subAlbum.dateRange.latest?.toISOString() || null,
+          } : null,
         };
       }),
       photos: album.photos,
