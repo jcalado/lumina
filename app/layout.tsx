@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { FavoritesProvider } from '@/contexts/FavoritesContext';
+import { DownloadSelectionProvider } from '@/contexts/DownloadSelectionContext';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { Toaster } from '@/components/ui/toaster';
@@ -42,7 +43,8 @@ export default async function RootLayout({
           <ThemeCustomizer accentColor={siteSettings.accentColor} />
           <AuthProvider>
             <FavoritesProvider>
-              <NextIntlClientProvider messages={messages}>
+              <DownloadSelectionProvider>
+                <NextIntlClientProvider messages={messages}>
                 <div className="min-h-screen bg-background">
                   <Header siteName={siteSettings.siteName} />
                   <main className="container mx-auto px-4 py-8">
@@ -52,6 +54,7 @@ export default async function RootLayout({
                 </div>
                 <Toaster />
               </NextIntlClientProvider>
+              </DownloadSelectionProvider>
             </FavoritesProvider>
           </AuthProvider>
         </ThemeProvider>

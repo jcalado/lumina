@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Download, Info } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Download, Info, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { PhotoExifInfo } from './PhotoExifInfo';
+import { useDownloadSelection } from '@/contexts/DownloadSelectionContext';
 
 interface Photo {
   id: string;
@@ -29,6 +30,7 @@ interface LightboxProps {
 export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: LightboxProps) {
   const [showMetadata, setShowMetadata] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const { isSelectedForDownload, toggleDownloadSelection } = useDownloadSelection();
 
   const currentPhoto = photos[currentIndex];
 
@@ -128,6 +130,21 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => toggleDownloadSelection(currentPhoto.id)}
+              className={`text-white hover:bg-white/20 ${
+                isSelectedForDownload(currentPhoto.id) ? 'bg-white/20' : ''
+              }`}
+              title={isSelectedForDownload(currentPhoto.id) ? 'Remove from download selection' : 'Add to download selection'}
+            >
+              {isSelectedForDownload(currentPhoto.id) ? (
+                <Check className="h-4 w-4 text-blue-400" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setShowMetadata(!showMetadata)}
               className="text-white hover:bg-white/20"
             >
@@ -138,6 +155,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
               size="icon"
               onClick={handleDownload}
               className="text-white hover:bg-white/20"
+              title="Download this photo"
             >
               <Download className="h-4 w-4" />
             </Button>

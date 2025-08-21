@@ -10,6 +10,8 @@ import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home, 
 import { PhotoImage } from '@/components/PhotoImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
+import { DownloadSelectionButton } from '@/components/Download/DownloadSelectionButton';
+import { SelectedPhotosDownload } from '@/components/Download/SelectedPhotosDownload';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
 
@@ -703,11 +705,15 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                         orientation={photo.orientation}
                       />
 
-                      {/* Favorite button overlay */}
-                      <FavoriteButton
-                        photoId={photo.id}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      />
+                      {/* Action buttons overlay */}
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <DownloadSelectionButton
+                          photoId={photo.id}
+                        />
+                        <FavoriteButton
+                          photoId={photo.id}
+                        />
+                      </div>
                     </div>
 
                   </CardContent>
@@ -746,6 +752,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         onClose={closeLightbox}
         onNavigate={navigateToPhoto}
       />
+
+      {/* Selected Photos Download */}
+      <SelectedPhotosDownload albumPath={albumPath} />
     </div>
   );
 }
