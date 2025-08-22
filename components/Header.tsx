@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import Link from 'next/link';
 
 interface HeaderProps {
   siteName: string;
@@ -13,15 +14,15 @@ export function Header({ siteName }: HeaderProps) {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-primary">
-            {siteName}
+            <Link href="/">{siteName}</Link>
           </h1>
           <nav className="flex items-center space-x-6">
-            <a href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
               {t('albums')}
-            </a>
-            <a href="/favorites" className="text-muted-foreground hover:text-foreground transition-colors">
+            </Link>
+            <Link href="/favorites" className="text-muted-foreground hover:text-foreground transition-colors">
               {t('favorites')}
-            </a>
+            </Link>
             <ThemeToggle />
           </nav>
         </div>

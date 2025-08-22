@@ -88,11 +88,9 @@ export function ResponsiveBreadcrumb({ items, className }: ResponsiveBreadcrumbP
               <span className={cn("truncate", maxWidthClass)}>{item.name}</span>
             </BreadcrumbPage>
           ) : (
-            <BreadcrumbLink asChild>
-              <Link href={item.href} className="flex items-center">
-                <Icon className="h-4 w-4 mr-1 flex-shrink-0" />
-                <span className={cn("truncate", maxWidthClass)}>{item.name}</span>
-              </Link>
+            <BreadcrumbLink href={item.href} className="flex items-center">
+              <Icon className="h-4 w-4 mr-1 flex-shrink-0" />
+              <span className={cn("truncate", maxWidthClass)}>{item.name}</span>
             </BreadcrumbLink>
           )}
         </BreadcrumbItem>
