@@ -4,8 +4,10 @@ import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET() {
   try {
-    // Single optimized query with CTEs and JOINs
-    const albums = await prisma.$queryRaw`
+    console.log('Fetching albums...');
+    
+    // Single comprehensive query to get everything at once
+    const result = await prisma.$queryRaw`
       WITH AlbumStats AS (
         SELECT 
           a.id,
@@ -15,76 +17,88 @@ export async function GET() {
           a.description,
           a.createdAt,
           a.updatedAt,
-          COUNT(DISTINCT p.id) as photoCount,
-          COUNT(DISTINCT CASE WHEN sub_p.albumId IS NOT NULL THEN sub_p.id END) as subAlbumPhotosCount,
-          COUNT(DISTINCT CASE WHEN sub_a.id IS NOT NULL THEN sub_a.id END) as subAlbumsCount
+          (SELECT COUNT(*) FROM photos WHERE albumId = a.id) as photoCount,
+          (SELECT COUNT(*) FROM photos p2 
+           INNER JOIN albums a2 ON p2.albumId = a2.id 
+           WHERE a2.path LIKE a.path || '/%' 
+             AND a2.status = 'PUBLIC' 
+             AND a2.enabled = 1) as subAlbumPhotosCount,
+          (SELECT COUNT(*) FROM albums a3 
+           WHERE a3.path LIKE a.path || '/%' 
+             AND a3.status = 'PUBLIC' 
+             AND a3.enabled = 1) as subAlbumsCount
         FROM albums a
-        LEFT JOIN photos p ON p.albumId = a.id
-        LEFT JOIN albums sub_a ON sub_a.path LIKE CONCAT(a.path, '/%') 
-          AND sub_a.status = 'PUBLIC' 
-          AND sub_a.enabled = 1
-        LEFT JOIN photos sub_p ON sub_p.albumId = sub_a.id
         WHERE a.status = 'PUBLIC' 
           AND a.enabled = 1 
           AND a.path NOT LIKE '%/%'
-        GROUP BY a.id, a.path, a.slug, a.name, a.description, a.createdAt, a.updatedAt
-        ORDER BY a.name ASC
+      ),
+      AlbumThumbnails AS (
+        SELECT 
+          parent.id as parentAlbumId,
+          p.id as photoId,
+          p.filename,
+          ROW_NUMBER() OVER (PARTITION BY parent.id ORDER BY p.takenAt ASC) as rn
+        FROM AlbumStats parent
+        LEFT JOIN albums sub ON sub.path LIKE parent.path || '/%' 
+          AND sub.status = 'PUBLIC' 
+          AND sub.enabled = 1
+        LEFT JOIN photos p ON (p.albumId = parent.id OR p.albumId = sub.id)
+        WHERE p.id IS NOT NULL
       )
-      SELECT * FROM AlbumStats
+      SELECT 
+        a.*,
+        COALESCE(t.thumbnails, '') as thumbnails
+      FROM AlbumStats a
+      LEFT JOIN (
+        SELECT 
+          parentAlbumId,
+          GROUP_CONCAT(photoId || '|||' || filename, ';;;') as thumbnails
+        FROM AlbumThumbnails 
+        WHERE rn <= 5
+        GROUP BY parentAlbumId
+      ) t ON t.parentAlbumId = a.id
+      ORDER BY a.name ASC
     ` as any[];
 
-    // Get thumbnail photos with efficient sampling
-    const albumsWithThumbnails = await Promise.all(
-      albums.map(async (album: any) => {
-        const photoCount = Number(album.photoCount);
-        const subAlbumPhotosCount = Number(album.subAlbumPhotosCount);
-        const subAlbumsCount = Number(album.subAlbumsCount);
-        
-        // Use optimized query for thumbnails
-        const thumbnails = await prisma.$queryRaw`
-          (
-            SELECT p.id, p.filename, 'sub' as source
-            FROM photos p
-            INNER JOIN albums a ON p.albumId = a.id
-            WHERE a.path LIKE ${album.path + '/%'
-            }
-              AND a.status = 'PUBLIC'
-              AND a.enabled = 1
-            ORDER BY RANDOM()
-            LIMIT 5
-          )
-          UNION ALL
-          (
-            SELECT id, filename, 'main' as source
-            FROM photos
-            WHERE albumId = ${album.id}
-            ORDER BY RANDOM()
-            LIMIT ${5}
-          )
-          LIMIT 5
-        ` as { id: string; filename: string }[];
-        
+    console.log(`Found ${result.length} albums`);
+
+    // Process the results
+    const albums = await Promise.all(
+      result.map(async (album: any) => {
+        // Parse thumbnails from GROUP_CONCAT format
+        let thumbnails = [];
+        if (album.thumbnails) {
+          thumbnails = album.thumbnails.split(';;;').map((item: string) => {
+            const [photoId, filename] = item.split('|||');
+            return { photoId, filename };
+          });
+        }
+
         return {
-          ...album,
-          photoCount,
-          totalPhotoCount: photoCount + subAlbumPhotosCount,
-          subAlbumsCount,
+          id: album.id,
+          path: album.path,
+          slug: album.slug,
+          name: album.name,
+          description: album.description,
+          createdAt: album.createdAt,
+          updatedAt: album.updatedAt,
+          photoCount: Number(album.photoCount),
+          subAlbumPhotosCount: Number(album.subAlbumPhotosCount),
+          subAlbumsCount: Number(album.subAlbumsCount),
+          totalPhotoCount: Number(album.photoCount) + Number(album.subAlbumPhotosCount),
           slugPath: await pathToSlugPath(album.path),
-          thumbnails: thumbnails.map(photo => ({
-            photoId: photo.id,
-            filename: photo.filename,
-          })),
+          thumbnails,
         };
       })
     );
 
     return NextResponse.json({
-      albums: albumsWithThumbnails,
+      albums,
     });
   } catch (error) {
-    console.error('Error fetching albums:', error);
+    console.error('Detailed error fetching albums:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch albums' },
+      { error: 'Failed to fetch albums', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
