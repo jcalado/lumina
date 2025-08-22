@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET() {
   try {
@@ -63,34 +62,32 @@ export async function GET() {
     console.log(`Found ${result.length} albums`);
 
     // Process the results
-    const albums = await Promise.all(
-      result.map(async (album: any) => {
-        // Parse thumbnails from GROUP_CONCAT format
-        let thumbnails = [];
-        if (album.thumbnails) {
-          thumbnails = album.thumbnails.split(';;;').map((item: string) => {
-            const [photoId, filename] = item.split('|||');
-            return { photoId, filename };
-          });
-        }
+    const albums = result.map((album: any) => {
+      // Parse thumbnails from GROUP_CONCAT format
+      let thumbnails = [];
+      if (album.thumbnails) {
+        thumbnails = album.thumbnails.split(';;;').map((item: string) => {
+          const [photoId, filename] = item.split('|||');
+          return { photoId, filename };
+        });
+      }
 
-        return {
-          id: album.id,
-          path: album.path,
-          slug: album.slug,
-          name: album.name,
-          description: album.description,
-          createdAt: album.createdAt,
-          updatedAt: album.updatedAt,
-          photoCount: Number(album.photoCount),
-          subAlbumPhotosCount: Number(album.subAlbumPhotosCount),
-          subAlbumsCount: Number(album.subAlbumsCount),
-          totalPhotoCount: Number(album.photoCount) + Number(album.subAlbumPhotosCount),
-          slugPath: await pathToSlugPath(album.path),
-          thumbnails,
-        };
-      })
-    );
+      return {
+        id: album.id,
+        path: album.path,
+        slug: album.slug,
+        name: album.name,
+        description: album.description,
+        createdAt: album.createdAt,
+        updatedAt: album.updatedAt,
+        photoCount: Number(album.photoCount),
+        subAlbumPhotosCount: Number(album.subAlbumPhotosCount),
+        subAlbumsCount: Number(album.subAlbumsCount),
+        totalPhotoCount: Number(album.photoCount) + Number(album.subAlbumPhotosCount),
+        slugPath: album.slug, // Use existing slug instead of converting
+        thumbnails,
+      };
+    });
 
     return NextResponse.json({
       albums,
