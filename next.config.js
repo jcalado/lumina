@@ -7,6 +7,16 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+  // Increase request size limits for file uploads
+  serverRuntimeConfig: {
+    maxRequestSize: '2gb',
+  },
+  // Configure body parser for larger uploads
+  api: {
+    bodyParser: {
+      sizeLimit: '2gb',
+    },
+  },
   images: {
     remotePatterns: [
       {

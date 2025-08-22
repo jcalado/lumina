@@ -8,7 +8,7 @@ import crypto from 'crypto'
 
 const SUPPORTED_IMAGE_FORMATS = ['.jpg', '.jpeg', '.png', '.webp']
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB per file
-const MAX_TOTAL_SIZE = 500 * 1024 * 1024 // 500MB total
+const MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024 // 2GB total
 const TEMP_DIR = path.join(process.cwd(), 'temp')
 
 interface FileProgress {

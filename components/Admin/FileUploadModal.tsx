@@ -102,7 +102,7 @@ export function FileUploadModal({
     
     // Calculate total size first
     const totalSize = fileList.reduce((sum, file) => sum + file.size, 0)
-    const maxTotalSize = 500 * 1024 * 1024 // 500MB
+    const maxTotalSize = 2 * 1024 * 1024 * 1024 // 2GB
     
     if (totalSize > maxTotalSize) {
       setError(`Total upload size too large: ${formatFileSize(totalSize)}. Maximum: ${formatFileSize(maxTotalSize)}`)
@@ -266,7 +266,7 @@ export function FileUploadModal({
                     Support for {supportedFormats.join(', ')} files up to 50MB each
                   </p>
                   <p className="text-sm text-gray-500">
-                    You can also upload a ZIP file containing photos (max 500MB total)
+                    You can also upload a ZIP file containing photos (max 2GB total)
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
                     Files will be processed in batches based on your admin settings
@@ -293,20 +293,31 @@ export function FileUploadModal({
             </div>
           )}
 
-          {/* File List */}
+              {/* File List */}
           {files.length > 0 && !uploading && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">
                   {uploadType === 'zip' ? 'ZIP Archive' : 'Selected Files'} ({files.length})
                 </h3>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setFiles([])}
-                >
-                  Clear All
-                </Button>
+                <div className="flex items-center gap-2">
+                  {files.length > 100 && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                      Large batch - will process in parallel
+                    </span>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setFiles([])}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="text-sm text-gray-600 mb-2">
+                Total size: {formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}
               </div>
               
               <div className="max-h-48 overflow-y-auto space-y-2">
