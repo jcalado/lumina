@@ -587,7 +587,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                                 {subAlbum.totalPhotoCount}
                               </Badge>
                             )}
-                            {subAlbum.subAlbumsCount > 0 && (
+                            {(subAlbum.subAlbumsCount ?? 0) > 0 && (
                               <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
                                 <Folder className="w-3 h-3 mr-1" />
                                 {subAlbum.subAlbumsCount}
