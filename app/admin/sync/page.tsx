@@ -128,6 +128,8 @@ export default function SyncPage() {
   const [createAlbumModal, setCreateAlbumModal] = useState<{ isOpen: boolean; parentPath?: string; parentName?: string }>({ isOpen: false })
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false)
   const [uploadModal, setUploadModal] = useState<{ isOpen: boolean; albumId: string; albumName: string }>({ isOpen: false, albumId: '', albumName: '' })
+  const [isUpdatingFingerprints, setIsUpdatingFingerprints] = useState(false)
+  const [isCancellingSync, setIsCancellingSync] = useState(false)
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -417,6 +419,59 @@ export default function SyncPage() {
     }
   }
 
+  const updateFingerprints = async () => {
+    setIsUpdatingFingerprints(true)
+    try {
+      const response = await fetch('/api/admin/fingerprints', { method: 'POST' })
+      if (response.ok) {
+        const result = await response.json()
+        toast({
+          title: "Fingerprints Updated",
+          description: `Updated ${result.updated} albums, ${result.errors} errors`
+        })
+        fetchData() // Refresh the data
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update fingerprints",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUpdatingFingerprints(false)
+    }
+  }
+
+  const cancelSync = async (jobId: string) => {
+    setIsCancellingSync(true)
+    try {
+      const response = await fetch('/api/admin/sync/cancel', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        toast({
+          title: "Sync Cancelled",
+          description: "The sync job has been cancelled successfully"
+        })
+        fetchData() // Refresh the data to show updated status
+      } else {
+        throw new Error('Failed to cancel sync')
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel sync job",
+        variant: "destructive"
+      })
+    } finally {
+      setIsCancellingSync(false)
+    }
+  }
+
   const openDeleteConfirmation = (albumId: string) => {
     const album = albums.find(a => a.id === albumId)
     if (album) {
@@ -683,13 +738,23 @@ export default function SyncPage() {
           <h1 className="text-3xl font-bold">Sync Management</h1>
           <p className="text-muted-foreground">Monitor photo sync progress and manage local files</p>
         </div>
-        <Button 
-          onClick={startSync} 
-          disabled={isSyncing || currentSync?.status === 'RUNNING'}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-          {isSyncing ? 'Starting...' : 'Sync Now'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={updateFingerprints}
+            disabled={isSyncing || currentSync?.status === 'RUNNING' || isUpdatingFingerprints}
+            variant="outline"
+          >
+            <FileText className={`h-4 w-4 mr-2 ${isUpdatingFingerprints ? 'animate-spin' : ''}`} />
+            {isUpdatingFingerprints ? 'Updating...' : 'Update Fingerprints'}
+          </Button>
+          <Button 
+            onClick={startSync} 
+            disabled={isSyncing || currentSync?.status === 'RUNNING'}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Starting...' : 'Sync Now'}
+          </Button>
+        </div>
       </div>
 
       {/* Pre-Sync Reconciliation Status */}
@@ -771,16 +836,29 @@ export default function SyncPage() {
       {currentSync && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Current Sync Job
-              <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
-                currentSync.status === 'RUNNING' ? 'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80' : 
-                currentSync.status === 'COMPLETED' ? 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80' : 
-                'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80'
-              }`}>
-                {currentSync.status}
-              </span>
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CardTitle>Current Sync Job</CardTitle>
+                <span className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                  currentSync.status === 'RUNNING' ? 'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80' : 
+                  currentSync.status === 'COMPLETED' ? 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80' : 
+                  'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80'
+                }`}>
+                  {currentSync.status}
+                </span>
+              </div>
+              {currentSync.status === 'RUNNING' && (
+                <Button
+                  onClick={() => cancelSync(currentSync.id)}
+                  disabled={isCancellingSync}
+                  variant="destructive"
+                  size="sm"
+                >
+                  <X className={`h-4 w-4 mr-2 ${isCancellingSync ? 'animate-spin' : ''}`} />
+                  {isCancellingSync ? 'Cancelling...' : 'Cancel Sync'}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">

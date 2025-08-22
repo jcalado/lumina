@@ -5,6 +5,13 @@ import { s3 } from '@/lib/s3';
 import { generateThumbnails } from '@/lib/thumbnails';
 import { getBatchProcessingSize } from '@/lib/settings';
 import { generateUniqueSlug } from '@/lib/slugs';
+import { 
+  generateAlbumFingerprint, 
+  shouldSkipSync, 
+  stringifyFingerprint,
+  parseFingerprintString,
+  compareFingerprints 
+} from '@/lib/sync-fingerprint';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -46,6 +53,15 @@ async function syncPhotos(jobId: string) {
     };
     logs.push(logEntry);
     console.log(`[${level.toUpperCase()}] ${message}`, details || '');
+  };
+
+  // Function to check if sync has been cancelled
+  const checkCancellation = async () => {
+    const job = await prisma.syncJob.findUnique({
+      where: { id: jobId },
+      select: { status: true }
+    });
+    return job?.status === ('CANCELLED' as any);
   };
 
   try {
@@ -94,8 +110,66 @@ async function syncPhotos(jobId: string) {
 
     for (const albumPath of albumPaths) {
       try {
+        // Check for cancellation before processing each album
+        if (await checkCancellation()) {
+          addLog('info', 'Sync was cancelled by user');
+          return; // Exit the sync process
+        }
+
         addLog('info', `Processing album: ${albumPath}`);
         const albumData = await scanner.scanDirectory(albumPath);
+        
+        // Generate current fingerprint
+        const currentFingerprint = await generateAlbumFingerprint(albumPath, {
+          name: albumData.name,
+          description: albumData.description
+        });
+        
+        // Check existing album data for fingerprint comparison
+        const existingAlbum = await prisma.album.findUnique({
+          where: { path: albumPath },
+          include: { photos: true }
+        });
+        
+        // Check if we should skip this sync (temporarily disabled until types are fixed)
+        let shouldSkip = false;
+        let skipReason = '';
+        
+        // TODO: Re-enable fingerprint checking once Prisma types are updated
+        // if (existingAlbum && existingAlbum.syncFingerprint) {
+        //   const skipCheck = shouldSkipSync(existingAlbum, currentFingerprint, 1);
+        //   shouldSkip = skipCheck.shouldSkip;
+        //   skipReason = skipCheck.reason || '';
+        // }
+        
+        if (shouldSkip) {
+          addLog('info', `⏭️ Skipping album "${albumData.name}": ${skipReason}`);
+          
+          // Track album as skipped
+          albumProgress[albumPath] = {
+            status: 'SKIPPED',
+            reason: skipReason,
+            photosTotal: albumData.photos.length,
+            photosProcessed: albumData.photos.length,
+            photosUploaded: albumData.photos.length,
+            issues: []
+          };
+          
+          progress++;
+          const progressPercent = Math.round((progress / totalAlbums) * 100);
+          
+          await prisma.syncJob.update({
+            where: { id: jobId },
+            data: { 
+              progress: progressPercent,
+              completedAlbums: progress,
+              albumProgress: JSON.stringify(albumProgress),
+              logs: JSON.stringify(logs)
+            },
+          });
+          
+          continue;
+        }
         
         // Track album start
         albumProgress[albumPath] = {
@@ -103,7 +177,8 @@ async function syncPhotos(jobId: string) {
           photosTotal: albumData.photos.length,
           photosProcessed: 0,
           photosUploaded: 0,
-          issues: []
+          issues: [],
+          fingerprintInfo: 'Generated fingerprint for sync optimization'
         };
         
         addLog('info', `Album "${albumData.name}" contains ${albumData.photos.length} photos`);
@@ -159,6 +234,10 @@ async function syncPhotos(jobId: string) {
             syncedToS3: true,
             localFilesSafeDelete: allFilesUploaded && !hasIssues, // Only mark safe if ALL files uploaded and no issues
             lastSyncAt: new Date(),
+            // TODO: Re-enable once Prisma types are updated
+            // syncFingerprint: stringifyFingerprint(currentFingerprint),
+            // lastSyncCheck: new Date(),
+            // syncStatus: allFilesUploaded && !hasIssues ? 'SYNCED' : 'CHANGED',
           },
         });
         
@@ -591,7 +670,7 @@ async function syncAlbumPhotosConcurrent(
     const checkBatchSize = Math.min(10, batchSize);
     
     const checkPhotoExists = async (photoData: any) => {
-      const existingPhoto = existingPhotos.find(p => p.filename === photoData.filename);
+      const existingPhoto = existingPhotos.find((p: any) => p.filename === photoData.filename);
       if (existingPhoto && existingPhoto.s3Key) {
         try {
           const existsInS3 = await s3.objectExists(existingPhoto.s3Key);
