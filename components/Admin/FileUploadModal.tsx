@@ -147,7 +147,26 @@ export function FileUploadModal({
 
     setUploading(true)
     setError(null)
-    setProgress(null)
+    
+    // Set initial progress state
+    const initialProgress: UploadProgress = {
+      uploadId: '',
+      totalFiles: files.length,
+      processedFiles: 0,
+      currentBatch: 0,
+      totalBatches: 0,
+      files: files.map(file => ({
+        filename: file.name,
+        status: 'pending',
+        size: file.size
+      })),
+      errors: [],
+      completed: false,
+      phase: 'validating'
+    }
+    
+    setProgress(initialProgress)
+    console.log('[UPLOAD] Set initial progress state:', initialProgress)
 
     try {
       const formData = new FormData()
@@ -166,19 +185,28 @@ export function FileUploadModal({
       }
 
       const uploadId = result.uploadId
+      initialProgress.uploadId = uploadId
+      setProgress(initialProgress)
       
-      // Start polling for progress
+      console.log('[UPLOAD] Upload started with ID:', uploadId)
+      
+      // Start polling for progress immediately
+      let pollCount = 0
       progressInterval.current = setInterval(async () => {
+        pollCount++
         try {
           const progressResponse = await fetch(
             `/api/admin/albums/${albumId}/upload?uploadId=${uploadId}`
           )
           const progressData = await progressResponse.json()
 
+          console.log(`[UPLOAD] Progress update #${pollCount}:`, progressData)
+
           if (progressResponse.ok) {
             setProgress(progressData)
             
             if (progressData.completed) {
+              console.log('[UPLOAD] Upload completed, clearing interval')
               clearInterval(progressInterval.current!)
               setUploading(false)
               
@@ -190,11 +218,23 @@ export function FileUploadModal({
                 }, 2000)
               }
             }
+          } else {
+            console.error('[UPLOAD] Progress check failed:', progressData)
+            if (pollCount > 3) { // Stop polling after a few failures
+              clearInterval(progressInterval.current!)
+              setError('Failed to get upload progress')
+              setUploading(false)
+            }
           }
         } catch (error) {
-          console.error('Progress check error:', error)
+          console.error(`Progress check error #${pollCount}:`, error)
+          if (pollCount > 10) { // Stop polling after many attempts
+            clearInterval(progressInterval.current!)
+            setError('Lost connection to upload progress')
+            setUploading(false)
+          }
         }
-      }, 1000)
+      }, 500) // Poll more frequently for better responsiveness
 
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Upload failed')
@@ -368,7 +408,7 @@ export function FileUploadModal({
               </div>
 
               {/* Individual File Progress */}
-              {progress.files && progress.files.length > 0 && (
+              {progress.files && progress.files.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">File Status:</h4>
                   <div className="max-h-48 overflow-y-auto space-y-1">
@@ -380,12 +420,24 @@ export function FileUploadModal({
                           {file.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-500" />}
                           {file.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
                           <span className="truncate">{file.filename}</span>
+                          {file.error && (
+                            <span className="text-red-500 text-xs">({file.error})</span>
+                          )}
                         </div>
                         <div className="text-gray-500 ml-2">
                           {formatFileSize(file.size)}
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              ) : progress.totalFiles > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Processing Files:</h4>
+                  <div className="text-sm text-gray-600">
+                    {progress.phase === 'extracting' && 'Extracting files from ZIP archive...'}
+                    {progress.phase === 'validating' && 'Validating files...'}
+                    {progress.phase === 'uploading' && `Processing ${progress.totalFiles} files...`}
                   </div>
                 </div>
               )}

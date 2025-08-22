@@ -81,15 +81,21 @@ export async function POST(
     // Initialize progress tracking
     uploadProgress.set(uploadId, {
       uploadId,
-      totalFiles: 0, // Will be updated after processing
+      totalFiles: files.length, // Initial estimate, will be updated
       processedFiles: 0,
       currentBatch: 0,
       totalBatches: 0,
-      files: [],
+      files: files.map(file => ({
+        filename: file.name,
+        status: 'pending',
+        size: file.size
+      })),
       errors: [],
       completed: false,
       phase: 'validating'
     })
+
+    console.log(`[UPLOAD] Initial progress set for ${files.length} files`)
 
     // Process files asynchronously
     processUploadAsync(uploadId, albumId, album.path, files, uploadType)
@@ -117,15 +123,19 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const uploadId = searchParams.get('uploadId')
     
+    console.log(`[UPLOAD] Progress check requested for uploadId: ${uploadId}`)
+    
     if (!uploadId) {
       return NextResponse.json({ error: 'Upload ID required' }, { status: 400 })
     }
 
     const progress = uploadProgress.get(uploadId)
     if (!progress) {
+      console.log(`[UPLOAD] Progress not found for uploadId: ${uploadId}`)
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
 
+    console.log(`[UPLOAD] Returning progress: ${progress.processedFiles}/${progress.totalFiles}, phase: ${progress.phase}`)
     return NextResponse.json(progress)
   } catch (error) {
     console.error('Progress check error:', error)
@@ -206,11 +216,16 @@ async function processUploadAsync(
       size: file.size
     }))
 
+    console.log(`[UPLOAD] Updated progress tracking for ${progress.totalFiles} final files`)
+
     const batchSize = await getBatchProcessingSize()
     progress.totalBatches = Math.ceil(filesToProcess.length / batchSize)
     progress.phase = 'uploading'
     
     console.log(`[UPLOAD] Processing ${filesToProcess.length} files in ${progress.totalBatches} batches of size ${batchSize}`)
+
+    // Add a small delay to ensure the progress is visible
+    await new Promise(resolve => setTimeout(resolve, 100))
 
     // Process files in parallel batches
     for (let i = 0; i < filesToProcess.length; i += batchSize) {
@@ -222,8 +237,12 @@ async function processUploadAsync(
       await Promise.all(
         batch.map(async ({ filename, buffer, size }) => {
           const fileProgressIndex = progress.files.findIndex(f => f.filename === filename)
+          
+          console.log(`[UPLOAD] Starting file: ${filename} (index: ${fileProgressIndex})`)
+          
           if (fileProgressIndex !== -1) {
             progress.files[fileProgressIndex].status = 'processing'
+            console.log(`[UPLOAD] Set ${filename} to processing`)
           }
           
           try {
@@ -231,6 +250,7 @@ async function processUploadAsync(
             
             if (fileProgressIndex !== -1) {
               progress.files[fileProgressIndex].status = 'completed'
+              console.log(`[UPLOAD] Set ${filename} to completed`)
             }
             progress.processedFiles++
             console.log(`[UPLOAD] Completed: ${filename} (${progress.processedFiles}/${progress.totalFiles})`)
@@ -240,6 +260,7 @@ async function processUploadAsync(
             if (fileProgressIndex !== -1) {
               progress.files[fileProgressIndex].status = 'error'
               progress.files[fileProgressIndex].error = error instanceof Error ? error.message : 'Unknown error'
+              console.log(`[UPLOAD] Set ${filename} to error: ${progress.files[fileProgressIndex].error}`)
             }
             
             progress.errors.push({
@@ -250,6 +271,8 @@ async function processUploadAsync(
           }
         })
       )
+      
+      console.log(`[UPLOAD] Completed batch ${progress.currentBatch}/${progress.totalBatches}. Progress: ${progress.processedFiles}/${progress.totalFiles}`)
     }
 
     // Clean up ZIP file if it was uploaded
