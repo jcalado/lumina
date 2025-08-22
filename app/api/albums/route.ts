@@ -4,91 +4,91 @@ import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET() {
   try {
-    // Get albums with slug field using raw query to avoid TypeScript issues
+    // Single optimized query with CTEs and JOINs
     const albums = await prisma.$queryRaw`
-      SELECT 
-        id,
-        path,
-        slug,
-        name,
-        description,
-        createdAt,
-        updatedAt,
-        (SELECT COUNT(*) FROM photos WHERE albumId = albums.id) as photoCount
-      FROM albums 
-      WHERE status = 'PUBLIC' 
-        AND enabled = 1 
-        AND path NOT LIKE '%/%'
-      ORDER BY name ASC
+      WITH AlbumStats AS (
+        SELECT 
+          a.id,
+          a.path,
+          a.slug,
+          a.name,
+          a.description,
+          a.createdAt,
+          a.updatedAt,
+          COUNT(DISTINCT p.id) as photoCount,
+          COUNT(DISTINCT CASE WHEN sub_p.albumId IS NOT NULL THEN sub_p.id END) as subAlbumPhotosCount,
+          COUNT(DISTINCT CASE WHEN sub_a.id IS NOT NULL THEN sub_a.id END) as subAlbumsCount
+        FROM albums a
+        LEFT JOIN photos p ON p.albumId = a.id
+        LEFT JOIN albums sub_a ON sub_a.path LIKE CONCAT(a.path, '/%') 
+          AND sub_a.status = 'PUBLIC' 
+          AND sub_a.enabled = 1
+        LEFT JOIN photos sub_p ON sub_p.albumId = sub_a.id
+        WHERE a.status = 'PUBLIC' 
+          AND a.enabled = 1 
+          AND a.path NOT LIKE '%/%'
+        GROUP BY a.id, a.path, a.slug, a.name, a.description, a.createdAt, a.updatedAt
+        ORDER BY a.name ASC
+      )
+      SELECT * FROM AlbumStats
     ` as any[];
 
-    // For each album, get additional data  
-    const albumsWithCounts = await Promise.all(
+    // Get thumbnail photos with efficient sampling
+    const albumsWithThumbnails = await Promise.all(
       albums.map(async (album: any) => {
-        // Convert photoCount to number (it comes as bigint from raw query)
         const photoCount = Number(album.photoCount);
+        const subAlbumPhotosCount = Number(album.subAlbumPhotosCount);
+        const subAlbumsCount = Number(album.subAlbumsCount);
         
-        // Get sub-album photos count
-        const subAlbumPhotos = await prisma.photo.count({
-          where: {
-            album: {
-              status: 'PUBLIC',
-              enabled: true,
-              path: {
-                startsWith: album.path + '/',
-              },
-            },
-          },
-        });
+        // Use optimized query for thumbnails
+        const thumbnails = await prisma.$queryRaw`
+          (
+            SELECT p.id, p.filename, 'sub' as source
+            FROM photos p
+            INNER JOIN albums a ON p.albumId = a.id
+            WHERE a.path LIKE ${album.path + '/%'
+            }
+              AND a.status = 'PUBLIC'
+              AND a.enabled = 1
+            ORDER BY RANDOM()
+            LIMIT 5
+          )
+          UNION ALL
+          (
+            SELECT id, filename, 'main' as source
+            FROM photos
+            WHERE albumId = ${album.id}
+            ORDER BY RANDOM()
+            LIMIT ${5}
+          )
+          LIMIT 5
+        ` as { id: string; filename: string }[];
+        
+        return {
+          ...album,
+          photoCount,
+          totalPhotoCount: photoCount + subAlbumPhotosCount,
+          subAlbumsCount,
+          slugPath: await pathToSlugPath(album.path),
+          thumbnails: thumbnails.map(photo => ({
+            photoId: photo.id,
+            filename: photo.filename,
+          })),
+        };
+      })
+    );
 
-        // Get sub-albums count
-        const subAlbumsCount = await prisma.album.count({
-          where: {
-            status: 'PUBLIC',
-            enabled: true,
-            path: {
-              startsWith: album.path + '/',
-            },
-          },
-        });
-
-        // Get 5 random photos for thumbnails from this album and its sub-albums
-        let thumbnailPhotos: { id: string; filename: string }[] = [];
-        
-        // First try to get photos from sub-albums (more diverse)
-        if (subAlbumsCount > 0) {
-          const subAlbumPhotos = await prisma.photo.findMany({
-            where: {
-              album: {
-                status: 'PUBLIC',
-                enabled: true,
-                path: {
-                  startsWith: album.path + '/',
-                },
-              },
-            },
-            select: {
-              id: true,
-              filename: true,
-            },
-            take: 100, // Get more to randomize
-            orderBy: {
-              takenAt: 'asc',
-            },
-          });
-          
-          // Randomize and take 5
-          if (subAlbumPhotos.length > 0) {
-            const shuffled = subAlbumPhotos.sort(() => 0.5 - Math.random());
-            thumbnailPhotos = shuffled.slice(0, 5);
-          }
-        }
-        
-        // If we don't have enough from sub-albums, get from the main album
-        if (thumbnailPhotos.length < 5 && photoCount > 0) {
-          const albumPhotos = await prisma.photo.findMany({
-            where: {
-              albumId: album.id,
+    return NextResponse.json({
+      albums: albumsWithThumbnails,
+    });
+  } catch (error) {
+    console.error('Error fetching albums:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch albums' },
+      { status: 500 }
+    );
+  }
+}
             },
             select: {
               id: true,
