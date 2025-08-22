@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle, CloudDownload } from "lucide-react"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle, CloudDownload, Plus, FolderPlus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface AlbumTreeNode {
@@ -121,6 +124,8 @@ export default function SyncPage() {
   const [restoringAlbums, setRestoringAlbums] = useState<Set<string>>(new Set())
   const [restoreProgress, setRestoreProgress] = useState<Map<string, { current: number; total: number; message: string }>>(new Map())
   const [reconciliationData, setReconciliationData] = useState<ReconciliationData | null>(null)
+  const [createAlbumModal, setCreateAlbumModal] = useState<{ isOpen: boolean; parentPath?: string; parentName?: string }>({ isOpen: false })
+  const [isCreatingAlbum, setIsCreatingAlbum] = useState(false)
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -308,6 +313,53 @@ export default function SyncPage() {
         newMap.delete(albumId)
         return newMap
       })
+    }
+  }
+
+  const createAlbum = async (albumData: { name: string; description?: string; parentPath?: string }) => {
+    setIsCreatingAlbum(true)
+    
+    try {
+      console.log(`[FRONTEND] Creating album:`, albumData)
+      
+      const response = await fetch('/api/admin/albums/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(albumData)
+      })
+      
+      const result = await response.json()
+      
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: result.message
+        })
+        
+        // Close modal and refresh data
+        setCreateAlbumModal({ isOpen: false })
+        await fetchData()
+        
+        // Expand parent path if creating sub-album
+        if (albumData.parentPath) {
+          setExpandedNodes(prev => new Set([...prev, albumData.parentPath!]))
+        }
+        
+      } else {
+        throw new Error(result.error || 'Failed to create album')
+      }
+    } catch (error) {
+      console.error('[FRONTEND] Error creating album:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      toast({
+        title: "Error",
+        description: `Failed to create album: ${errorMessage}`,
+        variant: "destructive"
+      })
+    } finally {
+      setIsCreatingAlbum(false)
     }
   }
 
@@ -546,6 +598,16 @@ export default function SyncPage() {
                 </div>
                 
                 <div className="flex items-center gap-2 ml-4">
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCreateAlbumModal({ isOpen: true, parentPath: node.path })}
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 h-7 rounded-md px-2 text-xs"
+                  >
+                    <FolderPlus className="h-3 w-3 mr-1" />
+                    Add Sub-Album
+                  </Button>
+                  
                   <Button 
                     className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-7 rounded-md px-2 text-xs"
                     onClick={() => compareAlbum(node.album!.id)}
@@ -1220,6 +1282,103 @@ export default function SyncPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Create Album Modal */}
+      <Dialog open={createAlbumModal.isOpen} onOpenChange={(open) => setCreateAlbumModal({ isOpen: open })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="h-5 w-5" />
+              Create New Album
+            </DialogTitle>
+            <DialogDescription>
+              {createAlbumModal.parentPath 
+                ? `Create a sub-album under "${createAlbumModal.parentName}"`
+                : 'Create a new root-level album'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            const formData = new FormData(e.currentTarget)
+            const name = formData.get('albumName') as string
+            const description = formData.get('albumDescription') as string
+            
+            if (name.trim()) {
+              createAlbum({
+                name: name.trim(),
+                description: description.trim() || undefined,
+                parentPath: createAlbumModal.parentPath
+              })
+            }
+          }}>
+            <div className="space-y-4 py-4">
+              {createAlbumModal.parentPath && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="text-sm font-medium text-blue-900">Parent Album</div>
+                  <div className="text-sm text-blue-700">{createAlbumModal.parentPath}</div>
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <Label htmlFor="albumName">Album Name *</Label>
+                <Input
+                  id="albumName"
+                  name="albumName"
+                  placeholder="Enter album name"
+                  required
+                  disabled={isCreatingAlbum}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Special characters will be sanitized for filesystem compatibility
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="albumDescription">Description (Optional)</Label>
+                <Textarea
+                  id="albumDescription"
+                  name="albumDescription"
+                  placeholder="Enter album description..."
+                  rows={3}
+                  disabled={isCreatingAlbum}
+                />
+                <div className="text-xs text-muted-foreground">
+                  Will be saved as project.md in the album folder
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setCreateAlbumModal({ isOpen: false })}
+                disabled={isCreatingAlbum}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isCreatingAlbum}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {isCreatingAlbum ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    Create Album
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Albums Tree View */}
       <Card>
         <CardHeader>
@@ -1231,6 +1390,15 @@ export default function SyncPage() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateAlbumModal({ isOpen: true })}
+                className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Album
+              </Button>
               <Button 
                 variant="outline"
                 size="sm"
