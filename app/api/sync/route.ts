@@ -58,12 +58,25 @@ async function syncPhotos(jobId: string) {
 
     // Get all albums from filesystem
     const albumPaths = await scanner.getAllAlbums();
+    
+    // Get all albums from database
+    const databaseAlbums = await prisma.album.findMany({
+      select: { id: true, path: true, name: true, syncedToS3: true, localFilesSafeDelete: true },
+    });
+    
+    addLog('info', `Found ${albumPaths.length} albums in filesystem`);
+    addLog('info', `Found ${databaseAlbums.length} albums in database`);
+    
+    // Reconciliation phase - identify orphaned albums
+    const reconciliationResults = await reconcileAlbums(albumPaths, databaseAlbums, addLog);
+    
+    // Total albums includes both filesystem albums and reconciled albums
+    const totalAlbums = albumPaths.length + reconciliationResults.reconciledAlbums.length;
     let progress = 0;
-    const totalAlbums = albumPaths.length;
     let totalFilesProcessed = 0;
     let totalFilesUploaded = 0;
     
-    addLog('info', `Found ${totalAlbums} albums to sync`);
+    addLog('info', `Total albums to process: ${totalAlbums} (${albumPaths.length} from filesystem, ${reconciliationResults.reconciledAlbums.length} reconciled)`);
     
     // Initialize job with album count
     await prisma.syncJob.update({
@@ -188,6 +201,70 @@ async function syncPhotos(jobId: string) {
       }
     }
 
+    // Process reconciled albums (albums in database but missing from filesystem)
+    if (reconciliationResults.reconciledAlbums.length > 0) {
+      addLog('info', `Processing ${reconciliationResults.reconciledAlbums.length} reconciled albums`);
+      
+      for (const reconciledAlbum of reconciliationResults.reconciledAlbums) {
+        try {
+          albumProgress[`reconciled_${reconciledAlbum.id}`] = {
+            status: 'RECONCILED',
+            action: reconciledAlbum.action,
+            albumName: reconciledAlbum.name,
+            albumPath: reconciledAlbum.path
+          };
+
+          progress++;
+          const progressPercent = Math.round((progress / totalAlbums) * 100);
+
+          await prisma.syncJob.update({
+            where: { id: jobId },
+            data: { 
+              progress: progressPercent,
+              completedAlbums: progress,
+              albumProgress: JSON.stringify(albumProgress),
+              logs: JSON.stringify(logs)
+            },
+          });
+
+          switch (reconciledAlbum.action) {
+            case 'cleaned_up':
+              addLog('info', `✅ Cleaned up orphaned album: ${reconciledAlbum.name}`);
+              break;
+            case 'marked_missing':
+              addLog('warn', `⚠️ Marked album as missing local files: ${reconciledAlbum.name} (recoverable from S3)`);
+              break;
+            case 'restored':
+              addLog('info', `✅ Restored album from S3: ${reconciledAlbum.name}`);
+              break;
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          addLog('error', `Failed to process reconciled album ${reconciledAlbum.name}`, { error: errorMsg });
+          albumProgress[`reconciled_${reconciledAlbum.id}`] = {
+            status: 'ERROR',
+            error: errorMsg,
+            action: reconciledAlbum.action,
+            albumName: reconciledAlbum.name
+          };
+        }
+      }
+    }
+
+    // Log orphaned albums that need manual review
+    if (reconciliationResults.orphanedAlbums.length > 0) {
+      addLog('warn', `Found ${reconciliationResults.orphanedAlbums.length} albums requiring manual review`);
+      for (const orphaned of reconciliationResults.orphanedAlbums) {
+        addLog('warn', `Manual review needed: ${orphaned.name} - ${orphaned.reason}`);
+        albumProgress[`orphaned_${orphaned.id}`] = {
+          status: 'NEEDS_REVIEW',
+          reason: orphaned.reason,
+          albumName: orphaned.name,
+          albumPath: orphaned.path
+        };
+      }
+    }
+
     // Mark job as completed
     await prisma.syncJob.update({
       where: { id: jobId },
@@ -214,6 +291,116 @@ async function syncPhotos(jobId: string) {
         logs: JSON.stringify(logs)
       },
     });
+  }
+}
+
+// Reconciliation function to handle albums in database but missing from filesystem
+async function reconcileAlbums(
+  filesystemAlbums: string[],
+  databaseAlbums: Array<{ id: string; path: string; name: string; syncedToS3: boolean; localFilesSafeDelete: boolean }>,
+  logger: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
+): Promise<{
+  reconciledAlbums: Array<{ id: string; path: string; name: string; action: 'restored' | 'marked_missing' | 'cleaned_up' }>;
+  orphanedAlbums: Array<{ id: string; path: string; name: string; reason: string }>;
+}> {
+  const filesystemAlbumSet = new Set(filesystemAlbums);
+  const orphanedAlbums: Array<{ id: string; path: string; name: string; reason: string }> = [];
+  const reconciledAlbums: Array<{ id: string; path: string; name: string; action: 'restored' | 'marked_missing' | 'cleaned_up' }> = [];
+
+  logger('info', 'Starting album reconciliation phase');
+
+  for (const dbAlbum of databaseAlbums) {
+    if (!filesystemAlbumSet.has(dbAlbum.path)) {
+      logger('warn', `Found orphaned album in database: ${dbAlbum.name} (${dbAlbum.path})`);
+
+      try {
+        // Check if album has photos in S3
+        const photosInS3 = await prisma.photo.count({
+          where: {
+            albumId: dbAlbum.id,
+            s3Key: { not: '' }
+          }
+        });
+
+        if (photosInS3 > 0 && dbAlbum.syncedToS3) {
+          // Album has S3 files - mark for potential restoration
+          logger('info', `Album "${dbAlbum.name}" has ${photosInS3} photos in S3 - marking as missing but recoverable`);
+          
+          await prisma.album.update({
+            where: { id: dbAlbum.id },
+            data: {
+              localFilesSafeDelete: false,
+              // Add a note that local files are missing
+              description: `${dbAlbum.path ? 'Local files missing. ' : ''}${await getAlbumDescription(dbAlbum.id) || ''}`
+            }
+          });
+
+          reconciledAlbums.push({
+            id: dbAlbum.id,
+            path: dbAlbum.path,
+            name: dbAlbum.name,
+            action: 'marked_missing'
+          });
+        } else if (photosInS3 === 0) {
+          // No S3 files - safe to clean up
+          logger('info', `Album "${dbAlbum.name}" has no S3 files - cleaning up database records`);
+          
+          // Delete all photos for this album
+          await prisma.photo.deleteMany({
+            where: { albumId: dbAlbum.id }
+          });
+
+          // Delete the album
+          await prisma.album.delete({
+            where: { id: dbAlbum.id }
+          });
+
+          reconciledAlbums.push({
+            id: dbAlbum.id,
+            path: dbAlbum.path,
+            name: dbAlbum.name,
+            action: 'cleaned_up'
+          });
+        } else {
+          // Has some S3 files but not fully synced - keep as orphaned for manual review
+          orphanedAlbums.push({
+            id: dbAlbum.id,
+            path: dbAlbum.path,
+            name: dbAlbum.name,
+            reason: `Partially synced: ${photosInS3} photos in S3 but syncedToS3=${dbAlbum.syncedToS3}`
+          });
+        }
+      } catch (error) {
+        logger('error', `Error reconciling album "${dbAlbum.name}": ${error}`);
+        orphanedAlbums.push({
+          id: dbAlbum.id,
+          path: dbAlbum.path,
+          name: dbAlbum.name,
+          reason: `Reconciliation error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+      }
+    }
+  }
+
+  logger('info', `Reconciliation complete: ${reconciledAlbums.length} albums reconciled, ${orphanedAlbums.length} albums need manual review`);
+  
+  if (orphanedAlbums.length > 0) {
+    logger('warn', `Albums requiring manual review: ${orphanedAlbums.map(a => a.name).join(', ')}`);
+  }
+
+  return { reconciledAlbums, orphanedAlbums };
+}
+
+// Helper function to get album description
+async function getAlbumDescription(albumId: string): Promise<string | null> {
+  try {
+    const album = await prisma.album.findUnique({
+      where: { id: albumId },
+      select: { description: true }
+    });
+    return album?.description || null;
+  } catch {
+    return null;
   }
 }
 

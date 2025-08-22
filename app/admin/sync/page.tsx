@@ -77,6 +77,35 @@ interface SyncJob {
   logs: Array<{timestamp: string, level: string, message: string, details?: any}>
 }
 
+interface ReconciliationData {
+  stats: {
+    total: {
+      filesystem: number
+      database: number
+      orphaned: number
+      new: number
+      synced: number
+    }
+    orphaned: {
+      cleanupNeeded: number
+      recoverable: number
+      needsReview: number
+    }
+  }
+  orphanedAlbums: Array<{
+    id: string
+    path: string
+    name: string
+    s3PhotoCount: number
+    totalPhotoCount: number
+    recommendedAction: 'cleanup' | 'recoverable' | 'review'
+  }>
+  summary: {
+    hasIssues: boolean
+    message: string
+  }
+}
+
 export default function SyncPage() {
   const [albums, setAlbums] = useState<Album[]>([])
   const [currentSync, setCurrentSync] = useState<SyncJob | null>(null)
@@ -91,6 +120,7 @@ export default function SyncPage() {
   const [isDeletingLocal, setIsDeletingLocal] = useState(false)
   const [restoringAlbums, setRestoringAlbums] = useState<Set<string>>(new Set())
   const [restoreProgress, setRestoreProgress] = useState<Map<string, { current: number; total: number; message: string }>>(new Map())
+  const [reconciliationData, setReconciliationData] = useState<ReconciliationData | null>(null)
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -283,9 +313,10 @@ export default function SyncPage() {
 
   const fetchData = async () => {
     try {
-      const [albumsRes, syncRes] = await Promise.all([
+      const [albumsRes, syncRes, reconciliationRes] = await Promise.all([
         fetch('/api/admin/albums'),
-        fetch('/api/admin/sync/status')
+        fetch('/api/admin/sync/status'),
+        fetch('/api/admin/reconciliation')
       ])
       
       const albumsData = await albumsRes.json()
@@ -293,6 +324,11 @@ export default function SyncPage() {
       
       setAlbums(albumsData.albums || [])
       setCurrentSync(syncData.currentJob)
+      
+      if (reconciliationRes.ok) {
+        const reconciliationData = await reconciliationRes.json()
+        setReconciliationData(reconciliationData)
+      }
     } catch (error) {
       console.error('Error fetching data:', error)
       toast({
@@ -582,6 +618,81 @@ export default function SyncPage() {
         </Button>
       </div>
 
+      {/* Pre-Sync Reconciliation Status */}
+      {reconciliationData && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              System Status Check
+              {reconciliationData.summary.hasIssues && (
+                <Badge variant="destructive" className="ml-2">
+                  Issues Found
+                </Badge>
+              )}
+              {!reconciliationData.summary.hasIssues && (
+                <Badge variant="secondary" className="ml-2 bg-green-100 text-green-800">
+                  All Good
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              {reconciliationData.summary.message}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Filesystem Albums</p>
+                <p className="font-medium">{reconciliationData.stats.total.filesystem}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Database Albums</p>
+                <p className="font-medium">{reconciliationData.stats.total.database}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Orphaned Albums</p>
+                <p className={`font-medium ${reconciliationData.stats.total.orphaned > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {reconciliationData.stats.total.orphaned}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">New Albums</p>
+                <p className={`font-medium ${reconciliationData.stats.total.new > 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                  {reconciliationData.stats.total.new}
+                </p>
+              </div>
+            </div>
+
+            {reconciliationData.summary.hasIssues && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <div className="text-sm font-medium text-yellow-900 mb-2">Actions that will be taken during sync:</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {reconciliationData.stats.orphaned.cleanupNeeded > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Trash2 className="h-3 w-3 text-red-600" />
+                      <span>Clean up {reconciliationData.stats.orphaned.cleanupNeeded} empty albums</span>
+                    </div>
+                  )}
+                  {reconciliationData.stats.orphaned.recoverable > 0 && (
+                    <div className="flex items-center gap-2">
+                      <CloudDownload className="h-3 w-3 text-blue-600" />
+                      <span>Mark {reconciliationData.stats.orphaned.recoverable} albums as recoverable</span>
+                    </div>
+                  )}
+                  {reconciliationData.stats.orphaned.needsReview > 0 && (
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-3 w-3 text-orange-600" />
+                      <span>{reconciliationData.stats.orphaned.needsReview} albums need manual review</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Current Sync Status */}
       {currentSync && (
         <Card>
@@ -631,6 +742,57 @@ export default function SyncPage() {
                 </p>
               </div>
             </div>
+
+            {/* Reconciliation Summary */}
+            {currentSync.albumProgress && (() => {
+              try {
+                const albumProgressData = typeof currentSync.albumProgress === 'string' 
+                  ? JSON.parse(currentSync.albumProgress) 
+                  : currentSync.albumProgress;
+                
+                const reconciledCount = Object.keys(albumProgressData).filter(key => key.startsWith('reconciled_')).length;
+                const orphanedCount = Object.keys(albumProgressData).filter(key => key.startsWith('orphaned_')).length;
+                const cleanedUpCount = Object.values(albumProgressData).filter((album: any) => album.action === 'cleaned_up').length;
+                const markedMissingCount = Object.values(albumProgressData).filter((album: any) => album.action === 'marked_missing').length;
+
+                if (reconciledCount > 0 || orphanedCount > 0) {
+                  return (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="text-sm font-medium text-blue-900 mb-2">Album Reconciliation</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        {cleanedUpCount > 0 && (
+                          <div>
+                            <p className="text-green-700 font-medium">Cleaned Up</p>
+                            <p className="text-green-600">{cleanedUpCount} albums</p>
+                          </div>
+                        )}
+                        {markedMissingCount > 0 && (
+                          <div>
+                            <p className="text-yellow-700 font-medium">Missing Local</p>
+                            <p className="text-yellow-600">{markedMissingCount} recoverable</p>
+                          </div>
+                        )}
+                        {orphanedCount > 0 && (
+                          <div>
+                            <p className="text-orange-700 font-medium">Need Review</p>
+                            <p className="text-orange-600">{orphanedCount} albums</p>
+                          </div>
+                        )}
+                        {reconciledCount > 0 && (
+                          <div>
+                            <p className="text-blue-700 font-medium">Total Handled</p>
+                            <p className="text-blue-600">{reconciledCount} albums</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+              } catch (error) {
+                console.error('Error parsing album progress:', error);
+              }
+              return null;
+            })()}
 
             {currentSync.errors && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-md">
