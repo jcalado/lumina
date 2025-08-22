@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface AlbumTreeNode {
@@ -86,6 +86,8 @@ export default function SyncPage() {
   const [selectedComparisonAlbumId, setSelectedComparisonAlbumId] = useState<string | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isHelpExpanded, setIsHelpExpanded] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; album: Album | null }>({ isOpen: false, album: null })
+  const [isDeletingLocal, setIsDeletingLocal] = useState(false)
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -199,27 +201,61 @@ export default function SyncPage() {
     }
   }
 
-  const deleteLocalFiles = async (albumId: string) => {
+  const openDeleteConfirmation = (albumId: string) => {
+    const album = albums.find(a => a.id === albumId)
+    if (album) {
+      setDeleteConfirmation({ isOpen: true, album })
+    }
+  }
+
+  const closeDeleteConfirmation = () => {
+    setDeleteConfirmation({ isOpen: false, album: null })
+  }
+
+  const deleteLocalFiles = async () => {
+    if (!deleteConfirmation.album) return
+
+    const album = deleteConfirmation.album
+    setIsDeletingLocal(true)
+
     try {
-      const response = await fetch(`/api/admin/albums/${albumId}/delete-local`, {
-        method: 'POST'
+      console.log(`[FRONTEND] Starting delete request for album ID: ${album.id}`)
+      console.log(`[FRONTEND] Album: ${album.name} (${album.path})`)
+      
+      const response = await fetch(`/api/admin/albums/${album.id}/delete-local`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       })
       
+      console.log(`[FRONTEND] Delete response status: ${response.status}`)
+      
       if (response.ok) {
+        const data = await response.json()
+        console.log(`[FRONTEND] Delete response data:`, data)
+        
         toast({
           title: "Success",
-          description: "Local files deleted successfully"
+          description: data.message || "Local files deleted successfully"
         })
         fetchData()
+        closeDeleteConfirmation()
       } else {
-        throw new Error('Failed to delete local files')
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error(`[FRONTEND] Delete failed with status ${response.status}:`, errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
     } catch (error) {
+      console.error('[FRONTEND] Error in deleteLocalFiles:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       toast({
         title: "Error",
-        description: "Failed to delete local files",
+        description: `Failed to delete local files: ${errorMessage}`,
         variant: "destructive"
       })
+    } finally {
+      setIsDeletingLocal(false)
     }
   }
 
@@ -360,7 +396,7 @@ export default function SyncPage() {
                   {node.album!.localFilesSafeDelete ? (
                     <Button 
                       className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 h-7 rounded-md px-2 text-xs"
-                      onClick={() => deleteLocalFiles(node.album!.id)}
+                      onClick={() => openDeleteConfirmation(node.album!.id)}
                     >
                       <Trash2 className="h-3 w-3 mr-1" />
                       Delete Local
@@ -859,6 +895,79 @@ export default function SyncPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteConfirmation.isOpen} onOpenChange={(open) => !open && closeDeleteConfirmation()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Delete Local Files
+            </DialogTitle>
+            <DialogDescription>
+              This action will permanently delete the local files for this album.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {deleteConfirmation.album && (
+            <div className="space-y-4">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="space-y-2">
+                  <div className="font-medium text-red-900">
+                    {deleteConfirmation.album.name}
+                  </div>
+                  <div className="text-sm text-red-700">
+                    <strong>Path:</strong> {deleteConfirmation.album.path}
+                  </div>
+                  <div className="text-sm text-red-700">
+                    <strong>Photos:</strong> {deleteConfirmation.album.photoCount} files
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-gray-700">
+                    <strong>Warning:</strong> This action cannot be undone. All local files in this album directory will be permanently removed from your filesystem.
+                  </div>
+                </div>
+                <div className="text-sm text-gray-600 ml-6">
+                  The files will remain available in S3 storage and the database records will be preserved.
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+            <Button
+              variant="outline"
+              onClick={closeDeleteConfirmation}
+              disabled={isDeletingLocal}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={deleteLocalFiles}
+              disabled={isDeletingLocal}
+              className="mb-2 sm:mb-0"
+            >
+              {isDeletingLocal ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Local Files
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
