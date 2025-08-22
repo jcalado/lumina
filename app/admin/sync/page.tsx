@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle } from "lucide-react"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle, CloudDownload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface AlbumTreeNode {
@@ -88,6 +89,8 @@ export default function SyncPage() {
   const [isHelpExpanded, setIsHelpExpanded] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; album: Album | null }>({ isOpen: false, album: null })
   const [isDeletingLocal, setIsDeletingLocal] = useState(false)
+  const [restoringAlbums, setRestoringAlbums] = useState<Set<string>>(new Set())
+  const [restoreProgress, setRestoreProgress] = useState<Map<string, { current: number; total: number; message: string }>>(new Map())
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -153,6 +156,129 @@ export default function SyncPage() {
       }
       return newSet
     })
+  }
+
+  const restoreLocalFiles = async (albumId: string, missingFiles: string[]) => {
+    setRestoringAlbums(prev => new Set([...prev, albumId]))
+    setRestoreProgress(prev => new Map(prev.set(albumId, { current: 0, total: missingFiles.length, message: 'Starting...' })))
+
+    try {
+      console.log(`[FRONTEND] Starting restore request for album ID: ${albumId}`)
+      console.log(`[FRONTEND] Files to restore: ${missingFiles.length}`)
+      
+      const response = await fetch(`/api/admin/albums/${albumId}/restore-progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ missingFiles })
+      })
+      
+      console.log(`[FRONTEND] Restore response status: ${response.status}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error(`[FRONTEND] Restore failed with status ${response.status}:`, errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body reader available')
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          break
+        }
+
+        // Decode the chunk and process SSE messages
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              switch (data.type) {
+                case 'progress':
+                  setRestoreProgress(prev => new Map(prev.set(albumId, {
+                    current: data.current,
+                    total: data.total,
+                    message: data.message
+                  })))
+                  break
+                  
+                case 'complete':
+                  console.log(`[FRONTEND] Restore complete:`, data)
+                  
+                  toast({
+                    title: "Success",
+                    description: data.message || `Restored ${data.stats?.restored || 0} files successfully`
+                  })
+                  
+                  // If there were failed files, show a warning
+                  if (data.failedFiles && data.failedFiles.length > 0) {
+                    toast({
+                      title: "Warning",
+                      description: `${data.failedFiles.length} files failed to restore. Check logs for details.`,
+                      variant: "destructive"
+                    })
+                  }
+                  
+                  // If album was updated, show success message
+                  if (data.albumUpdated) {
+                    toast({
+                      title: "Album Restored",
+                      description: "Album is now complete and marked as safe for deletion."
+                    })
+                  }
+
+                  // Refresh data and update comparison modal if it's open
+                  await fetchData()
+                  if (selectedComparisonAlbumId === albumId) {
+                    await compareAlbum(albumId)
+                  }
+                  
+                  break
+                  
+                case 'error':
+                  console.error(`[FRONTEND] Restore error:`, data)
+                  throw new Error(data.error || 'Unknown error during restoration')
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError)
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('[FRONTEND] Error in restoreLocalFiles:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      toast({
+        title: "Error",
+        description: `Failed to restore files: ${errorMessage}`,
+        variant: "destructive"
+      })
+    } finally {
+      setRestoringAlbums(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(albumId)
+        return newSet
+      })
+      setRestoreProgress(prev => {
+        const newMap = new Map(prev)
+        newMap.delete(albumId)
+        return newMap
+      })
+    }
   }
 
   const fetchData = async () => {
@@ -657,7 +783,9 @@ export default function SyncPage() {
                     <div className="text-3xl font-bold">
                       {comparison.localOnly.length + comparison.s3Only.length + comparison.databaseOnly.length +
                        (comparison.missing?.localMissingFromS3?.length || 0) +
+                       (comparison.missing?.localMissingFromDB?.length || 0) +
                        (comparison.missing?.s3MissingFromLocal?.length || 0) +
+                       (comparison.missing?.s3MissingFromDB?.length || 0) +
                        (comparison.missing?.dbMissingFromLocal?.length || 0) +
                        (comparison.missing?.dbMissingFromS3?.length || 0)}
                     </div>
@@ -671,7 +799,9 @@ export default function SyncPage() {
                                            comparison.s3Only.length > 0 || 
                                            comparison.databaseOnly.length > 0 ||
                                            (comparison.missing?.localMissingFromS3?.length || 0) > 0 ||
+                                           (comparison.missing?.localMissingFromDB?.length || 0) > 0 ||
                                            (comparison.missing?.s3MissingFromLocal?.length || 0) > 0 ||
+                                           (comparison.missing?.s3MissingFromDB?.length || 0) > 0 ||
                                            (comparison.missing?.dbMissingFromLocal?.length || 0) > 0 ||
                                            (comparison.missing?.dbMissingFromS3?.length || 0) > 0
                   
@@ -698,9 +828,46 @@ export default function SyncPage() {
 
                       {comparison.s3Only.length > 0 && (
                         <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
-                          <div className="font-medium text-yellow-800 mb-2">Files Only in S3 ({comparison.s3Only.length})</div>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="font-medium text-yellow-800">Files Only in S3 ({comparison.s3Only.length})</div>
+                            <Button
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => restoreLocalFiles(selectedComparisonAlbumId!, comparison.s3Only)}
+                              disabled={restoringAlbums.has(selectedComparisonAlbumId!)}
+                            >
+                              {restoringAlbums.has(selectedComparisonAlbumId!) ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  Restoring...
+                                </>
+                              ) : (
+                                <>
+                                  <CloudDownload className="h-4 w-4 mr-2" />
+                                  Restore Files
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          {restoringAlbums.has(selectedComparisonAlbumId!) && restoreProgress.has(selectedComparisonAlbumId!) && (
+                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                              <div className="flex items-center justify-between text-sm mb-2">
+                                <span className="text-blue-700">Restoration Progress</span>
+                                <span className="text-blue-600 font-medium">
+                                  {restoreProgress.get(selectedComparisonAlbumId!)?.current || 0} / {restoreProgress.get(selectedComparisonAlbumId!)?.total || 0}
+                                </span>
+                              </div>
+                              <Progress 
+                                value={((restoreProgress.get(selectedComparisonAlbumId!)?.current || 0) / (restoreProgress.get(selectedComparisonAlbumId!)?.total || 1)) * 100} 
+                                className="mb-2"
+                              />
+                              <div className="text-xs text-blue-600">
+                                {restoreProgress.get(selectedComparisonAlbumId!)?.message || 'Processing...'}
+                              </div>
+                            </div>
+                          )}
                           <div className="text-sm text-yellow-700 mb-3">
-                            These files exist in S3 but are missing from local filesystem and database
+                            These files exist in S3 but are missing from local filesystem and database. Click "Restore Files" to download them locally.
                           </div>
                           <div className="text-xs text-yellow-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
                             {comparison.s3Only.slice(0, 10).map((file, idx) => (
@@ -760,6 +927,111 @@ export default function SyncPage() {
                             ))}
                             {comparison.missing.dbMissingFromS3.length > 10 && (
                               <div className="py-1 font-medium">... and {comparison.missing.dbMissingFromS3.length - 10} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(comparison.missing?.s3MissingFromLocal?.length || 0) > 0 && (
+                        <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="font-medium text-green-800">S3 Files Missing from Local ({comparison.missing.s3MissingFromLocal.length})</div>
+                            <Button
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => restoreLocalFiles(selectedComparisonAlbumId!, comparison.missing.s3MissingFromLocal)}
+                              disabled={restoringAlbums.has(selectedComparisonAlbumId!)}
+                            >
+                              {restoringAlbums.has(selectedComparisonAlbumId!) ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  Restoring...
+                                </>
+                              ) : (
+                                <>
+                                  <CloudDownload className="h-4 w-4 mr-2" />
+                                  Restore from S3
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                          {restoringAlbums.has(selectedComparisonAlbumId!) && restoreProgress.has(selectedComparisonAlbumId!) && (
+                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                              <div className="flex items-center justify-between text-sm mb-2">
+                                <span className="text-blue-700">Restoration Progress</span>
+                                <span className="text-blue-600 font-medium">
+                                  {restoreProgress.get(selectedComparisonAlbumId!)?.current || 0} / {restoreProgress.get(selectedComparisonAlbumId!)?.total || 0}
+                                </span>
+                              </div>
+                              <Progress 
+                                value={((restoreProgress.get(selectedComparisonAlbumId!)?.current || 0) / (restoreProgress.get(selectedComparisonAlbumId!)?.total || 1)) * 100} 
+                                className="mb-2"
+                              />
+                              <div className="text-xs text-blue-600">
+                                {restoreProgress.get(selectedComparisonAlbumId!)?.message || 'Processing...'}
+                              </div>
+                            </div>
+                          )}
+                          <div className="text-sm text-green-700 mb-3">
+                            These files exist in S3 and database but are missing from local filesystem
+                          </div>
+                          <div className="text-xs text-green-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.s3MissingFromLocal.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
+                            ))}
+                            {comparison.missing.s3MissingFromLocal.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.s3MissingFromLocal.length - 10} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(comparison.missing?.dbMissingFromLocal?.length || 0) > 0 && (
+                        <div className="p-4 border border-indigo-200 rounded-lg bg-indigo-50">
+                          <div className="font-medium text-indigo-800 mb-2">Database Records Missing from Local ({comparison.missing.dbMissingFromLocal.length})</div>
+                          <div className="text-sm text-indigo-700 mb-3">
+                            These files exist in database but are missing from local filesystem
+                          </div>
+                          <div className="text-xs text-indigo-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.dbMissingFromLocal.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
+                            ))}
+                            {comparison.missing.dbMissingFromLocal.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.dbMissingFromLocal.length - 10} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(comparison.missing?.localMissingFromDB?.length || 0) > 0 && (
+                        <div className="p-4 border border-violet-200 rounded-lg bg-violet-50">
+                          <div className="font-medium text-violet-800 mb-2">Local Files Missing from Database ({comparison.missing.localMissingFromDB.length})</div>
+                          <div className="text-sm text-violet-700 mb-3">
+                            These files exist locally but are missing from database
+                          </div>
+                          <div className="text-xs text-violet-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.localMissingFromDB.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
+                            ))}
+                            {comparison.missing.localMissingFromDB.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.localMissingFromDB.length - 10} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(comparison.missing?.s3MissingFromDB?.length || 0) > 0 && (
+                        <div className="p-4 border border-cyan-200 rounded-lg bg-cyan-50">
+                          <div className="font-medium text-cyan-800 mb-2">S3 Files Missing from Database ({comparison.missing.s3MissingFromDB.length})</div>
+                          <div className="text-sm text-cyan-700 mb-3">
+                            These files exist in S3 but are missing from database
+                          </div>
+                          <div className="text-xs text-cyan-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.s3MissingFromDB.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
+                            ))}
+                            {comparison.missing.s3MissingFromDB.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.s3MissingFromDB.length - 10} more</div>
                             )}
                           </div>
                         </div>
