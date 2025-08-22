@@ -7,6 +7,7 @@ import {
   compareFingerprints 
 } from '@/lib/sync-fingerprint';
 import { scanner } from '@/lib/filesystem';
+import path from 'path';
 
 /**
  * API endpoint to update album fingerprints for all albums
@@ -38,8 +39,11 @@ export async function POST() {
 
     for (const album of albums) {
       try {
+        // Convert relative path to absolute path for fingerprint generation
+        const absoluteAlbumPath = path.join(process.env.PHOTOS_ROOT_PATH || '', album.path);
+        
         // Generate fingerprint for this album
-        const fingerprint = await generateAlbumFingerprint(album.path, {
+        const fingerprint = await generateAlbumFingerprint(absoluteAlbumPath, {
           name: album.name,
           description: album.description || undefined
         });
@@ -98,8 +102,11 @@ export async function GET(request: NextRequest) {
     // Get album data from filesystem
     const albumData = await scanner.scanDirectory(albumPath);
     
+    // Convert relative path to absolute path for fingerprint generation
+    const absoluteAlbumPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath);
+    
     // Generate current fingerprint
-    const currentFingerprint = await generateAlbumFingerprint(albumPath, {
+    const currentFingerprint = await generateAlbumFingerprint(absoluteAlbumPath, {
       name: albumData.name,
       description: albumData.description || undefined
     });

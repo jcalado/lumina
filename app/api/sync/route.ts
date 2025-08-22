@@ -119,10 +119,13 @@ async function syncPhotos(jobId: string) {
         addLog('info', `Processing album: ${albumPath}`);
         const albumData = await scanner.scanDirectory(albumPath);
         
+        // Convert relative path to absolute path for fingerprint generation
+        const absoluteAlbumPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath);
+        
         // Generate current fingerprint
-        const currentFingerprint = await generateAlbumFingerprint(albumPath, {
+        const currentFingerprint = await generateAlbumFingerprint(absoluteAlbumPath, {
           name: albumData.name,
-          description: albumData.description
+          description: albumData.description || undefined
         });
         
         // Check existing album data for fingerprint comparison
