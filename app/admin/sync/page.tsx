@@ -4,8 +4,17 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
+interface AlbumTreeNode {
+  path: string
+  name: string
+  depth: number
+  album?: Album
+  children: AlbumTreeNode[]
+}
 
 interface Album {
   id: string
@@ -74,8 +83,75 @@ export default function SyncPage() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [comparingAlbums, setComparingAlbums] = useState<Set<string>>(new Set())
   const [albumComparisons, setAlbumComparisons] = useState<Map<string, AlbumComparison>>(new Map())
-  const [showComparisons, setShowComparisons] = useState(false)
+  const [selectedComparisonAlbumId, setSelectedComparisonAlbumId] = useState<string | null>(null)
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [isHelpExpanded, setIsHelpExpanded] = useState(false)
   const { toast } = useToast()
+
+  const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
+    const pathMap = new Map<string, AlbumTreeNode>()
+    const roots: AlbumTreeNode[] = []
+
+    // First, create all nodes
+    albums.forEach(album => {
+      const pathParts = album.path.split('/').filter(Boolean)
+      let currentPath = ''
+      
+      pathParts.forEach((part, index) => {
+        const depth = index
+        currentPath = currentPath ? `${currentPath}/${part}` : part
+        
+        if (!pathMap.has(currentPath)) {
+          const node: AlbumTreeNode = {
+            path: currentPath,
+            name: part,
+            depth,
+            children: [],
+            album: currentPath === album.path ? album : undefined
+          }
+          pathMap.set(currentPath, node)
+        } else if (currentPath === album.path) {
+          // Update existing node with album data
+          const node = pathMap.get(currentPath)!
+          node.album = album
+        }
+      })
+    })
+
+    // Build the tree structure
+    pathMap.forEach(node => {
+      if (node.depth === 0) {
+        roots.push(node)
+      } else {
+        const parentPath = node.path.substring(0, node.path.lastIndexOf('/'))
+        const parent = pathMap.get(parentPath)
+        if (parent) {
+          parent.children.push(node)
+        }
+      }
+    })
+
+    // Sort children at each level
+    const sortNodes = (nodes: AlbumTreeNode[]) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name))
+      nodes.forEach(node => sortNodes(node.children))
+    }
+    
+    sortNodes(roots)
+    return roots
+  }
+
+  const toggleNode = (path: string) => {
+    setExpandedNodes(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(path)) {
+        newSet.delete(path)
+      } else {
+        newSet.add(path)
+      }
+      return newSet
+    })
+  }
 
   const fetchData = async () => {
     try {
@@ -159,7 +235,7 @@ export default function SyncPage() {
       
       if (data.success) {
         setAlbumComparisons(prev => new Map([...prev, [albumId, data.comparison]]))
-        setShowComparisons(true)
+        setSelectedComparisonAlbumId(albumId)
         
         // If album was marked as safe to delete, refresh the albums list
         if (data.albumUpdated) {
@@ -197,6 +273,132 @@ export default function SyncPage() {
     const interval = setInterval(fetchData, 2000) // Poll every 2 seconds
     return () => clearInterval(interval)
   }, [])
+
+  const renderAlbumNode = (node: AlbumTreeNode): React.ReactNode => {
+    const isExpanded = expandedNodes.has(node.path)
+    const hasChildren = node.children.length > 0
+    const hasAlbum = !!node.album
+    const indentLevel = node.depth * 24
+
+    return (
+      <div key={node.path}>
+        <div 
+          className="flex items-center gap-2 py-2 px-3 hover:bg-gray-50 rounded-md"
+          style={{ paddingLeft: `${12 + indentLevel}px` }}
+        >
+          {/* Expand/Collapse Button */}
+          {hasChildren ? (
+            <button
+              onClick={() => toggleNode(node.path)}
+              className="p-1 hover:bg-gray-200 rounded"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+          ) : (
+            <div className="w-6" />
+          )}
+
+          {/* Folder Icon */}
+          {hasChildren ? (
+            isExpanded ? (
+              <FolderOpen className="h-4 w-4 text-blue-500" />
+            ) : (
+              <Folder className="h-4 w-4 text-blue-500" />
+            )
+          ) : (
+            <div className="w-4" />
+          )}
+
+          {/* Node Content */}
+          <div className="flex-1 min-w-0">
+            {hasAlbum ? (
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-medium text-sm">{node.name}</h3>
+                    <div className="flex gap-2">
+                      {node.album!.syncedToS3 && (
+                        <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold border-transparent bg-green-50 text-green-700">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Synced
+                        </span>
+                      )}
+                      {node.album!.localFilesSafeDelete && (
+                        <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold text-blue-700 bg-blue-50">
+                          <Download className="h-3 w-3 mr-1" />
+                          Safe Delete
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                    <span>{node.album!.photoCount} photos</span>
+                    <span className="truncate">{node.path}</span>
+                    {node.album!.lastSyncAt && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(node.album!.lastSyncAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 ml-4">
+                  <Button 
+                    className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-7 rounded-md px-2 text-xs"
+                    onClick={() => compareAlbum(node.album!.id)}
+                    disabled={comparingAlbums.has(node.album!.id)}
+                  >
+                    <Search className="h-3 w-3 mr-1" />
+                    {comparingAlbums.has(node.album!.id) ? 'Comparing...' : 'Compare'}
+                  </Button>
+                  
+                  {node.album!.localFilesSafeDelete ? (
+                    <Button 
+                      className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 h-7 rounded-md px-2 text-xs"
+                      onClick={() => deleteLocalFiles(node.album!.id)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Delete Local
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-1 text-xs">
+                      {node.album!.syncedToS3 ? (
+                        <div className="flex items-center gap-1 text-yellow-600">
+                          <AlertCircle className="h-3 w-3" />
+                          <span>Needs Verification</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-blue-600">
+                          <Clock className="h-3 w-3" />
+                          <span>Pending Sync</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 font-medium">
+                {node.name} <span className="text-xs text-gray-400">({node.children.length} album{node.children.length !== 1 ? 's' : ''})</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Render children if expanded */}
+        {hasChildren && isExpanded && (
+          <div>
+            {node.children.map(child => renderAlbumNode(child))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
@@ -378,101 +580,45 @@ export default function SyncPage() {
         </Card>
       )}
 
-      {/* Help Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Understanding Album Status</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                Synced to S3
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Album has been processed and files uploaded to S3 storage.
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Download className="h-4 w-4 text-blue-600" />
-                Safe to Delete Local
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                All files confirmed uploaded successfully. Local files can be safely deleted.
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                Needs Verification
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Album synced but some uploads failed or had issues. Check logs and re-run sync.
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Clock className="h-4 w-4 text-gray-600" />
-                Pending Sync
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Album not yet synced. Click "Sync Now" to upload files to S3.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Comparison Results */}
-      {showComparisons && albumComparisons.size > 0 && (
-        <div className="bg-white rounded-lg border shadow">
-          <div className="p-4 border-b">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-semibold">Album Comparison Results</h2>
-                <p className="text-sm text-muted-foreground">
-                  Comparing albums across local filesystem, S3 storage, and database
-                </p>
-              </div>
-              <Button 
-                className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground"
-                onClick={() => setShowComparisons(false)}
-              >
-                Hide Results
-              </Button>
-            </div>
-          </div>
+      {/* Comparison Results Modal */}
+      <Dialog open={selectedComparisonAlbumId !== null} onOpenChange={(open) => !open && setSelectedComparisonAlbumId(null)}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Album Comparison Results</DialogTitle>
+            <DialogDescription>
+              Comparing album across local filesystem, S3 storage, and database
+            </DialogDescription>
+          </DialogHeader>
           
-          <div className="p-4 space-y-6">
-            {Array.from(albumComparisons.entries()).map(([albumId, comparison]) => (
-              <div key={albumId} className="border rounded-lg p-4">
-                <h3 className="text-md font-semibold mb-3">{comparison.albumName}</h3>
+          {selectedComparisonAlbumId && albumComparisons.has(selectedComparisonAlbumId) && (() => {
+            const comparison = albumComparisons.get(selectedComparisonAlbumId)!
+            return (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">{comparison.albumName}</h3>
+                  <p className="text-sm text-muted-foreground">{comparison.albumPath}</p>
+                </div>
                 
                 {/* Summary Stats */}
-                <div className="grid grid-cols-4 gap-4 mb-4">
-                  <div className="text-center p-3 border rounded">
-                    <FileText className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-                    <div className="text-2xl font-bold">{comparison.localFiles.length}</div>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="text-center p-4 border rounded-lg">
+                    <FileText className="h-8 w-8 mx-auto mb-3 text-blue-500" />
+                    <div className="text-3xl font-bold">{comparison.localFiles.length}</div>
                     <div className="text-sm text-muted-foreground">Local Files</div>
                   </div>
-                  <div className="text-center p-3 border rounded">
-                    <Cloud className="h-6 w-6 mx-auto mb-2 text-green-500" />
-                    <div className="text-2xl font-bold">{comparison.s3Files.length}</div>
+                  <div className="text-center p-4 border rounded-lg">
+                    <Cloud className="h-8 w-8 mx-auto mb-3 text-green-500" />
+                    <div className="text-3xl font-bold">{comparison.s3Files.length}</div>
                     <div className="text-sm text-muted-foreground">S3 Files</div>
                   </div>
-                  <div className="text-center p-3 border rounded">
-                    <Database className="h-6 w-6 mx-auto mb-2 text-purple-500" />
-                    <div className="text-2xl font-bold">{comparison.databaseFiles.length}</div>
+                  <div className="text-center p-4 border rounded-lg">
+                    <Database className="h-8 w-8 mx-auto mb-3 text-purple-500" />
+                    <div className="text-3xl font-bold">{comparison.databaseFiles.length}</div>
                     <div className="text-sm text-muted-foreground">Database Records</div>
                   </div>
-                  <div className="text-center p-3 border rounded">
-                    <AlertCircle className="h-6 w-6 mx-auto mb-2 text-red-500" />
-                    <div className="text-2xl font-bold">
+                  <div className="text-center p-4 border rounded-lg">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-3 text-red-500" />
+                    <div className="text-3xl font-bold">
                       {comparison.localOnly.length + comparison.s3Only.length + comparison.databaseOnly.length +
                        (comparison.missing?.localMissingFromS3?.length || 0) +
                        (comparison.missing?.s3MissingFromLocal?.length || 0) +
@@ -483,7 +629,7 @@ export default function SyncPage() {
                   </div>
                 </div>
 
-                {/* Check for any inconsistencies */}
+                {/* Issues Details */}
                 {(() => {
                   const hasInconsistencies = comparison.localOnly.length > 0 || 
                                            comparison.s3Only.length > 0 || 
@@ -494,55 +640,55 @@ export default function SyncPage() {
                                            (comparison.missing?.dbMissingFromS3?.length || 0) > 0
                   
                   return hasInconsistencies ? (
-                    <div className="space-y-3">
-                      <h4 className="text-md font-semibold text-red-700">Found Issues</h4>
+                    <div className="space-y-4">
+                      <h4 className="text-lg font-semibold text-red-700">Found Issues</h4>
                       
                       {comparison.localOnly.length > 0 && (
-                        <div className="p-3 border border-red-200 rounded bg-red-50">
-                          <div className="font-medium text-red-800">Files Only in Local ({comparison.localOnly.length})</div>
-                          <div className="text-sm text-red-700 mt-1">
+                        <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                          <div className="font-medium text-red-800 mb-2">Files Only in Local ({comparison.localOnly.length})</div>
+                          <div className="text-sm text-red-700 mb-3">
                             These files exist locally but are missing from S3 and database
                           </div>
-                          <div className="text-xs text-red-600 mt-2 max-h-32 overflow-y-auto">
-                            {comparison.localOnly.slice(0, 5).map((file, idx) => (
-                              <div key={idx}>{file}</div>
+                          <div className="text-xs text-red-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.localOnly.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
                             ))}
-                            {comparison.localOnly.length > 5 && (
-                              <div>... and {comparison.localOnly.length - 5} more</div>
+                            {comparison.localOnly.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.localOnly.length - 10} more</div>
                             )}
                           </div>
                         </div>
                       )}
 
                       {comparison.s3Only.length > 0 && (
-                        <div className="p-3 border border-yellow-200 rounded bg-yellow-50">
-                          <div className="font-medium text-yellow-800">Files Only in S3 ({comparison.s3Only.length})</div>
-                          <div className="text-sm text-yellow-700 mt-1">
+                        <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                          <div className="font-medium text-yellow-800 mb-2">Files Only in S3 ({comparison.s3Only.length})</div>
+                          <div className="text-sm text-yellow-700 mb-3">
                             These files exist in S3 but are missing from local filesystem and database
                           </div>
-                          <div className="text-xs text-yellow-600 mt-2 max-h-32 overflow-y-auto">
-                            {comparison.s3Only.slice(0, 5).map((file, idx) => (
-                              <div key={idx}>{file}</div>
+                          <div className="text-xs text-yellow-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.s3Only.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
                             ))}
-                            {comparison.s3Only.length > 5 && (
-                              <div>... and {comparison.s3Only.length - 5} more</div>
+                            {comparison.s3Only.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.s3Only.length - 10} more</div>
                             )}
                           </div>
                         </div>
                       )}
 
                       {comparison.databaseOnly.length > 0 && (
-                        <div className="p-3 border border-purple-200 rounded bg-purple-50">
-                          <div className="font-medium text-purple-800">Files Only in Database ({comparison.databaseOnly.length})</div>
-                          <div className="text-sm text-purple-700 mt-1">
+                        <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
+                          <div className="font-medium text-purple-800 mb-2">Files Only in Database ({comparison.databaseOnly.length})</div>
+                          <div className="text-sm text-purple-700 mb-3">
                             These files exist in database but are missing from local filesystem and S3
                           </div>
-                          <div className="text-xs text-purple-600 mt-2 max-h-32 overflow-y-auto">
-                            {comparison.databaseOnly.slice(0, 5).map((file, idx) => (
-                              <div key={idx}>{file}</div>
+                          <div className="text-xs text-purple-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.databaseOnly.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
                             ))}
-                            {comparison.databaseOnly.length > 5 && (
-                              <div>... and {comparison.databaseOnly.length - 5} more</div>
+                            {comparison.databaseOnly.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.databaseOnly.length - 10} more</div>
                             )}
                           </div>
                         </div>
@@ -550,147 +696,169 @@ export default function SyncPage() {
 
                       {/* Missing files between locations */}
                       {(comparison.missing?.localMissingFromS3?.length || 0) > 0 && (
-                        <div className="p-3 border border-orange-200 rounded bg-orange-50">
-                          <div className="font-medium text-orange-800">Local Files Missing from S3 ({comparison.missing.localMissingFromS3.length})</div>
-                          <div className="text-sm text-orange-700 mt-1">
+                        <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                          <div className="font-medium text-orange-800 mb-2">Local Files Missing from S3 ({comparison.missing.localMissingFromS3.length})</div>
+                          <div className="text-sm text-orange-700 mb-3">
                             These files exist locally and in database but are missing from S3
                           </div>
-                          <div className="text-xs text-orange-600 mt-2 max-h-32 overflow-y-auto">
-                            {comparison.missing.localMissingFromS3.slice(0, 5).map((file, idx) => (
-                              <div key={idx}>{file}</div>
+                          <div className="text-xs text-orange-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.localMissingFromS3.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
                             ))}
-                            {comparison.missing.localMissingFromS3.length > 5 && (
-                              <div>... and {comparison.missing.localMissingFromS3.length - 5} more</div>
+                            {comparison.missing.localMissingFromS3.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.localMissingFromS3.length - 10} more</div>
                             )}
                           </div>
                         </div>
                       )}
 
                       {(comparison.missing?.dbMissingFromS3?.length || 0) > 0 && (
-                        <div className="p-3 border border-blue-200 rounded bg-blue-50">
-                          <div className="font-medium text-blue-800">Database Records Missing from S3 ({comparison.missing.dbMissingFromS3.length})</div>
-                          <div className="text-sm text-blue-700 mt-1">
+                        <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                          <div className="font-medium text-blue-800 mb-2">Database Records Missing from S3 ({comparison.missing.dbMissingFromS3.length})</div>
+                          <div className="text-sm text-blue-700 mb-3">
                             These files exist in database but are missing from S3
                           </div>
-                          <div className="text-xs text-blue-600 mt-2 max-h-32 overflow-y-auto">
-                            {comparison.missing.dbMissingFromS3.slice(0, 5).map((file, idx) => (
-                              <div key={idx}>{file}</div>
+                          <div className="text-xs text-blue-600 max-h-40 overflow-y-auto bg-white p-3 rounded border">
+                            {comparison.missing.dbMissingFromS3.slice(0, 10).map((file, idx) => (
+                              <div key={idx} className="py-1">{file}</div>
                             ))}
-                            {comparison.missing.dbMissingFromS3.length > 5 && (
-                              <div>... and {comparison.missing.dbMissingFromS3.length - 5} more</div>
+                            {comparison.missing.dbMissingFromS3.length > 10 && (
+                              <div className="py-1 font-medium">... and {comparison.missing.dbMissingFromS3.length - 10} more</div>
                             )}
                           </div>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <div className="text-green-800 font-medium">All files match perfectly!</div>
+                    <div className="p-6 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-3 mb-3">
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                        <div className="text-green-800 font-medium text-lg">All files match perfectly!</div>
                       </div>
-                      <div className="text-sm text-green-700 mt-1">
+                      <div className="text-sm text-green-700 mb-3">
                         Local files, S3 storage, and database records are all in sync.
                       </div>
-                      <div className="text-xs text-green-600 mt-2 p-2 bg-green-100 rounded">
+                      <div className="text-sm text-green-600 p-3 bg-green-100 rounded border">
                         ✓ This album has been automatically marked as safe for local file deletion.
                       </div>
                     </div>
                   )
                 })()}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
 
-      {/* Albums List */}
-      <div className="grid gap-4">
-        <h2 className="text-xl font-semibold">Albums</h2>
-        {albums.map((album) => (
-          <Card key={album.id}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-medium">{album.name}</h3>
-                    <div className="flex gap-2">
-                      {album.syncedToS3 && (
-                        <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-green-700 bg-green-50">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Synced to S3
-                        </span>
-                      )}
-                      {album.localFilesSafeDelete && (
-                        <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold text-foreground text-blue-700 bg-blue-50">
-                          <Download className="h-3 w-3 mr-1" />
-                          Safe to Delete Local
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">{album.path}</p>
-                  <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                    <span>{album.photoCount} photos</span>
-                    {album.lastSyncAt && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Last sync: {new Date(album.lastSyncAt).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Button 
-                    className="border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 rounded-md px-3 text-xs"
-                    onClick={() => compareAlbum(album.id)}
-                    disabled={comparingAlbums.has(album.id)}
-                  >
-                    <Search className="h-4 w-4 mr-2" />
-                    {comparingAlbums.has(album.id) ? 'Comparing...' : 'Compare'}
-                  </Button>
-                  
-                  {album.localFilesSafeDelete ? (
-                    <Button 
-                      className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 h-8 rounded-md px-3 text-xs"
-                      onClick={() => deleteLocalFiles(album.id)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Local Files
-                    </Button>
-                  ) : (
-                    <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                      {album.syncedToS3 ? (
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4 text-yellow-500" />
-                          <div>
-                            <div className="font-medium text-yellow-700">Needs Verification</div>
-                            <div className="text-xs">
-                              Album synced but some files may have failed upload.
-                              Check sync logs for details and re-run sync to resolve.
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-blue-500" />
-                          <div>
-                            <div className="font-medium text-blue-700">Pending Sync</div>
-                            <div className="text-xs">
-                              Album has not been synced yet. Run sync to upload files to S3.
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+      {/* Albums Tree View */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl">Albums</CardTitle>
+              <CardDescription>
+                Hierarchical view of all photo albums. Expand folders to see nested albums.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Expand all nodes
+                  const allPaths = new Set<string>()
+                  const addPaths = (nodes: AlbumTreeNode[]) => {
+                    nodes.forEach(node => {
+                      if (node.children.length > 0) {
+                        allPaths.add(node.path)
+                        addPaths(node.children)
+                      }
+                    })
+                  }
+                  addPaths(buildAlbumTree(albums))
+                  setExpandedNodes(allPaths)
+                }}
+              >
+                Expand All
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setExpandedNodes(new Set())}
+              >
+                Collapse All
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-96 overflow-y-auto border-t">
+            {buildAlbumTree(albums).map(node => renderAlbumNode(node))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Help Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div 
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsHelpExpanded(!isHelpExpanded)}
+          >
+            <CardTitle className="text-lg">Understanding Album Status</CardTitle>
+            {isHelpExpanded ? (
+              <ChevronDown className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
+          </div>
+        </CardHeader>
+        {isHelpExpanded && (
+          <CardContent className="space-y-4 pt-0">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  Synced to S3
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Album has been processed and files uploaded to S3 storage.
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              
+              <div>
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <Download className="h-4 w-4 text-blue-600" />
+                  Safe to Delete Local
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  All files confirmed uploaded successfully. Local files can be safely deleted.
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  Needs Verification
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Album synced but some uploads failed or had issues. Check logs and re-run sync.
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="font-medium mb-2 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-gray-600" />
+                  Pending Sync
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Album not yet synced. Click "Sync Now" to upload files to S3.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
     </div>
   )
 }
