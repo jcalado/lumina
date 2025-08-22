@@ -13,7 +13,7 @@ export function Header({ siteName }: HeaderProps) {
     <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 dark:bg-slate-950/80">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-primary">
+          <h1 className="text-lg sm:text-2xl font-bold text-primary">
             <Link href="/">{siteName}</Link>
           </h1>
           <nav className="flex items-center space-x-6">
