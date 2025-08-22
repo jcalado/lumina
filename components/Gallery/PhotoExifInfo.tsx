@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Camera, Image, MapPin, Calendar, Info, Settings } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from 'next-intl';
 
 interface ExifData {
   // Basic info
@@ -89,38 +90,11 @@ function ExifField({ label, value, unit }: ExifFieldProps) {
   );
 }
 
-function formatFileSize(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = bytes;
-  let unitIndex = 0;
-  
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-  
-  return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
-}
-
 function formatShutterSpeed(exposureTime: number): string {
   if (exposureTime >= 1) {
     return `${exposureTime}s`;
   } else {
     return `1/${Math.round(1 / exposureTime)}`;
-  }
-}
-
-function getOrientationDescription(orientation?: number): string {
-  switch (orientation) {
-    case 1: return 'Normal';
-    case 2: return 'Mirrored horizontal';
-    case 3: return 'Rotated 180°';
-    case 4: return 'Mirrored vertical';
-    case 5: return 'Mirrored horizontal, rotated 270°';
-    case 6: return 'Rotated 90° CW';
-    case 7: return 'Mirrored horizontal, rotated 90°';
-    case 8: return 'Rotated 270° CW';
-    default: return 'Unknown';
   }
 }
 
@@ -137,6 +111,36 @@ interface PhotoExifInfoProps {
 }
 
 export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
+  const t = useTranslations('PhotoExifInfo');
+
+  // Move helper functions inside component to access translations
+  const getOrientationDescription = (orientation?: number): string => {
+    switch (orientation) {
+      case 1: return t('orientation.normal');
+      case 2: return t('orientation.mirroredHorizontal');
+      case 3: return t('orientation.rotated180');
+      case 4: return t('orientation.mirroredVertical');
+      case 5: return t('orientation.mirroredHorizontalRotated270');
+      case 6: return t('orientation.rotated90CW');
+      case 7: return t('orientation.mirroredHorizontalRotated90');
+      case 8: return t('orientation.rotated270CW');
+      default: return t('orientation.unknown');
+    }
+  };
+
+  const formatFileSizeLocalized = (bytes: number): string => {
+    const unitKeys = ['fileSizeUnits.B', 'fileSizeUnits.KB', 'fileSizeUnits.MB', 'fileSizeUnits.GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < unitKeys.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    
+    return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${t(unitKeys[unitIndex])}`;
+  };
+
   // Parse metadata
   let exifData: ExifData = {};
   if (photo.metadata) {
@@ -195,13 +199,20 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
     longitude: exifData.GPSLongitude || exifData.gps?.longitude,
   };
 
+  const copyrightInfo = {
+    copyright: exifData.Copyright,
+    artist: exifData.Artist,
+    ownerName: exifData.OwnerName,
+    userComment: exifData.UserComment,
+  };
+
   // Get all other EXIF fields (raw data)
   const excludedFields = new Set([
     'filename', 'size', 'takenAt', 'camera', 'lens', 'settings', 'gps', 'orientation',
     'Make', 'Model', 'LensModel', 'SerialNumber', 'OwnerName', 'Software',
     'ISO', 'FNumber', 'ExposureTime', 'FocalLength', 'ExposureProgram', 'MeteringMode',
     'Flash', 'WhiteBalance', 'ExposureCompensation', 'ColorSpace', 'XResolution',
-    'YResolution', 'ResolutionUnit', 'GPSLatitude', 'GPSLongitude'
+    'YResolution', 'ResolutionUnit', 'GPSLatitude', 'GPSLongitude', 'Copyright', 'Artist', 'UserComment'
   ]);
 
   const rawExifData = Object.entries(exifData)
@@ -214,33 +225,33 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
         <div className="sticky top-0 bg-background border-b border-border p-3 z-10">
           <h3 className="font-semibold text-sm flex items-center gap-2">
             <Info className="h-4 w-4" />
-            Photo Information
+            {t('photoInformation')}
           </h3>
         </div>
         
         <div className="overflow-y-auto max-h-[calc(80vh-60px)]">
           {/* Basic Information */}
           <ExifSection
-            title="Basic Information"
+            title={t('basicInformation')}
             icon={<Image className="h-4 w-4" />}
             defaultExpanded={true}
           >
             <div className="space-y-1">
-              <ExifField label="Filename" value={basicInfo.filename} />
-              <ExifField label="File Size" value={basicInfo.size ? formatFileSize(basicInfo.size) : null} />
+              <ExifField label={t('filename')} value={basicInfo.filename} />
+              <ExifField label={t('fileSize')} value={basicInfo.size ? formatFileSizeLocalized(basicInfo.size) : null} />
               {basicInfo.takenAt && (
                 <ExifField 
-                  label="Date Taken" 
+                  label={t('dateTaken')} 
                   value={new Date(basicInfo.takenAt).toLocaleString()} 
                 />
               )}
               <ExifField 
-                label="Date Added" 
+                label={t('dateAdded')} 
                 value={new Date(basicInfo.dateAdded).toLocaleString()} 
               />
               {basicInfo.orientation && (
                 <ExifField 
-                  label="Orientation" 
+                  label={t('orientation.label')} 
                   value={`${basicInfo.orientation} (${getOrientationDescription(basicInfo.orientation)})`} 
                 />
               )}
@@ -250,23 +261,23 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
           {/* Camera Information */}
           {(cameraInfo.make || cameraInfo.model || cameraInfo.camera || cameraInfo.lens) && (
             <ExifSection
-              title="Camera & Lens"
+              title={t('cameraAndLens')}
               icon={<Camera className="h-4 w-4" />}
               defaultExpanded={true}
             >
               <div className="space-y-1">
                 {cameraInfo.camera ? (
-                  <ExifField label="Camera" value={cameraInfo.camera} />
+                  <ExifField label={t('camera')} value={cameraInfo.camera} />
                 ) : (
                   <>
-                    <ExifField label="Make" value={cameraInfo.make} />
-                    <ExifField label="Model" value={cameraInfo.model} />
+                    <ExifField label={t('make')} value={cameraInfo.make} />
+                    <ExifField label={t('model')} value={cameraInfo.model} />
                   </>
                 )}
-                <ExifField label="Lens" value={cameraInfo.lens} />
-                <ExifField label="Serial Number" value={cameraInfo.serialNumber} />
-                <ExifField label="Owner" value={cameraInfo.ownerName} />
-                <ExifField label="Software" value={cameraInfo.software} />
+                <ExifField label={t('lens')} value={cameraInfo.lens} />
+                <ExifField label={t('serialNumber')} value={cameraInfo.serialNumber} />
+                <ExifField label={t('owner')} value={cameraInfo.ownerName} />
+                <ExifField label={t('software')} value={cameraInfo.software} />
               </div>
             </ExifSection>
           )}
@@ -274,41 +285,41 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
           {/* Capture Settings */}
           {(captureSettings.iso || captureSettings.aperture || captureSettings.exposureTime || captureSettings.focalLength) && (
             <ExifSection
-              title="Capture Settings"
+              title={t('captureSettings')}
               icon={<Settings className="h-4 w-4" />}
               defaultExpanded={true}
             >
               <div className="space-y-1">
-                <ExifField label="ISO" value={captureSettings.iso} />
+                <ExifField label={t('iso')} value={captureSettings.iso} />
                 {captureSettings.aperture ? (
-                  <ExifField label="Aperture" value={captureSettings.aperture} />
+                  <ExifField label={t('aperture')} value={captureSettings.aperture} />
                 ) : captureSettings.aperture && (
-                  <ExifField label="Aperture" value={`f/${captureSettings.aperture}`} />
+                  <ExifField label={t('aperture')} value={`f/${captureSettings.aperture}`} />
                 )}
                 {captureSettings.shutter ? (
-                  <ExifField label="Shutter Speed" value={captureSettings.shutter} />
+                  <ExifField label={t('shutterSpeed')} value={captureSettings.shutter} />
                 ) : captureSettings.exposureTime && (
                   <ExifField 
-                    label="Shutter Speed" 
+                    label={t('shutterSpeed')} 
                     value={formatShutterSpeed(captureSettings.exposureTime)} 
                   />
                 )}
                 {captureSettings.focalLength && (
                   <ExifField 
-                    label="Focal Length" 
+                    label={t('focalLength')} 
                     value={typeof captureSettings.focalLength === 'string' 
                       ? captureSettings.focalLength 
                       : `${captureSettings.focalLength}mm`
                     } 
                   />
                 )}
-                <ExifField label="Exposure Program" value={captureSettings.exposureProgram} />
-                <ExifField label="Metering Mode" value={captureSettings.meteringMode} />
-                <ExifField label="Flash" value={captureSettings.flash} />
-                <ExifField label="White Balance" value={captureSettings.whiteBalance} />
+                <ExifField label={t('exposureProgram')} value={captureSettings.exposureProgram} />
+                <ExifField label={t('meteringMode')} value={captureSettings.meteringMode} />
+                <ExifField label={t('flash')} value={captureSettings.flash} />
+                <ExifField label={t('whiteBalance')} value={captureSettings.whiteBalance} />
                 {captureSettings.exposureCompensation !== undefined && captureSettings.exposureCompensation !== 0 && (
                   <ExifField 
-                    label="Exposure Compensation" 
+                    label={t('exposureCompensation')} 
                     value={`${captureSettings.exposureCompensation > 0 ? '+' : ''}${captureSettings.exposureCompensation} EV`} 
                   />
                 )}
@@ -319,12 +330,12 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
           {/* GPS Information */}
           {(gpsInfo.latitude || gpsInfo.longitude) && (
             <ExifSection
-              title="Location"
+              title={t('location')}
               icon={<MapPin className="h-4 w-4" />}
             >
               <div className="space-y-1">
-                <ExifField label="Latitude" value={gpsInfo.latitude?.toFixed(6)} />
-                <ExifField label="Longitude" value={gpsInfo.longitude?.toFixed(6)} />
+                <ExifField label={t('latitude')} value={gpsInfo.latitude?.toFixed(6)} />
+                <ExifField label={t('longitude')} value={gpsInfo.longitude?.toFixed(6)} />
                 {gpsInfo.latitude && gpsInfo.longitude && (
                   <div className="pt-2">
                     <a
@@ -333,7 +344,7 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
                       rel="noopener noreferrer"
                       className="text-xs text-blue-600 hover:text-blue-800 underline"
                     >
-                      View on Google Maps
+                      {t('viewOnGoogleMaps')}
                     </a>
                   </div>
                 )}
@@ -344,12 +355,26 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
           {/* Image Details */}
           {(imageDetails.colorSpace || imageDetails.resolution) && (
             <ExifSection
-              title="Image Details"
+              title={t('imageDetails')}
               icon={<Image className="h-4 w-4" />}
             >
               <div className="space-y-1">
-                <ExifField label="Color Space" value={imageDetails.colorSpace === 1 ? 'sRGB' : imageDetails.colorSpace} />
-                <ExifField label="Resolution" value={imageDetails.resolution} unit={imageDetails.resolutionUnit} />
+                <ExifField label={t('colorSpace')} value={imageDetails.colorSpace === 1 ? t('colorSpace.sRGB') : imageDetails.colorSpace} />
+                <ExifField label={t('resolution')} value={imageDetails.resolution} unit={imageDetails.resolutionUnit} />
+              </div>
+            </ExifSection>
+          )}
+
+          {/* Copyright Information */}
+          {(copyrightInfo.copyright || copyrightInfo.artist || copyrightInfo.userComment) && (
+            <ExifSection
+              title={t('copyrightInfo')}
+              icon={<Info className="h-4 w-4" />}
+            >
+              <div className="space-y-1">
+                <ExifField label={t('copyright')} value={copyrightInfo.copyright} />
+                <ExifField label={t('artist')} value={copyrightInfo.artist} />
+                <ExifField label={t('userComment')} value={copyrightInfo.userComment} />
               </div>
             </ExifSection>
           )}
@@ -357,7 +382,7 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
           {/* Raw EXIF Data */}
           {rawExifData.length > 0 && (
             <ExifSection
-              title={`All EXIF Data (${rawExifData.length} fields)`}
+              title={t('allExifData', { count: rawExifData.length })}
               icon={<Info className="h-4 w-4" />}
             >
               <div className="space-y-1">

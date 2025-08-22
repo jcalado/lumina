@@ -19,5 +19,64 @@
     "nav": {
         "albums": "Álbuns",
         "favorites": "Favoritos"
+    },
+    "PhotoExifInfo": {
+        "photoInformation": "Informações da Foto",
+        "basicInformation": "Informação Básica",
+        "filename": "Nome do ficheiro",
+        "fileSize": "Tamanho do ficheiro",
+        "dateTaken": "Data da foto",
+        "dateAdded": "Data adicionada",
+        "cameraAndLens": "Câmara e Lente",
+        "camera": "Câmara",
+        "make": "Marca",
+        "model": "Modelo",
+        "lens": "Lente",
+        "serialNumber": "Número de série",
+        "owner": "Proprietário",
+        "software": "Software",
+        "captureSettings": "Definições de Captura",
+        "iso": "ISO",
+        "aperture": "Abertura",
+        "shutterSpeed": "Velocidade do obturador",
+        "focalLength": "Distância focal",
+        "exposureProgram": "Programa de exposição",
+        "meteringMode": "Modo de medição",
+        "flash": "Flash",
+        "whiteBalance": "Balanço de brancos",
+        "exposureCompensation": "Compensação de exposição",
+        "location": "Localização",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "viewOnGoogleMaps": "Ver no Google Maps",
+        "imageDetails": "Detalhes da Imagem",
+        "colorSpace": "Espaço de cor",
+        "resolution": "Resolução",
+        "copyrightInfo": "Informações de Copyright",
+        "copyright": "Copyright",
+        "artist": "Artista",
+        "userComment": "Comentário do utilizador",
+        "allExifData": "Todos os dados EXIF ({count} campos)",
+        "orientation": {
+            "label": "Orientação",
+            "normal": "Normal",
+            "mirroredHorizontal": "Espelhado horizontalmente",
+            "rotated180": "Rodado 180°",
+            "mirroredVertical": "Espelhado verticalmente",
+            "mirroredHorizontalRotated270": "Espelhado horizontalmente, rodado 270°",
+            "rotated90CW": "Rodado 90° sentido horário",
+            "mirroredHorizontalRotated90": "Espelhado horizontalmente, rodado 90°",
+            "rotated270CW": "Rodado 270° sentido horário",
+            "unknown": "Desconhecido"
+        },
+        "colorSpace": {
+            "sRGB": "sRGB"
+        },
+        "fileSizeUnits": {
+            "B": "B",
+            "KB": "KB",
+            "MB": "MB",
+            "GB": "GB"
+        }
     }
 }
