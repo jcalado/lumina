@@ -24,10 +24,11 @@ const uploadProgress = new Map<string, UploadProgress>()
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const albumId = params.id
+    const { id } = await params
+    const albumId = id
     
     // Verify album exists
     const album = await prisma.album.findUnique({
@@ -79,7 +80,7 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url)
