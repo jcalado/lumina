@@ -8,15 +8,26 @@ import crypto from 'crypto'
 
 const SUPPORTED_IMAGE_FORMATS = ['.jpg', '.jpeg', '.png', '.webp']
 const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB per file
+const MAX_TOTAL_SIZE = 500 * 1024 * 1024 // 500MB total
 const TEMP_DIR = path.join(process.cwd(), 'temp')
+
+interface FileProgress {
+  filename: string
+  status: 'pending' | 'processing' | 'completed' | 'error'
+  error?: string
+  size: number
+}
 
 interface UploadProgress {
   uploadId: string
   totalFiles: number
   processedFiles: number
-  currentFile: string
+  currentBatch: number
+  totalBatches: number
+  files: FileProgress[]
   errors: Array<{ filename: string; error: string }>
   completed: boolean
+  phase: 'validating' | 'extracting' | 'uploading' | 'completed' | 'error'
 }
 
 // In-memory progress tracking
@@ -47,17 +58,37 @@ export async function POST(
       return NextResponse.json({ error: 'No files provided' }, { status: 400 })
     }
 
+    // Validate total size
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0)
+    if (totalSize > MAX_TOTAL_SIZE) {
+      return NextResponse.json({ 
+        error: `Total upload size too large: ${Math.round(totalSize / 1024 / 1024)}MB. Maximum: ${MAX_TOTAL_SIZE / 1024 / 1024}MB` 
+      }, { status: 400 })
+    }
+
+    // Validate individual files
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json({ 
+          error: `File "${file.name}" is too large: ${Math.round(file.size / 1024 / 1024)}MB. Maximum: ${MAX_FILE_SIZE / 1024 / 1024}MB` 
+        }, { status: 400 })
+      }
+    }
+
     // Generate unique upload ID
     const uploadId = crypto.randomUUID()
     
     // Initialize progress tracking
     uploadProgress.set(uploadId, {
       uploadId,
-      totalFiles: files.length,
+      totalFiles: 0, // Will be updated after processing
       processedFiles: 0,
-      currentFile: '',
+      currentBatch: 0,
+      totalBatches: 0,
+      files: [],
       errors: [],
-      completed: false
+      completed: false,
+      phase: 'validating'
     })
 
     // Process files asynchronously
@@ -66,7 +97,7 @@ export async function POST(
     return NextResponse.json({ 
       success: true, 
       uploadId,
-      message: `Started upload of ${files.length} file(s)`
+      message: `Started processing ${files.length} file(s)`
     })
 
   } catch (error) {
@@ -125,32 +156,92 @@ async function processUploadAsync(
     // Ensure album directory exists
     await fs.mkdir(albumDir, { recursive: true })
 
-    let filesToProcess: { file: File; filename: string }[] = []
+    let filesToProcess: { filename: string; buffer: Buffer; size: number }[] = []
 
     if (uploadType === 'zip' && files.length === 1) {
       // Handle ZIP file
-      progress.currentFile = 'Extracting ZIP file...'
-      filesToProcess = await extractZipFile(files[0], albumDir)
-      progress.totalFiles = filesToProcess.length
+      progress.phase = 'extracting'
+      console.log(`[UPLOAD] Extracting ZIP file: ${files[0].name}`)
+      
+      try {
+        filesToProcess = await extractZipFile(files[0])
+        console.log(`[UPLOAD] Extracted ${filesToProcess.length} files from ZIP`)
+      } catch (error) {
+        console.error('[UPLOAD] ZIP extraction failed:', error)
+        throw new Error(`ZIP extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+      
+      if (filesToProcess.length === 0) {
+        throw new Error('No valid image files found in ZIP archive')
+      }
     } else {
       // Handle individual files
-      filesToProcess = files.map(file => ({ file, filename: file.name }))
+      progress.phase = 'validating'
+      console.log(`[UPLOAD] Processing ${files.length} individual files`)
+      
+      for (const file of files) {
+        const ext = path.extname(file.name).toLowerCase()
+        if (!SUPPORTED_IMAGE_FORMATS.includes(ext)) {
+          progress.errors.push({
+            filename: file.name,
+            error: `Unsupported file format: ${ext}`
+          })
+          continue
+        }
+        
+        const buffer = Buffer.from(await file.arrayBuffer())
+        filesToProcess.push({
+          filename: file.name,
+          buffer,
+          size: file.size
+        })
+      }
     }
 
+    // Initialize file progress tracking
+    progress.totalFiles = filesToProcess.length
+    progress.files = filesToProcess.map(file => ({
+      filename: file.filename,
+      status: 'pending',
+      size: file.size
+    }))
+
     const batchSize = await getBatchProcessingSize()
+    progress.totalBatches = Math.ceil(filesToProcess.length / batchSize)
+    progress.phase = 'uploading'
     
-    // Process files in batches
+    console.log(`[UPLOAD] Processing ${filesToProcess.length} files in ${progress.totalBatches} batches of size ${batchSize}`)
+
+    // Process files in parallel batches
     for (let i = 0; i < filesToProcess.length; i += batchSize) {
       const batch = filesToProcess.slice(i, i + batchSize)
+      progress.currentBatch = Math.floor(i / batchSize) + 1
       
+      console.log(`[UPLOAD] Processing batch ${progress.currentBatch}/${progress.totalBatches} (${batch.length} files)`)
+
       await Promise.all(
-        batch.map(async ({ file, filename }) => {
+        batch.map(async ({ filename, buffer, size }) => {
+          const fileProgressIndex = progress.files.findIndex(f => f.filename === filename)
+          if (fileProgressIndex !== -1) {
+            progress.files[fileProgressIndex].status = 'processing'
+          }
+          
           try {
-            progress.currentFile = filename
-            await processFile(file, filename, albumDir, albumId, albumPath)
+            await processFileBuffer(filename, buffer, size, albumDir, albumId, albumPath)
+            
+            if (fileProgressIndex !== -1) {
+              progress.files[fileProgressIndex].status = 'completed'
+            }
             progress.processedFiles++
+            console.log(`[UPLOAD] Completed: ${filename} (${progress.processedFiles}/${progress.totalFiles})`)
           } catch (error) {
-            console.error(`Error processing ${filename}:`, error)
+            console.error(`[UPLOAD] Error processing ${filename}:`, error)
+            
+            if (fileProgressIndex !== -1) {
+              progress.files[fileProgressIndex].status = 'error'
+              progress.files[fileProgressIndex].error = error instanceof Error ? error.message : 'Unknown error'
+            }
+            
             progress.errors.push({
               filename,
               error: error instanceof Error ? error.message : 'Unknown error'
@@ -172,12 +263,15 @@ async function processUploadAsync(
     }
 
     progress.completed = true
-    progress.currentFile = 'Upload completed'
+    progress.phase = 'completed'
     
-    // Clean up progress after 5 minutes
+    const successCount = progress.processedFiles - progress.errors.length
+    console.log(`[UPLOAD] Upload completed: ${successCount}/${progress.totalFiles} files successful, ${progress.errors.length} errors`)
+    
+    // Clean up progress after 10 minutes
     setTimeout(() => {
       uploadProgress.delete(uploadId)
-    }, 5 * 60 * 1000)
+    }, 10 * 60 * 1000)
 
   } catch (error) {
     console.error('Upload processing error:', error)
@@ -186,59 +280,76 @@ async function processUploadAsync(
       error: error instanceof Error ? error.message : 'Upload failed'
     })
     progress.completed = true
-    progress.currentFile = 'Upload failed'
+    progress.phase = 'error'
   }
 }
 
-async function extractZipFile(zipFile: File, albumDir: string): Promise<{ file: File; filename: string }[]> {
+async function extractZipFile(zipFile: File): Promise<{ filename: string; buffer: Buffer; size: number }[]> {
   const tempZipPath = path.join(TEMP_DIR, `${crypto.randomUUID()}.zip`)
+  
+  console.log(`[UPLOAD] Writing ZIP to temp file: ${tempZipPath}`)
   
   // Write ZIP to temp file
   const zipBuffer = Buffer.from(await zipFile.arrayBuffer())
   await fs.writeFile(tempZipPath, zipBuffer)
   
+  console.log(`[UPLOAD] ZIP file written, size: ${zipBuffer.length} bytes`)
+  
   const zip = new AdmZip(tempZipPath)
   const entries = zip.getEntries()
   
-  const extractedFiles: { file: File; filename: string }[] = []
+  console.log(`[UPLOAD] ZIP contains ${entries.length} entries`)
+  
+  const extractedFiles: { filename: string; buffer: Buffer; size: number }[] = []
   
   for (const entry of entries) {
     if (!entry.isDirectory) {
-      const filename = path.basename(entry.entryName)
+      const entryName = entry.entryName
+      const filename = path.basename(entryName)
       const ext = path.extname(filename).toLowerCase()
       
+      console.log(`[UPLOAD] Processing ZIP entry: ${entryName} -> ${filename} (${ext})`)
+      
       if (SUPPORTED_IMAGE_FORMATS.includes(ext)) {
-        const fileBuffer = entry.getData()
-        const file = new File([new Uint8Array(fileBuffer)], filename, {
-          type: getMimeType(ext)
-        })
-        extractedFiles.push({ file, filename })
+        try {
+          const fileBuffer = entry.getData()
+          console.log(`[UPLOAD] Extracted file: ${filename}, size: ${fileBuffer.length} bytes`)
+          
+          extractedFiles.push({
+            filename: sanitizeFilename(filename),
+            buffer: fileBuffer,
+            size: fileBuffer.length
+          })
+        } catch (error) {
+          console.error(`[UPLOAD] Error extracting ${filename}:`, error)
+        }
+      } else {
+        console.log(`[UPLOAD] Skipping unsupported file: ${filename} (${ext})`)
       }
     }
   }
   
+  console.log(`[UPLOAD] Successfully extracted ${extractedFiles.length} image files from ZIP`)
+  
   // Clean up temp ZIP file
-  await fs.unlink(tempZipPath).catch(() => {})
+  await fs.unlink(tempZipPath).catch((error) => {
+    console.error('Error cleaning up temp ZIP file:', error)
+  })
   
   return extractedFiles
 }
 
-async function processFile(
-  file: File,
+async function processFileBuffer(
   filename: string,
+  buffer: Buffer,
+  size: number,
   albumDir: string,
   albumId: string,
   albumPath: string
 ) {
   // Validate file size
-  if (file.size > MAX_FILE_SIZE) {
+  if (size > MAX_FILE_SIZE) {
     throw new Error(`File too large (max ${MAX_FILE_SIZE / 1024 / 1024}MB)`)
-  }
-
-  // Validate file type
-  const ext = path.extname(filename).toLowerCase()
-  if (!SUPPORTED_IMAGE_FORMATS.includes(ext)) {
-    throw new Error(`Unsupported file type: ${ext}`)
   }
 
   // Generate safe filename
@@ -257,8 +368,7 @@ async function processFile(
   }
 
   // Write file to disk
-  const fileBuffer = Buffer.from(await file.arrayBuffer())
-  await fs.writeFile(filePath, fileBuffer)
+  await fs.writeFile(filePath, buffer)
 
   // Create database record (the sync process will handle S3 upload)
   await prisma.photo.create({
@@ -266,7 +376,7 @@ async function processFile(
       albumId,
       filename: safeFilename,
       originalPath: filePath,
-      fileSize: file.size,
+      fileSize: size,
       s3Key: '', // Will be set during sync
       createdAt: new Date()
     }

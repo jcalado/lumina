@@ -12,13 +12,23 @@ import {
   Loader2
 } from 'lucide-react'
 
+interface FileProgress {
+  filename: string
+  status: 'pending' | 'processing' | 'completed' | 'error'
+  error?: string
+  size: number
+}
+
 interface UploadProgress {
   uploadId: string
   totalFiles: number
   processedFiles: number
-  currentFile: string
+  currentBatch: number
+  totalBatches: number
+  files: FileProgress[]
   errors: Array<{ filename: string; error: string }>
   completed: boolean
+  phase: 'validating' | 'extracting' | 'uploading' | 'completed' | 'error'
 }
 
 interface FileUploadModalProps {
@@ -79,6 +89,10 @@ export function FileUploadModal({
     
     // Check if it's a single ZIP file
     if (fileList.length === 1 && fileList[0].name.toLowerCase().endsWith('.zip')) {
+      if (fileList[0].size > maxFileSize) {
+        setError(`ZIP file too large: ${formatFileSize(fileList[0].size)}. Max size: ${formatFileSize(maxFileSize)}`)
+        return
+      }
       setUploadType('zip')
       setFiles(fileList)
       return
@@ -86,26 +100,46 @@ export function FileUploadModal({
 
     setUploadType('files')
     
+    // Calculate total size first
+    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0)
+    const maxTotalSize = 500 * 1024 * 1024 // 500MB
+    
+    if (totalSize > maxTotalSize) {
+      setError(`Total upload size too large: ${formatFileSize(totalSize)}. Maximum: ${formatFileSize(maxTotalSize)}`)
+      return
+    }
+    
     // Filter for supported image formats
-    const validFiles = fileList.filter(file => {
+    const validFiles: File[] = []
+    const errors: string[] = []
+    
+    fileList.forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase()
       const isValidFormat = supportedFormats.includes(ext)
       const isValidSize = file.size <= maxFileSize
       
       if (!isValidFormat) {
-        setError(`Unsupported file format: ${file.name}. Supported: ${supportedFormats.join(', ')}`)
-        return false
+        errors.push(`${file.name}: Unsupported format (${ext})`)
+        return
       }
       
       if (!isValidSize) {
-        setError(`File too large: ${file.name}. Max size: 50MB`)
-        return false
+        errors.push(`${file.name}: Too large (${formatFileSize(file.size)})`)
+        return
       }
       
-      return true
+      validFiles.push(file)
     })
 
+    if (errors.length > 0) {
+      setError(`Some files were rejected:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`)
+    }
+
     setFiles(validFiles)
+    
+    if (validFiles.length === 0 && errors.length > 0) {
+      setError('No valid files to upload. ' + (errors.length > 0 ? 'Supported formats: ' + supportedFormats.join(', ') : ''))
+    }
   }
 
   const startUpload = async () => {
@@ -232,7 +266,10 @@ export function FileUploadModal({
                     Support for {supportedFormats.join(', ')} files up to 50MB each
                   </p>
                   <p className="text-sm text-gray-500">
-                    You can also upload a ZIP file containing photos
+                    You can also upload a ZIP file containing photos (max 500MB total)
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Files will be processed in batches based on your admin settings
                   </p>
                 </div>
 
@@ -304,19 +341,43 @@ export function FileUploadModal({
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Upload Progress</span>
+                  <span>
+                    {progress.phase === 'validating' && 'Validating files...'}
+                    {progress.phase === 'extracting' && 'Extracting ZIP archive...'}
+                    {progress.phase === 'uploading' && `Batch ${progress.currentBatch}/${progress.totalBatches}`}
+                    {progress.phase === 'completed' && 'Upload completed'}
+                    {progress.phase === 'error' && 'Upload failed'}
+                  </span>
                   <span>{getProgressPercentage()}%</span>
                 </div>
                 <Progress value={getProgressPercentage()} />
                 <p className="text-sm text-gray-600">
                   {progress.processedFiles} of {progress.totalFiles} files processed
                 </p>
-                {progress.currentFile && (
-                  <p className="text-sm text-gray-500 truncate">
-                    Current: {progress.currentFile}
-                  </p>
-                )}
               </div>
+
+              {/* Individual File Progress */}
+              {progress.files && progress.files.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">File Status:</h4>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {progress.files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 border rounded text-xs">
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
+                          {file.status === 'pending' && <div className="w-3 h-3 rounded-full bg-gray-300" />}
+                          {file.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
+                          {file.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-500" />}
+                          {file.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
+                          <span className="truncate">{file.filename}</span>
+                        </div>
+                        <div className="text-gray-500 ml-2">
+                          {formatFileSize(file.size)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {progress.errors.length > 0 && (
                 <div className="border border-red-200 bg-red-50 p-3 rounded-lg">
