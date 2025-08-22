@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle, CloudDownload, Plus, FolderPlus } from "lucide-react"
+import { RefreshCw, Download, Trash2, CheckCircle, AlertCircle, Clock, Search, FileText, Database, Cloud, ChevronDown, ChevronRight, Folder, FolderOpen, X, AlertTriangle, CloudDownload, Plus, FolderPlus, Upload } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { FileUploadModal } from "@/components/Admin/FileUploadModal"
 
 interface AlbumTreeNode {
   path: string
@@ -126,6 +127,7 @@ export default function SyncPage() {
   const [reconciliationData, setReconciliationData] = useState<ReconciliationData | null>(null)
   const [createAlbumModal, setCreateAlbumModal] = useState<{ isOpen: boolean; parentPath?: string; parentName?: string }>({ isOpen: false })
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false)
+  const [uploadModal, setUploadModal] = useState<{ isOpen: boolean; albumId: string; albumName: string }>({ isOpen: false, albumId: '', albumName: '' })
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -606,6 +608,16 @@ export default function SyncPage() {
                   >
                     <FolderPlus className="h-3 w-3 mr-1" />
                     Add Sub-Album
+                  </Button>
+                  
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUploadModal({ isOpen: true, albumId: node.album!.id, albumName: node.album!.name })}
+                    className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200 h-7 rounded-md px-2 text-xs"
+                  >
+                    <Upload className="h-3 w-3 mr-1" />
+                    Upload Files
                   </Button>
                   
                   <Button 
@@ -1570,6 +1582,22 @@ export default function SyncPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* File Upload Modal */}
+      <FileUploadModal
+        isOpen={uploadModal.isOpen}
+        onClose={() => setUploadModal({ isOpen: false, albumId: '', albumName: '' })}
+        albumId={uploadModal.albumId}
+        albumName={uploadModal.albumName}
+        onUploadComplete={() => {
+          // Refresh albums after upload
+          fetchData()
+          toast({
+            title: "Upload completed",
+            description: "Files have been uploaded. You can now run a sync to upload them to remote storage.",
+          })
+        }}
+      />
     </div>
   )
 }
