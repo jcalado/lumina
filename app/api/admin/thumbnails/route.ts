@@ -359,8 +359,132 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (action === 'start-videos') {
+      // Check if already running
+      if (runningJobId) {
+        return NextResponse.json(
+          { error: 'A thumbnail job is already running' },
+          { status: 409 }
+        );
+      }
+
+      try {
+        console.log('Starting video thumbnail generation...');
+        const { generateMissingVideoThumbnails } = await import('@/lib/video-thumbnails');
+        
+        // For simplicity, we'll do direct processing for videos
+        runningJobId = `video-thumbnails-${Date.now()}`;
+        
+        const result = await generateMissingVideoThumbnails();
+        
+        runningJobId = null;
+        
+        return NextResponse.json({
+          success: true,
+          message: `Generated video thumbnails for ${result.processed} out of ${result.total} videos`,
+          processed: result.processed,
+          total: result.total,
+        });
+      } catch (error) {
+        runningJobId = null;
+        console.error('Video thumbnail generation failed:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate video thumbnails' },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (action === 'reprocess-videos') {
+      // Check if already running
+      if (runningJobId) {
+        return NextResponse.json(
+          { error: 'A thumbnail job is already running' },
+          { status: 409 }
+        );
+      }
+
+      try {
+        console.log('Starting video thumbnail reprocessing...');
+        const { reprocessAllVideoThumbnails } = await import('@/lib/video-thumbnails');
+        
+        runningJobId = `video-reprocess-${Date.now()}`;
+        
+        const result = await reprocessAllVideoThumbnails();
+        
+        runningJobId = null;
+        
+        return NextResponse.json({
+          success: true,
+          message: `Reprocessed ${result.processed} videos, deleted ${result.deleted} old video thumbnails`,
+          processed: result.processed,
+          total: result.total,
+          deleted: result.deleted,
+        });
+      } catch (error) {
+        runningJobId = null;
+        console.error('Video thumbnail reprocessing failed:', error);
+        return NextResponse.json(
+          { error: 'Failed to reprocess video thumbnails' },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (action === 'start-all') {
+      // Process both photos and videos
+      if (runningJobId) {
+        return NextResponse.json(
+          { error: 'A thumbnail job is already running' },
+          { status: 409 }
+        );
+      }
+
+      try {
+        console.log('Starting thumbnail generation for both photos and videos...');
+        
+        runningJobId = `all-thumbnails-${Date.now()}`;
+        
+        // Import both libraries
+        const { generateMissingThumbnails } = await import('@/lib/thumbnails');
+        const { generateMissingVideoThumbnails } = await import('@/lib/video-thumbnails');
+        
+        // Process photos first
+        console.log('Processing photo thumbnails...');
+        const photoResult = await generateMissingThumbnails();
+        
+        // Then process videos
+        console.log('Processing video thumbnails...');
+        const videoResult = await generateMissingVideoThumbnails();
+        
+        runningJobId = null;
+        
+        return NextResponse.json({
+          success: true,
+          message: `Generated thumbnails for ${photoResult.processed} photos and ${videoResult.processed} videos`,
+          photos: {
+            processed: photoResult.processed,
+            total: photoResult.total,
+          },
+          videos: {
+            processed: videoResult.processed,
+            total: videoResult.total,
+          },
+          totalProcessed: photoResult.processed + videoResult.processed,
+          totalItems: photoResult.total + videoResult.total,
+        });
+      } catch (error) {
+        runningJobId = null;
+        console.error('Combined thumbnail generation failed:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate thumbnails' },
+          { status: 500 }
+        );
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Invalid action' },
+      { error: 'Invalid action. Available actions: start, stop, reprocess, cleanup, start-videos, reprocess-videos, start-all' },
       { status: 400 }
     );
   } catch (error) {
