@@ -2,9 +2,9 @@
 
 import { Worker } from 'worker_threads';
 import { PrismaClient } from '@prisma/client';
-import path from 'path';
-import os from 'os';
-import dotenv from 'dotenv';
+import * as path from 'path';
+import * as os from 'os';
+import * as dotenv from 'dotenv';
 import { getBatchProcessingSize } from '../lib/settings';
 
 // Load environment variables

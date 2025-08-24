@@ -474,7 +474,7 @@ if (isMainThread) {
     requestJobStop,
     resetStopFlag,
     startBlurhashJobParallel: async () => {
-      const { startBlurhashJobParallel } = await import('./blurhash-worker-thread');
+      const { startBlurhashJobParallel } = await import('./blurhash-parallel');
       return startBlurhashJobParallel();
     }
   };

@@ -57,7 +57,7 @@ async function benchmarkBlurhashProcessing() {
     const startParallel = performance.now();
     
     // Import and run parallel version
-    const { startBlurhashJobParallel } = await import('./blurhash-worker-thread');
+    const { startBlurhashJobParallel } = await import('./blurhash-parallel');
     await startBlurhashJobParallel();
     
     const endParallel = performance.now();

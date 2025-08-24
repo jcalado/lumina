@@ -4,8 +4,8 @@ import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
-import fs from 'fs/promises';
-import path from 'path';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 interface PhotoTask {
   id: string;
