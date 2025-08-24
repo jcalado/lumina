@@ -475,7 +475,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           )}
           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
             {/* <span>{t('photos_in_this_album', { count: album?.photoCount || 0 })}</span> */}
-            {album?.totalPhotoCount && album.totalPhotoCount > (album.photoCount || 0) && (
+            {album?.totalPhotoCount && album.totalPhotoCount > 0 && album.totalPhotoCount !== (album.photoCount || 0) && (
               <span>{album.totalPhotoCount} {t('photos')}</span>
             )}
             {/* {album?.subAlbumsCount && album.subAlbumsCount > 0 && (
