@@ -68,6 +68,7 @@ export default function AdminJobsPage() {
   const [blurhashJobLoading, setBlurhashJobLoading] = useState(false)
   const [thumbnailJobLoading, setThumbnailJobLoading] = useState(false)
   const [videoThumbnailJobLoading, setVideoThumbnailJobLoading] = useState(false)
+  const [useParallelProcessing, setUseParallelProcessing] = useState(true)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -167,13 +168,14 @@ export default function AdminJobsPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "start" })
+        body: JSON.stringify({ action: "start", parallel: useParallelProcessing })
       })
 
       if (response.ok) {
+        const data = await response.json()
         toast({
           title: "Success",
-          description: "Blurhash processing started"
+          description: `Blurhash processing started (${data.processingMode || 'serial'} mode)`
         })
         
         // Refresh job data immediately
@@ -737,6 +739,25 @@ export default function AdminJobsPage() {
                 </div>
               </div>
             )}
+
+            {/* Processing Options */}
+            <div className="pt-3 border-t">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="parallel-processing"
+                  checked={useParallelProcessing}
+                  onChange={(e) => setUseParallelProcessing(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <label htmlFor="parallel-processing" className="text-sm font-medium">
+                  Use parallel processing (recommended for better performance)
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Parallel processing utilizes multiple CPU cores for faster blurhash generation
+              </p>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4 border-t">

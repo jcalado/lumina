@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { startBlurhashJob, requestJobStop } from '@/scripts/blurhash-worker';
+import { startBlurhashJobParallel, requestJobStop as requestParallelJobStop } from '@/scripts/blurhash-parallel';
 
 export async function GET() {
   try {
@@ -23,7 +24,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { action } = await request.json();
+    const { action, parallel } = await request.json();
 
     if (action === 'start') {
       // Check if there's already a running job
@@ -40,13 +41,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Choose processing method based on parallel parameter
+      const useParallel = parallel === true;
+      
+      console.log(`Starting blurhash job with ${useParallel ? 'PARALLEL' : 'SERIAL'} processing`);
+
       // Start the job in the background
       setImmediate(() => {
-        startBlurhashJob();
+        if (useParallel) {
+          startBlurhashJobParallel();
+        } else {
+          startBlurhashJob();
+        }
       });
 
       return NextResponse.json({ 
-        message: 'Blurhash job started successfully' 
+        message: `Blurhash job started successfully (${useParallel ? 'parallel' : 'serial'} processing)`,
+        processingMode: useParallel ? 'parallel' : 'serial'
       });
     }
 
