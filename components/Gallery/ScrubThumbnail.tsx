@@ -3,9 +3,21 @@
 import { useState, useRef } from 'react';
 import { Folder } from 'lucide-react';
 import { PhotoImage } from '@/components/PhotoImage';
+import { MediaImage } from '@/components/MediaImage';
+
+interface MediaThumbnail {
+  mediaId: string;
+  filename: string;
+  mediaType: 'photo' | 'video';
+}
+
+interface PhotoThumbnail {
+  photoId: string;
+  filename: string;
+}
 
 interface ScrubThumbnailProps {
-  thumbnails: { photoId: string; filename: string }[];
+  thumbnails: (MediaThumbnail | PhotoThumbnail)[];
   albumName: string;
 }
 
@@ -46,6 +58,41 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
 
   const currentThumbnail = thumbnails[currentIndex];
 
+  // Handle backward compatibility
+  const isMediaThumbnail = (thumb: MediaThumbnail | PhotoThumbnail): thumb is MediaThumbnail => {
+    return 'mediaId' in thumb;
+  };
+
+  const renderMediaImage = () => {
+    if (isMediaThumbnail(currentThumbnail)) {
+      const mediaThumbnail = currentThumbnail as MediaThumbnail;
+      return (
+        <MediaImage
+          media={{
+            id: mediaThumbnail.mediaId,
+            filename: mediaThumbnail.filename,
+            type: mediaThumbnail.mediaType,
+          }}
+          size="medium"
+          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
+        />
+      );
+    } else {
+      // Fallback to PhotoImage for old format
+      const photoThumbnail = currentThumbnail as PhotoThumbnail;
+      return (
+        <PhotoImage
+          photoId={photoThumbnail.photoId}
+          filename={photoThumbnail.filename}
+          size="medium"
+          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+          alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
+        />
+      );
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -54,13 +101,7 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
       onMouseEnter={thumbnails.length > 1 ? handleMouseEnter : undefined}
       onMouseLeave={thumbnails.length > 1 ? handleMouseLeave : undefined}
     >
-      <PhotoImage
-        photoId={currentThumbnail.photoId}
-        filename={currentThumbnail.filename}
-        size="medium"
-        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-        alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
-      />
+      {renderMediaImage()}
 
       {/* Progress indicator - only show when hovering and multiple images */}
       {isHovering && thumbnails.length > 1 && (

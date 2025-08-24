@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+const { PrismaClient } = require('@prisma/client');
 
-export async function GET() {
+async function testAlbumApiEndpoint() {
+  const prisma = new PrismaClient();
+  
   try {
-    console.log('Fetching albums...');
+    console.log('Testing the /api/albums endpoint to verify video thumbnails...');
     
-    // Single comprehensive query to get everything at once
+    // Simulate the main albums API logic
     const result = await prisma.$queryRaw`
       WITH AlbumStats AS (
         SELECT 
@@ -84,46 +85,83 @@ export async function GET() {
         GROUP BY parentAlbumId
       ) t ON t.parentAlbumId = a.id
       ORDER BY a.name ASC
-    ` as any[];
+    `;
 
-    console.log(`Found ${result.length} albums`);
-
-    // Process the results
-    const albums = result.map((album: any) => {
-      // Parse thumbnails from GROUP_CONCAT format
-      let thumbnails = [];
+    console.log('\nAlbum API results:');
+    for (const album of result) {
+      console.log(`\n📁 ${album.name}`);
+      console.log(`   Path: ${album.path}`);
+      console.log(`   PhotoCount: ${album.photoCount}, SubAlbumPhotosCount: ${album.subAlbumPhotosCount}`);
+      
       if (album.thumbnails) {
-        thumbnails = album.thumbnails.split(';;;').map((item: string) => {
+        const thumbnails = album.thumbnails.split(';;;').map(item => {
           const [mediaId, filename, mediaType] = item.split('|||');
           return { mediaId, filename, mediaType };
         });
+        
+        console.log(`   Thumbnails: ${thumbnails.length} items`);
+        thumbnails.forEach((thumb, index) => {
+          const icon = thumb.mediaType === 'video' ? '🎥' : '📷';
+          console.log(`     ${index + 1}. ${icon} ${thumb.filename} (${thumb.mediaType})`);
+        });
+        
+        if (album.photoCount === 0 && thumbnails.some(t => t.mediaType === 'video')) {
+          console.log(`   ✅ SUCCESS: Album with no photos now has video thumbnails!`);
+        }
+      } else {
+        console.log(`   ❌ No thumbnails found`);
       }
-
-      return {
-        id: album.id,
-        path: album.path,
-        slug: album.slug,
-        name: album.name,
-        description: album.description,
-        createdAt: album.createdAt,
-        updatedAt: album.updatedAt,
-        photoCount: Number(album.photoCount),
-        subAlbumPhotosCount: Number(album.subAlbumPhotosCount),
-        subAlbumsCount: Number(album.subAlbumsCount),
-        totalPhotoCount: Number(album.photoCount) + Number(album.subAlbumPhotosCount),
-        slugPath: album.slug, // Use existing slug instead of converting
-        thumbnails,
-      };
+    }
+    
+    // Test the individual album endpoint for the video-only album
+    const videoOnlyAlbum = await prisma.album.findFirst({
+      where: {
+        path: 'Album fotos e videos/Vídeos',
+        status: 'PUBLIC',
+        enabled: true,
+      },
+      include: {
+        _count: {
+          select: {
+            photos: true,
+            videos: true,
+          }
+        }
+      }
     });
-
-    return NextResponse.json({
-      albums,
-    });
+    
+    if (videoOnlyAlbum) {
+      console.log(`\n🎥 Testing individual album endpoint for: ${videoOnlyAlbum.name}`);
+      console.log(`   Photos: ${videoOnlyAlbum._count.photos}, Videos: ${videoOnlyAlbum._count.videos}`);
+      
+      // Test the same logic that would be used in the individual album API
+      const directVideos = await prisma.video.findMany({
+        where: {
+          albumId: videoOnlyAlbum.id,
+        },
+        select: {
+          id: true,
+          filename: true,
+          takenAt: true,
+        },
+        orderBy: {
+          takenAt: 'asc',
+        },
+      });
+      
+      if (directVideos.length > 0) {
+        console.log(`   ✅ Found ${directVideos.length} videos for individual album thumbnails:`);
+        directVideos.forEach(video => {
+          console.log(`     🎥 ${video.filename}`);
+        });
+      }
+    }
+    
   } catch (error) {
-    console.error('Detailed error fetching albums:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch albums', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('❌ Error testing API endpoint:', error);
+  } finally {
+    await prisma.$disconnect();
   }
 }
+
+testAlbumApiEndpoint();

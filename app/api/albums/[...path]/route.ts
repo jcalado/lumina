@@ -9,7 +9,7 @@ interface RouteParams {
   }>;
 }
 
-interface SubAlbumWithPhotos {
+interface SubAlbumWithMedia {
   id: string;
   path: string;
   slug?: string;
@@ -17,11 +17,13 @@ interface SubAlbumWithPhotos {
   description: string | null;
   _count: {
     photos: number;
+    videos?: number;
   };
-  photos?: {
+  media?: {
     id: string;
     filename: string;
     takenAt: Date | null;
+    type: 'photo' | 'video';
   }[];
   dateRange?: {
     earliest: Date | null;
@@ -117,8 +119,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       });
       
-      if (album && album.videos) {
-        albumVideos = album.videos;
+      if (album && (album as any).videos) {
+        albumVideos = (album as any).videos;
       }
     } catch (error) {
       console.log('Failed to include videos in main query, falling back to separate query:', error);
@@ -187,7 +189,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get sub-albums (albums whose path starts with this album's path + '/')
-    let subAlbums: SubAlbumWithPhotos[] = [];
+    let subAlbums: SubAlbumWithMedia[] = [];
     try {
       console.log('Searching for sub-albums of:', albumPath);
       
@@ -208,13 +210,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           _count: {
             select: {
               photos: true,
+              // videos: true, // TypeScript doesn't recognize this yet, handle manually
             },
           },
         },
       });
       
-      // Filter to get only direct children
-      subAlbums = allSubAlbums.filter((album: SubAlbumWithPhotos) => {
+      // Filter to get only direct children and add video counts
+      subAlbums = allSubAlbums.filter((album: any) => {
         if (albumPath === '') {
           // For root albums, get albums that don't contain '/'
           return !album.path.includes('/');
@@ -230,6 +233,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
       
       console.log('Found direct sub-albums:', subAlbums.length);
+      
+      // Add video counts to sub-albums (workaround for TypeScript limitations)
+      for (const subAlbum of subAlbums) {
+        try {
+          const videoCount = await (prisma as any).video.count({
+            where: {
+              albumId: subAlbum.id,
+            },
+          });
+          (subAlbum as any)._count.videos = videoCount;
+        } catch (error) {
+          console.log('Video count failed for album:', subAlbum.id, 'assuming 0');
+          (subAlbum as any)._count.videos = 0;
+        }
+      }
       
       // Get slugs for sub-albums (workaround for TypeScript/Prisma issue)
       for (const subAlbum of subAlbums) {
@@ -263,10 +281,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           });
 
-          let photos: { id: string; filename: string; takenAt: Date | null }[] = [];
+          let media: { id: string; filename: string; takenAt: Date | null; type: 'photo' | 'video' }[] = [];
           
           if (subAlbumHasChildren > 0) {
-            // This sub-album has children, so get photos from its sub-albums instead
+            // This sub-album has children, so get media from its sub-albums instead
             
             const subAlbumPhotos = await prisma.photo.findMany({
               where: {
@@ -288,69 +306,109 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             });
 
-            // Get distributed sample from sub-album photos
-            if (subAlbumPhotos.length > 0) {
-              if (subAlbumPhotos.length <= 5) {
-                photos = subAlbumPhotos;
+            const subAlbumVideos = await (prisma as any).video.findMany({
+              where: {
+                album: {
+                  status: 'PUBLIC',
+                  enabled: true,
+                  path: {
+                    startsWith: subAlbum.path + '/',
+                  },
+                },
+              },
+              select: {
+                id: true,
+                filename: true,
+                takenAt: true,
+              },
+              orderBy: {
+                takenAt: 'asc',
+              },
+            });
+
+            // Combine and sort all media by date
+            const allSubAlbumMedia = [
+              ...subAlbumPhotos.map(p => ({ ...p, type: 'photo' as const })),
+              ...subAlbumVideos.map((v: any) => ({ ...v, type: 'video' as const }))
+            ].sort((a, b) => {
+              const dateA = a.takenAt ? new Date(a.takenAt).getTime() : 0;
+              const dateB = b.takenAt ? new Date(b.takenAt).getTime() : 0;
+              return dateA - dateB;
+            });
+
+            // Get distributed sample from sub-album media
+            if (allSubAlbumMedia.length > 0) {
+              if (allSubAlbumMedia.length <= 5) {
+                media = allSubAlbumMedia;
               } else {
-                const interval = Math.floor(subAlbumPhotos.length / 5);
+                const interval = Math.floor(allSubAlbumMedia.length / 5);
                 for (let i = 0; i < 5; i++) {
                   const index = i * interval;
-                  if (index < subAlbumPhotos.length) {
-                    photos.push(subAlbumPhotos[index]);
+                  if (index < allSubAlbumMedia.length) {
+                    media.push(allSubAlbumMedia[index]);
                   }
                 }
               }
             }
-          } else if (subAlbum._count.photos > 0) {
-            // No children, get photos from this album directly
+          } else if (subAlbum._count.photos > 0 || (subAlbum._count as any).videos > 0) {
+            // No children, get media from this album directly
             
-            const totalPhotos = subAlbum._count.photos;
-            
-            if (totalPhotos <= 5) {
-              photos = await prisma.photo.findMany({
-                where: {
-                  albumId: subAlbum.id,
-                },
-                select: {
-                  id: true,
-                  filename: true,
-                  takenAt: true,
-                },
-                orderBy: {
-                  takenAt: 'asc',
-                },
-              });
+            const directPhotos = await prisma.photo.findMany({
+              where: {
+                albumId: subAlbum.id,
+              },
+              select: {
+                id: true,
+                filename: true,
+                takenAt: true,
+              },
+              orderBy: {
+                takenAt: 'asc',
+              },
+            });
+
+            const directVideos = await (prisma as any).video.findMany({
+              where: {
+                albumId: subAlbum.id,
+              },
+              select: {
+                id: true,
+                filename: true,
+                takenAt: true,
+              },
+              orderBy: {
+                takenAt: 'asc',
+              },
+            });
+
+            // Combine and sort all media by date
+            const allDirectMedia = [
+              ...directPhotos.map(p => ({ ...p, type: 'photo' as const })),
+              ...directVideos.map((v: any) => ({ ...v, type: 'video' as const }))
+            ].sort((a, b) => {
+              const dateA = a.takenAt ? new Date(a.takenAt).getTime() : 0;
+              const dateB = b.takenAt ? new Date(b.takenAt).getTime() : 0;
+              return dateA - dateB;
+            });
+
+            // Get distributed sample from direct media
+            if (allDirectMedia.length <= 5) {
+              media = allDirectMedia;
             } else {
-              // Get distributed sample from direct photos
-              const interval = Math.floor(totalPhotos / 5);
+              const interval = Math.floor(allDirectMedia.length / 5);
               for (let i = 0; i < 5; i++) {
                 const skip = i * interval;
-                const photo = await prisma.photo.findFirst({
-                  where: {
-                    albumId: subAlbum.id,
-                  },
-                  select: {
-                    id: true,
-                    filename: true,
-                    takenAt: true,
-                  },
-                  skip: skip,
-                  orderBy: {
-                    takenAt: 'asc',
-                  },
-                });
-                if (photo) {
-                  photos.push(photo);
+                if (skip < allDirectMedia.length) {
+                  media.push(allDirectMedia[skip]);
                 }
               }
             }
           }
 
-          // Store the photos for scrubbing
-          (subAlbum as SubAlbumWithPhotos).photos = photos;
+          // Store the media for scrubbing
+          (subAlbum as SubAlbumWithMedia).media = media;
           
-          // Calculate total photo count including sub-albums
+          // Calculate total media count including sub-albums
           const totalPhotoCount = subAlbum._count.photos + (subAlbumHasChildren > 0 ? await prisma.photo.count({
             where: {
               album: {
@@ -363,8 +421,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
           }) : 0);
 
+          const totalVideoCount = ((subAlbum._count as any).videos || 0) + (subAlbumHasChildren > 0 ? await (prisma as any).video.count({
+            where: {
+              album: {
+                status: 'PUBLIC',
+                enabled: true,
+                path: {
+                  startsWith: subAlbum.path + '/',
+                },
+              },
+            },
+          }) : 0);
+
           // Get date range for the album (including sub-albums if any)
-          const dateRange = await prisma.photo.aggregate({
+          const photoDateRange = await prisma.photo.aggregate({
             where: {
               OR: [
                 { albumId: subAlbum.id },
@@ -389,17 +459,52 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               takenAt: true,
             },
           });
+
+          const videoDateRange = await (prisma as any).video.aggregate({
+            where: {
+              OR: [
+                { albumId: subAlbum.id },
+                ...(subAlbumHasChildren > 0 ? [{
+                  album: {
+                    status: 'PUBLIC' as const,
+                    enabled: true,
+                    path: {
+                      startsWith: subAlbum.path + '/',
+                    },
+                  },
+                }] : [])
+              ],
+              takenAt: {
+                not: null,
+              },
+            },
+            _min: {
+              takenAt: true,
+            },
+            _max: {
+              takenAt: true,
+            },
+          });
+
+          // Combine date ranges
+          const allDates = [
+            photoDateRange._min.takenAt,
+            photoDateRange._max.takenAt,
+            videoDateRange._min.takenAt,
+            videoDateRange._max.takenAt
+          ].filter(Boolean);
+
+          (subAlbum as SubAlbumWithMedia).dateRange = allDates.length > 0 ? {
+            earliest: new Date(Math.min(...allDates.map(d => new Date(d!).getTime()))),
+            latest: new Date(Math.max(...allDates.map(d => new Date(d!).getTime()))),
+          } : null;
           
-          (subAlbum as SubAlbumWithPhotos).dateRange = {
-            earliest: dateRange._min.takenAt || null,
-            latest: dateRange._max.takenAt || null,
-          };
-          
-          // Update the photo count to include sub-albums
-          (subAlbum as SubAlbumWithPhotos)._count.photos = totalPhotoCount;
+          // Update the counts to include videos
+          (subAlbum as SubAlbumWithMedia)._count.photos = totalPhotoCount;
+          (subAlbum as SubAlbumWithMedia)._count.videos = totalVideoCount;
         } catch (photoError) {
           console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
-          (subAlbum as SubAlbumWithPhotos).photos = [];
+          (subAlbum as SubAlbumWithMedia).media = [];
         }
       }
     } catch (subAlbumError) {
@@ -408,19 +513,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Transform the response to match the expected frontend interface
+    const albumWithIncludes = album as any;
     const response = {
       album: {
         id: album.id,
         path: album.path,
         name: album.name,
         description: album.description,
-        photoCount: album.photos.length,
-        totalPhotoCount: album._count.photos,
+        photoCount: albumWithIncludes.photos?.length || 0,
+        totalPhotoCount: albumWithIncludes._count?.photos || 0,
         subAlbumsCount: subAlbums.length,
       },
-      subAlbums: await Promise.all(subAlbums.map(async (subAlbum: SubAlbumWithPhotos) => {
-        // Return all photos for scrubbing effect (up to 5)
-        const photos = subAlbum.photos || [];
+      subAlbums: await Promise.all(subAlbums.map(async (subAlbum: SubAlbumWithMedia) => {
+        // Return all media for scrubbing effect (up to 5)
+        const media = subAlbum.media || [];
         
         // Calculate subAlbumsCount for this sub-album
         const subAlbumsCount = await prisma.album.count({
@@ -443,9 +549,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           photoCount: subAlbum._count.photos,
           totalPhotoCount: subAlbum._count.photos,
           subAlbumsCount,
-          thumbnails: photos.map((photo) => ({
-            photoId: photo.id,
-            filename: photo.filename,
+          thumbnails: media.map((mediaItem) => ({
+            mediaId: mediaItem.id,
+            filename: mediaItem.filename,
+            mediaType: mediaItem.type,
           })),
           dateRange: subAlbum.dateRange ? {
             earliest: subAlbum.dateRange.earliest?.toISOString() || null,
@@ -453,23 +560,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           } : null,
         };
       })),
-      photos: album.photos.map(photo => ({
+      photos: (albumWithIncludes.photos || []).map((photo: any) => ({
         ...photo,
         type: 'photo' as const,
         orientation: getPhotoOrientation(photo.metadata)
       })),
-      videos: albumVideos.map(video => ({
+      videos: albumVideos.map((video: any) => ({
         ...video,
         type: 'video' as const,
       })),
       // Combined media array for easier frontend handling
       media: [
-        ...album.photos.map(photo => ({
+        ...(albumWithIncludes.photos || []).map((photo: any) => ({
           ...photo,
           type: 'photo' as const,
           orientation: getPhotoOrientation(photo.metadata)
         })),
-        ...albumVideos.map(video => ({
+        ...albumVideos.map((video: any) => ({
           ...video,
           type: 'video' as const,
         }))
@@ -482,9 +589,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       pagination: {
         page,
         limit,
-        totalPhotos: album._count.photos,
-        totalPages: Math.ceil(album._count.photos / limit),
-        hasMore: offset + album.photos.length < album._count.photos,
+        totalPhotos: albumWithIncludes._count?.photos || 0,
+        totalPages: Math.ceil((albumWithIncludes._count?.photos || 0) / limit),
+        hasMore: offset + (albumWithIncludes.photos?.length || 0) < (albumWithIncludes._count?.photos || 0),
       },
     };
 
