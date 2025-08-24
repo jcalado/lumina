@@ -78,28 +78,99 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.log('Sort order:', sortBy);
     console.log('Pagination:', { page, limit, offset });
     
-    const album = await prisma.album.findUnique({
-      where: {
-        path: albumPath,
-      },
-      include: {
-        photos: {
-          include: {
-            thumbnails: true,
-          },
-          orderBy: {
-            takenAt: sortBy === 'desc' ? 'desc' : 'asc',
-          },
-          skip: offset,
-          take: limit,
+    let album;
+    let albumVideos: any[] = [];
+    
+    try {
+      // Try to include videos in the main query
+      album = await prisma.album.findUnique({
+        where: {
+          path: albumPath,
         },
-        _count: {
-          select: {
-            photos: true,
+        include: {
+          photos: {
+            include: {
+              thumbnails: true,
+            },
+            orderBy: {
+              takenAt: sortBy === 'desc' ? 'desc' : 'asc',
+            },
+            skip: offset,
+            take: limit,
+          },
+          videos: {
+            include: {
+              thumbnails: true,
+            },
+            orderBy: {
+              takenAt: sortBy === 'desc' ? 'desc' : 'asc',
+            },
+            skip: offset,
+            take: limit,
+          },
+          _count: {
+            select: {
+              photos: true,
+              videos: true,
+            },
           },
         },
-      },
-    });
+      });
+      
+      if (album && album.videos) {
+        albumVideos = album.videos;
+      }
+    } catch (error) {
+      console.log('Failed to include videos in main query, falling back to separate query:', error);
+      
+      // Fallback: query without videos
+      album = await prisma.album.findUnique({
+        where: {
+          path: albumPath,
+        },
+        include: {
+          photos: {
+            include: {
+              thumbnails: true,
+            },
+            orderBy: {
+              takenAt: sortBy === 'desc' ? 'desc' : 'asc',
+            },
+            skip: offset,
+            take: limit,
+          },
+          _count: {
+            select: {
+              photos: true,
+            },
+          },
+        },
+      });
+      
+      // Try to get videos separately
+      if (album) {
+        try {
+          const videos = await prisma.video.findMany({
+            where: {
+              albumId: album.id,
+            },
+            include: {
+              thumbnails: true,
+            },
+            orderBy: {
+              takenAt: sortBy === 'desc' ? 'desc' : 'asc',
+            },
+            skip: offset,
+            take: limit,
+          });
+          
+          albumVideos = videos;
+        } catch (videoError) {
+          console.log('Video query failed (videos table may not exist yet):', videoError);
+          // Continue without videos if the table doesn't exist yet
+        }
+      }
+    }
 
     if (!album) {
       return NextResponse.json(
@@ -384,8 +455,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       })),
       photos: album.photos.map(photo => ({
         ...photo,
+        type: 'photo' as const,
         orientation: getPhotoOrientation(photo.metadata)
       })),
+      videos: albumVideos.map(video => ({
+        ...video,
+        type: 'video' as const,
+      })),
+      // Combined media array for easier frontend handling
+      media: [
+        ...album.photos.map(photo => ({
+          ...photo,
+          type: 'photo' as const,
+          orientation: getPhotoOrientation(photo.metadata)
+        })),
+        ...albumVideos.map(video => ({
+          ...video,
+          type: 'video' as const,
+        }))
+      ].sort((a, b) => {
+        // Sort by takenAt date, maintaining the sort order from the query
+        const dateA = new Date(a.takenAt || a.createdAt);
+        const dateB = new Date(b.takenAt || b.createdAt);
+        return sortBy === 'desc' ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+      }),
       pagination: {
         page,
         limit,

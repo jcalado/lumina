@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Image, Download, Heart, Folder, Images, ChevronRight, Home, ArrowUpDown, Filter } from 'lucide-react';
 import { PhotoImage } from '@/components/PhotoImage';
+import { MediaImage } from '@/components/MediaImage';
 import { Lightbox } from '@/components/Gallery/Lightbox';
+import { MediaLightbox } from '@/components/Gallery/MediaLightbox';
 import { FavoriteButton } from '@/components/Favorites/FavoriteButton';
 import { DownloadSelectionButton } from '@/components/Download/DownloadSelectionButton';
 import { SelectedPhotosDownload } from '@/components/Download/SelectedPhotosDownload';
@@ -37,6 +39,28 @@ interface Photo {
   }[];
 }
 
+interface Video {
+  id: string;
+  filename: string;
+  originalPath: string;
+  s3Key: string;
+  fileSize: number;
+  takenAt: string | null;
+  createdAt: string;
+  duration?: number | null;
+  resolution?: string | null;
+  codec?: string | null;
+  metadata?: string | null;
+  thumbnails: {
+    size: string;
+    s3Key: string;
+    width: number;
+    height: number;
+  }[];
+}
+
+type MediaItem = (Photo & { type: 'photo' }) | (Video & { type: 'video' });
+
 interface Album {
   id: string;
   path: string;
@@ -60,6 +84,8 @@ interface AlbumData {
   album: Album;
   subAlbums: Album[];
   photos: Photo[];
+  videos: Video[];
+  media: MediaItem[];
   pagination?: {
     page: number;
     limit: number;
@@ -202,6 +228,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const router = useRouter();
   const [albumData, setAlbumData] = useState<AlbumData | null>(null);
   const [allPhotos, setAllPhotos] = useState<Photo[]>([]);
+  const [allMedia, setAllMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -210,6 +237,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const [albumPath, setAlbumPath] = useState<string>('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -289,9 +317,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         if (isInitial) {
           setAlbumData(data);
           setAllPhotos(data.photos);
+          setAllMedia(data.media || []);
         } else {
-          // Append new photos for infinite scroll
+          // Append new photos and media for infinite scroll
           setAllPhotos(prev => [...prev, ...data.photos]);
+          setAllMedia(prev => [...prev, ...(data.media || [])]);
         }
 
         // Update pagination state
@@ -338,10 +368,19 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     return true;
   });
 
+  // Filter media based on favorites selection
+  const filteredMedia = allMedia.filter(media => {
+    if (showFavoritesOnly) {
+      return isFavorite(media.id);
+    }
+    return true;
+  });
+
   // Destructure album data for easier access
   const album = albumData?.album;
   const subAlbums = albumData?.subAlbums || [];
   const photos = filteredPhotos; // For lightbox compatibility
+  const media = filteredMedia; // For unified media display
 
   if (loading) {
     return (
@@ -376,11 +415,39 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     return null;
   }
 
+  // Helper function to convert MediaItem to Media format expected by MediaLightbox
+  const convertToLightboxMedia = (mediaItems: MediaItem[]) => {
+    return mediaItems.map(item => {
+      const baseItem = {
+        ...item,
+        duration: undefined as number | undefined,
+        width: undefined as number | undefined,
+        height: undefined as number | undefined,
+      };
+
+      if (item.type === 'video') {
+        const videoItem = item as Video & { type: 'video' };
+        baseItem.duration = videoItem.duration || undefined;
+        // Note: width and height are not available in our Video model yet
+        // They can be extracted from resolution string if needed
+      }
+
+      return baseItem;
+    });
+  };
+
   const openLightbox = (filteredIndex: number) => {
-    // Find the original photo index in the full photos array
-    const filteredPhoto = filteredPhotos[filteredIndex];
-    const originalIndex = allPhotos.findIndex(p => p.id === filteredPhoto.id);
-    setCurrentPhotoIndex(originalIndex);
+    // Find the original media index in the full media array
+    const filteredItem = filteredMedia[filteredIndex];
+    const originalIndex = allMedia.findIndex(m => m.id === filteredItem.id);
+    setCurrentMediaIndex(originalIndex);
+    
+    // Also update photo index for backward compatibility if it's a photo
+    if (filteredItem.type === 'photo') {
+      const photoIndex = allPhotos.findIndex(p => p.id === filteredItem.id);
+      setCurrentPhotoIndex(photoIndex);
+    }
+    
     setLightboxOpen(true);
   };
 
@@ -390,6 +457,17 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const navigateToPhoto = (index: number) => {
     setCurrentPhotoIndex(index);
+  };
+
+  const navigateToMedia = (index: number) => {
+    setCurrentMediaIndex(index);
+    
+    // Also update photo index if it's a photo
+    const mediaItem = allMedia[index];
+    if (mediaItem && mediaItem.type === 'photo') {
+      const photoIndex = allPhotos.findIndex(p => p.id === mediaItem.id);
+      setCurrentPhotoIndex(photoIndex);
+    }
   };
 
   const downloadAlbum = async () => {
@@ -624,63 +702,60 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         </div>
       )}
 
-      {/* Photos Grid */}
-      {filteredPhotos.length === 0 && albumData?.subAlbums.length === 0 ? (
+      {/* Media Grid */}
+      {filteredMedia.length === 0 && albumData?.subAlbums.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
             <Folder className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
             <CardTitle className="mb-2">Empty Album</CardTitle>
             <CardDescription>
-              This album doesn't contain any photos or sub-albums yet.
+              This album doesn't contain any photos, videos or sub-albums yet.
             </CardDescription>
           </CardContent>
         </Card>
-      ) : showFavoritesOnly && filteredPhotos.length === 0 ? (
+      ) : showFavoritesOnly && filteredMedia.length === 0 ? (
         <Card className="text-center py-16">
           <CardContent>
             <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
             <CardTitle className="mb-2">No Favorites</CardTitle>
             <CardDescription>
-              You haven't marked any photos as favorites in this album yet.
+              You haven't marked any photos or videos as favorites in this album yet.
             </CardDescription>
           </CardContent>
         </Card>
-      ) : filteredPhotos.length > 0 ? (
+      ) : filteredMedia.length > 0 ? (
         <div>
           <h2 className="text-xl font-semibold mb-4">
-            Photos {showFavoritesOnly && <span className="text-muted-foreground">({filteredPhotos.length} favorites)</span>}
+            Media {showFavoritesOnly && <span className="text-muted-foreground">({filteredMedia.length} favorites)</span>}
             {albumData?.pagination && !showFavoritesOnly && (
               <span className="text-muted-foreground text-base font-normal ml-2">
-                ({filteredPhotos.length} of {albumData.pagination.totalPhotos})
+                ({filteredMedia.length} of {(albumData.pagination.totalPhotos || 0) + (albumData.videos?.length || 0)})
               </span>
             )}
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {filteredPhotos.map((photo, index) => (
+            {filteredMedia.map((mediaItem, index) => (
               <div
-                key={photo.id}
+                key={mediaItem.id}
                 className="cursor-pointer"
                 onClick={() => openLightbox(index)}
               >
                 <Card className="group hover:shadow-lg transition-shadow">
                   <CardContent className="p-0">
                     <div className="aspect-square bg-muted rounded-md relative overflow-hidden">
-                      <PhotoImage
-                        photoId={photo.id}
-                        filename={photo.filename}
+                      <MediaImage
+                        media={mediaItem}
                         className="aspect-square rounded-md"
-                        alt={`Photo ${photo.filename}`}
-                        blurhash={photo.blurhash}
-                        orientation={photo.orientation}
+                        alt={`${mediaItem.type === 'photo' ? 'Photo' : 'Video'} ${mediaItem.filename}`}
                       />
 
                       {/* Action buttons overlay */}
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <DownloadSelectionButton
-                          photoId={photo.id}
+                          photoId={mediaItem.id}
                         />
                         <FavoriteButton
-                          photoId={photo.id}
+                          photoId={mediaItem.id}
                         />
                       </div>
                     </div>
@@ -714,12 +789,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       ) : null}
 
       {/* Lightbox */}
-      <Lightbox
-        photos={allPhotos}
-        currentIndex={currentPhotoIndex}
+      <MediaLightbox
+        media={convertToLightboxMedia(allMedia)}
+        currentIndex={currentMediaIndex}
         isOpen={lightboxOpen}
         onClose={closeLightbox}
-        onNavigate={navigateToPhoto}
+        onNavigate={navigateToMedia}
       />
 
       {/* Selected Photos Download */}

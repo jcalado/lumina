@@ -1,8 +1,20 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { readFile } from 'fs/promises';
-import { isImageFile } from './utils';
+import { isImageFile, isVideoFile, isMediaFile } from './utils';
 import exifr from 'exifr';
+
+export interface VideoMetadata {
+  filename: string;
+  size: number;
+  duration?: number; // in seconds
+  width?: number;
+  height?: number;
+  fps?: number;
+  codec?: string;
+  bitrate?: number;
+  takenAt?: Date;
+}
 
 export interface PhotoMetadata {
   filename: string;
@@ -28,6 +40,7 @@ export interface AlbumData {
   name: string;
   description?: string;
   photos: PhotoMetadata[];
+  videos: VideoMetadata[];
   subAlbums: string[];
 }
 
@@ -46,6 +59,7 @@ export class FileSystemScanner {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
       
       const photos: PhotoMetadata[] = [];
+      const videos: VideoMetadata[] = [];
       const subAlbums: string[] = [];
       
       // Process files and directories
@@ -56,6 +70,10 @@ export class FileSystemScanner {
           const photoPath = path.join(fullPath, entry.name);
           const metadata = await this.extractPhotoMetadata(photoPath);
           photos.push(metadata);
+        } else if (entry.isFile() && isVideoFile(entry.name)) {
+          const videoPath = path.join(fullPath, entry.name);
+          const metadata = await this.extractVideoMetadata(videoPath);
+          videos.push(metadata);
         }
       }
       
@@ -67,6 +85,7 @@ export class FileSystemScanner {
         name: albumName,
         description,
         photos: photos.sort((a, b) => (a.takenAt || new Date(0)).getTime() - (b.takenAt || new Date(0)).getTime()),
+        videos: videos.sort((a, b) => (a.takenAt || new Date(0)).getTime() - (b.takenAt || new Date(0)).getTime()),
         subAlbums: subAlbums.sort(),
       };
     } catch (error) {
@@ -147,6 +166,30 @@ export class FileSystemScanner {
     }
   }
 
+  async extractVideoMetadata(filePath: string): Promise<VideoMetadata> {
+    try {
+      const stats = await fs.stat(filePath);
+      const filename = path.basename(filePath);
+      
+      const metadata: VideoMetadata = {
+        filename,
+        size: stats.size,
+      };
+      
+      // For now, we'll return basic metadata
+      // TODO: Add video metadata extraction using a library like ffprobe
+      // This would require installing ffmpeg and a Node.js wrapper
+      
+      return metadata;
+    } catch (error) {
+      console.error(`Error extracting video metadata from ${filePath}:`, error);
+      return {
+        filename: path.basename(filePath),
+        size: 0,
+      };
+    }
+  }
+
   private async readProjectDescription(albumPath: string): Promise<string | undefined> {
     try {
       const projectPath = path.join(albumPath, 'project.md');
@@ -167,15 +210,15 @@ export class FileSystemScanner {
       try {
         const entries = await fs.readdir(fullPath, { withFileTypes: true });
         
-        // Check if this directory contains photos OR subdirectories
-        const hasPhotos = entries.some((entry: any) => 
-          entry.isFile() && isImageFile(entry.name)
+        // Check if this directory contains photos/videos OR subdirectories
+        const hasMedia = entries.some((entry: any) => 
+          entry.isFile() && isMediaFile(entry.name)
         );
         
         const hasSubdirectories = entries.some((entry: any) => entry.isDirectory());
         
-        // Add this directory as an album if it has photos OR if it's not the root and has subdirectories
-        if (hasPhotos || (currentPath && hasSubdirectories)) {
+        // Add this directory as an album if it has media OR if it's not the root and has subdirectories
+        if (hasMedia || (currentPath && hasSubdirectories)) {
           albums.push(currentPath);
         }
         

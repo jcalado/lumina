@@ -178,13 +178,16 @@ async function syncPhotos(jobId: string) {
         albumProgress[albumPath] = {
           status: 'PROCESSING',
           photosTotal: albumData.photos.length,
+          videosTotal: albumData.videos.length,
           photosProcessed: 0,
+          videosProcessed: 0,
           photosUploaded: 0,
+          videosUploaded: 0,
           issues: [],
           fingerprintInfo: 'Generated fingerprint for sync optimization'
         };
         
-        addLog('info', `Album "${albumData.name}" contains ${albumData.photos.length} photos`);
+        addLog('info', `Album "${albumData.name}" contains ${albumData.photos.length} photos and ${albumData.videos.length} videos`);
         
         // Upsert album
         const album = await prisma.album.upsert({
@@ -210,7 +213,7 @@ async function syncPhotos(jobId: string) {
         });
 
         // Update photos for this album with progress tracking
-        const { filesProcessed, filesUploaded, issues } = await syncAlbumPhotosConcurrent(
+        const photoSyncResult = await syncAlbumPhotosConcurrent(
           album.id, 
           albumData.photos, 
           albumPath, 
@@ -221,15 +224,28 @@ async function syncPhotos(jobId: string) {
           addLog
         );
         
-        totalFilesProcessed += filesProcessed;
-        totalFilesUploaded += filesUploaded;
+        // Update videos for this album with progress tracking
+        const videoSyncResult = await syncAlbumVideosConcurrent(
+          album.id, 
+          albumData.videos, 
+          albumPath, 
+          (processed: number, uploaded: number) => {
+            albumProgress[albumPath].videosProcessed = processed;
+            albumProgress[albumPath].videosUploaded = uploaded;
+          },
+          addLog
+        );
+        
+        totalFilesProcessed += photoSyncResult.filesProcessed + videoSyncResult.filesProcessed;
+        totalFilesUploaded += photoSyncResult.filesUploaded + videoSyncResult.filesUploaded;
         
         // Store any issues that occurred during this album sync
-        albumProgress[albumPath].issues = issues;
+        albumProgress[albumPath].issues = [...photoSyncResult.issues, ...videoSyncResult.issues];
         
         // Mark album as synced - files are safe to delete only if all uploads succeeded
-        const allFilesUploaded = filesUploaded === albumData.photos.length;
-        const hasIssues = issues.length > 0;
+        const allFilesUploaded = photoSyncResult.filesUploaded === albumData.photos.length && 
+                                 videoSyncResult.filesUploaded === albumData.videos.length;
+        const hasIssues = photoSyncResult.issues.length > 0 || videoSyncResult.issues.length > 0;
         
         await prisma.album.update({
           where: { id: album.id },
@@ -249,8 +265,8 @@ async function syncPhotos(jobId: string) {
         
         if (!allFilesUploaded || hasIssues) {
           const reason = !allFilesUploaded ? 
-            `Only ${filesUploaded}/${albumData.photos.length} files uploaded successfully` :
-            `Upload completed but with ${issues.length} issue(s)`;
+            `Only ${photoSyncResult.filesUploaded + videoSyncResult.filesUploaded}/${albumData.photos.length + albumData.videos.length} files uploaded successfully` :
+            `Upload completed but with ${photoSyncResult.issues.length + videoSyncResult.issues.length} issue(s)`;
           addLog('warn', `Album "${albumData.name}" requires verification: ${reason}`);
           albumProgress[albumPath].verificationNeeded = reason;
         } else {
@@ -272,7 +288,7 @@ async function syncPhotos(jobId: string) {
           },
         });
         
-        addLog('info', `✅ Album "${albumData.name}" processed (${filesUploaded}/${filesProcessed} files uploaded)`);
+        addLog('info', `✅ Album "${albumData.name}" processed (${photoSyncResult.filesUploaded + videoSyncResult.filesUploaded}/${photoSyncResult.filesProcessed + videoSyncResult.filesProcessed} files uploaded)`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         addLog('error', `Failed to sync album ${albumPath}`, { error: errorMsg });
@@ -824,6 +840,168 @@ async function syncAlbumPhotosConcurrent(
   return { filesProcessed, filesUploaded, issues };
 }
 
+// Video sync function with concurrent processing
+async function syncAlbumVideosConcurrent(
+  albumId: string, 
+  videos: any[], 
+  albumPath: string, 
+  progressCallback?: (processed: number, uploaded: number) => void,
+  logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
+): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
+  // Get batch size from settings
+  const batchSize = await getBatchProcessingSize();
+  logger?.('info', `Using batch processing size for videos: ${batchSize}`);
+
+  // Get existing videos for this album
+  const existingVideos = await prisma.video.findMany({
+    where: { albumId },
+    select: { filename: true, id: true, s3Key: true },
+  });
+
+  const existingFilenames = new Set(existingVideos.map((v: any) => v.filename));
+  const currentFilenames = new Set(videos.map((v: any) => v.filename));
+
+  let filesProcessed = 0;
+  let filesUploaded = 0;
+  const issues: string[] = [];
+
+  // Remove videos that no longer exist
+  const videosToDelete = existingVideos.filter((v: any) => !currentFilenames.has(v.filename));
+  for (const video of videosToDelete) {
+    try {
+      // Delete from S3
+      await s3.deleteObject(video.s3Key);
+      logger?.('info', `Deleted orphaned video from S3: ${video.s3Key}`);
+    } catch (error) {
+      const errorMsg = `Error deleting S3 object ${video.s3Key}: ${error}`;
+      logger?.('error', errorMsg);
+      issues.push(errorMsg);
+    }
+    // Delete from database
+    await prisma.video.delete({ where: { id: video.id } });
+  }
+
+  // Separate new videos from existing ones
+  const newVideos = videos.filter(video => !existingFilenames.has(video.filename));
+  const existingVideosToUpdate = videos.filter(video => existingFilenames.has(video.filename));
+
+  // Process new videos in batches with concurrency
+  if (newVideos.length > 0) {
+    logger?.('info', `Processing ${newVideos.length} new videos in batches of ${batchSize}`);
+    
+    const processNewVideo = async (videoData: any) => {
+      const videoPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath, videoData.filename);
+      const s3Key = s3.generateKey(albumPath, videoData.filename);
+      
+      try {
+        // Check if file already exists in S3 before uploading
+        const existsInS3 = await s3.objectExists(s3Key);
+        
+        if (existsInS3) {
+          logger?.('info', `Video already exists in S3, skipping upload: ${videoData.filename}`);
+        } else {
+          logger?.('info', `Uploading new video: ${videoData.filename}`);
+          
+          // Upload video to S3
+          const fileBuffer = await fs.readFile(videoPath);
+          const mimeType = getContentType(videoData.filename);
+          
+          await s3.uploadFile(s3Key, fileBuffer, mimeType);
+        }
+        
+        // Create database entry
+        const newVideo = await prisma.video.create({
+          data: {
+            albumId,
+            filename: videoData.filename,
+            originalPath: videoPath,
+            s3Key: s3Key,
+            metadata: JSON.stringify(videoData),
+            fileSize: videoData.size,
+            takenAt: videoData.takenAt || null,
+          },
+        });
+        
+        // Generate video thumbnails
+        try {
+          const { generateVideoThumbnails } = await import('@/lib/video-thumbnails');
+          await generateVideoThumbnails({
+            videoId: newVideo.id,
+            originalPath: videoPath,
+            s3Key: s3Key,
+            albumPath: albumPath,
+            filename: videoData.filename,
+          });
+          logger?.('info', `Generated thumbnails for video: ${videoData.filename}`);
+        } catch (thumbnailError) {
+          logger?.('warn', `Failed to generate thumbnails for video ${videoData.filename}: ${thumbnailError instanceof Error ? thumbnailError.message : String(thumbnailError)}`);
+          // Don't fail the entire sync if thumbnail generation fails
+        }
+        
+        logger?.('info', `Successfully uploaded and processed: ${videoData.filename}`);
+        return { success: true, filename: videoData.filename };
+      } catch (error) {
+        const errorMsg = `Failed to upload ${videoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('error', errorMsg);
+        issues.push(errorMsg);
+        return { success: false, filename: videoData.filename, error: errorMsg };
+      }
+    };
+
+    // Process new videos in batches
+    const newVideoResults = await processBatch(newVideos, batchSize, processNewVideo);
+    
+    // Count successful uploads
+    const successfulUploads = newVideoResults.filter(result => result.success).length;
+    filesUploaded += successfulUploads;
+    filesProcessed += newVideos.length;
+
+    // Update progress after new videos
+    if (progressCallback) {
+      progressCallback(filesProcessed, filesUploaded);
+    }
+  }
+
+  // Update existing videos metadata (can be done in parallel as well)
+  if (existingVideosToUpdate.length > 0) {
+    logger?.('info', `Updating metadata for ${existingVideosToUpdate.length} existing videos`);
+    
+    const updateExistingVideo = async (videoData: any) => {
+      try {
+        await prisma.video.updateMany({
+          where: {
+            albumId,
+            filename: videoData.filename,
+          },
+          data: {
+            metadata: JSON.stringify(videoData),
+            fileSize: videoData.size,
+            takenAt: videoData.takenAt || null,
+          },
+        });
+        logger?.('info', `Updated metadata for existing video: ${videoData.filename}`);
+        return { success: true, filename: videoData.filename };
+      } catch (error) {
+        const errorMsg = `Failed to update metadata for ${videoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        logger?.('warn', errorMsg);
+        issues.push(errorMsg);
+        return { success: false, filename: videoData.filename, error: errorMsg };
+      }
+    };
+
+    // Process metadata updates in batches
+    await processBatch(existingVideosToUpdate, Math.min(batchSize * 2, 10), updateExistingVideo);
+    filesProcessed += existingVideosToUpdate.length;
+
+    // Final progress update
+    if (progressCallback) {
+      progressCallback(filesProcessed, filesUploaded);
+    }
+  }
+  
+  return { filesProcessed, filesUploaded, issues };
+}
+
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
   switch (ext) {
@@ -836,6 +1014,24 @@ function getContentType(filename: string): string {
       return 'image/webp';
     case '.gif':
       return 'image/gif';
+    case '.mp4':
+      return 'video/mp4';
+    case '.mov':
+      return 'video/quicktime';
+    case '.avi':
+      return 'video/x-msvideo';
+    case '.mkv':
+      return 'video/x-matroska';
+    case '.webm':
+      return 'video/webm';
+    case '.m4v':
+      return 'video/x-m4v';
+    case '.3gp':
+      return 'video/3gpp';
+    case '.flv':
+      return 'video/x-flv';
+    case '.wmv':
+      return 'video/x-ms-wmv';
     default:
       return 'application/octet-stream';
   }

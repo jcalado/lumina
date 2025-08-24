@@ -27,6 +27,7 @@ model Album {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   photos                Photo[]
+  videos                Video[]
 
   // Composite unique constraint for path-based uniqueness
   @@unique([path, slug])
@@ -49,6 +50,44 @@ model Photo {
 
   @@index([albumId])
   @@map("photos")
+}
+
+model Video {
+  id           String      @id @default(cuid())
+  albumId      String
+  filename     String
+  originalPath String
+  s3Key        String
+  metadata     String?     // Video metadata as JSON string
+  fileSize     Int
+  duration     Float?      // Duration in seconds
+  width        Int?        // Video resolution width
+  height       Int?        // Video resolution height
+  fps          Float?      // Frames per second
+  codec        String?     // Video codec
+  bitrate      Int?        // Bitrate in bps
+  takenAt      DateTime?   // from metadata
+  posterFrame  String?     // S3 key for poster frame image
+  createdAt    DateTime    @default(now())
+  album        Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  thumbnails   VideoThumbnail[]
+
+  @@index([albumId])
+  @@map("videos")
+}
+
+model VideoThumbnail {
+  id      String        @id @default(cuid())
+  videoId String
+  size    ThumbnailSize
+  s3Key   String
+  width   Int
+  height  Int
+  video   Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, size])
+  @@index([videoId])
+  @@map("video_thumbnails")
 }
 
 model Thumbnail {
