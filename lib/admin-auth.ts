@@ -5,7 +5,7 @@ import { NextResponse } from "next/server"
 export async function requireAdmin() {
   const session = await getServerSession(authOptions)
   
-  if (!session || session.user.role !== "admin") {
+  if (!session || !["admin", "superadmin"].includes(session.user.role)) {
     return NextResponse.json(
       { error: "Unauthorized - Admin access required" },
       { status: 401 }
@@ -15,7 +15,25 @@ export async function requireAdmin() {
   return session
 }
 
+export async function requireSuperAdmin() {
+  const session = await getServerSession(authOptions)
+  
+  if (!session || session.user.role !== "superadmin") {
+    return NextResponse.json(
+      { error: "Unauthorized - Superadmin access required" },
+      { status: 401 }
+    )
+  }
+  
+  return session
+}
+
 export async function isAdmin() {
   const session = await getServerSession(authOptions)
-  return session?.user.role === "admin"
+  return session && ["admin", "superadmin"].includes(session.user.role)
+}
+
+export async function isSuperAdmin() {
+  const session = await getServerSession(authOptions)
+  return session?.user.role === "superadmin"
 }

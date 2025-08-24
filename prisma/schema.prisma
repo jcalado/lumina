@@ -124,9 +124,31 @@ model SiteSettings {
   @@map("site_settings")
 }
 
+model AdminUser {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String
+  password  String    // bcrypt hashed
+  role      AdminRole @default(ADMIN)
+  enabled   Boolean   @default(true)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   // ID of admin who created this user
+  creator   AdminUser? @relation("AdminUserCreatedBy", fields: [createdBy], references: [id])
+  created   AdminUser[] @relation("AdminUserCreatedBy")
+
+  @@map("admin_users")
+}
+
 enum Status {
   PUBLIC
   PRIVATE
+}
+
+enum AdminRole {
+  SUPERADMIN
+  ADMIN
 }
 
 enum SyncStatus {

@@ -10,7 +10,8 @@ import {
   BarChart3,
   RefreshCw,
   Activity,
-  FileText
+  FileText,
+  Users
 } from "lucide-react"
 
 const navigationItems = [
@@ -43,6 +44,11 @@ const navigationItems = [
     name: "Analytics",
     href: "/admin/analytics",
     icon: BarChart3,
+  },
+  {
+    name: "Users",
+    href: "/admin/users",
+    icon: Users,
   },
   {
     name: "Settings",

@@ -1,6 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,40 +17,45 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        // Check against admin credentials from environment
-        const adminEmail = process.env.ADMIN_EMAIL
-        const adminPassword = process.env.ADMIN_PASSWORD
+        try {
+          // Find admin user in database
+          const adminUser = await prisma.adminUser.findUnique({
+            where: {
+              email: credentials.email,
+            },
+          })
 
-        if (!adminEmail || !adminPassword) {
-          console.error("Admin credentials not configured in environment variables")
+          if (!adminUser) {
+            return null
+          }
+
+          // Check if user is enabled
+          if (!adminUser.enabled) {
+            return null
+          }
+
+          // Verify password
+          const isValidPassword = await bcrypt.compare(credentials.password, adminUser.password)
+
+          if (!isValidPassword) {
+            return null
+          }
+
+          // Update last login timestamp
+          await prisma.adminUser.update({
+            where: { id: adminUser.id },
+            data: { lastLogin: new Date() },
+          })
+
+          return {
+            id: adminUser.id,
+            email: adminUser.email,
+            name: adminUser.name,
+            role: adminUser.role.toLowerCase(), // Convert to lowercase for consistency
+          }
+        } catch (error) {
+          console.error("Authentication error:", error)
           return null
-        }
-
-        // Verify email
-        if (credentials.email !== adminEmail) {
-          return null
-        }
-
-        // Verify password - check if it's already hashed or plain text
-        let isValidPassword = false
-        
-        if (adminPassword.startsWith("$2")) {
-          // Password is already hashed
-          isValidPassword = await bcrypt.compare(credentials.password, adminPassword)
-        } else {
-          // Password is plain text in env (for development)
-          isValidPassword = credentials.password === adminPassword
-        }
-
-        if (!isValidPassword) {
-          return null
-        }
-
-        return {
-          id: "admin",
-          email: adminEmail,
-          name: "Admin",
-          role: "admin"
         }
       }
     })
