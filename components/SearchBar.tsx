@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+
 
 interface SearchResult {
   id: string;
@@ -34,6 +36,7 @@ export function SearchBar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const t = useTranslations('search');
 
   // Debounced search
   useEffect(() => {
@@ -143,7 +146,7 @@ export function SearchBar() {
         <Input
           ref={inputRef}
           type="text"
-          placeholder="Search albums..."
+          placeholder={t('search_albums_placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {

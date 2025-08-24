@@ -78,5 +78,8 @@
             "MB": "MB",
             "GB": "GB"
         }
+    },
+    "search": {
+        "search_albums_placeholder": "Procurar álbuns..."
     }
 }
