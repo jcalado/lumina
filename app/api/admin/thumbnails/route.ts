@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateMissingThumbnails, reprocessAllThumbnails } from '@/lib/thumbnails';
 import { getBatchProcessingSize } from '@/lib/settings';
+import { processThumbnailJobParallel } from '@/scripts/thumbnail-parallel';
 
 interface ThumbnailJob {
   id: string;
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Initialize running job tracking from database
     await initializeRunningJobId();
     
-    const { action } = await request.json();
+    const { action, parallel } = await request.json();
 
     if (action === 'start') {
       // First, check for any actual running jobs in the database
@@ -142,6 +143,11 @@ export async function POST(request: NextRequest) {
         runningJobId = null;
       }
 
+      // Choose processing method based on parallel parameter
+      const useParallel = parallel === true;
+      
+      console.log(`Starting thumbnail job with ${useParallel ? 'PARALLEL' : 'SERIAL'} processing`);
+
       // Get count of photos without thumbnails
       const photosWithoutThumbnails = await prisma.photo.findMany({
         where: {
@@ -153,7 +159,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Try to create new job, but handle case where table doesn't exist
-      let job = null;
+      let job: any = null;
       try {
         job = await (prisma as any).thumbnailJob?.create({
           data: {
@@ -165,7 +171,15 @@ export async function POST(request: NextRequest) {
         if (job) {
           runningJobId = job.id;
           // Start background processing
-          processJobInBackground(job.id);
+          if (useParallel) {
+            // Use parallel processing with worker threads
+            setImmediate(() => {
+              processThumbnailJobParallel(job.id);
+            });
+          } else {
+            // Use original serial processing
+            processJobInBackground(job.id);
+          }
         }
       } catch (error) {
         console.log('ThumbnailJob table not available yet, starting direct processing');
@@ -190,7 +204,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: 'Thumbnail job started',
+        message: `Thumbnail job started successfully (${useParallel ? 'parallel' : 'serial'} processing)`,
+        processingMode: useParallel ? 'parallel' : 'serial',
         job: job ? {
           ...job,
           startedAt: job.startedAt?.toISOString() || null,

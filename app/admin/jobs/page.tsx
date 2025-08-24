@@ -69,6 +69,7 @@ export default function AdminJobsPage() {
   const [thumbnailJobLoading, setThumbnailJobLoading] = useState(false)
   const [videoThumbnailJobLoading, setVideoThumbnailJobLoading] = useState(false)
   const [useParallelProcessing, setUseParallelProcessing] = useState(true)
+  const [useThumbnailParallelProcessing, setUseThumbnailParallelProcessing] = useState(true)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -243,13 +244,14 @@ export default function AdminJobsPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "start" })
+        body: JSON.stringify({ action: "start", parallel: useThumbnailParallelProcessing })
       })
 
       if (response.ok) {
+        const data = await response.json()
         toast({
           title: "Success",
-          description: "Thumbnail processing started"
+          description: `Thumbnail processing started (${data.processingMode || 'serial'} mode)`
         })
         
         // Refresh job data immediately
@@ -1110,6 +1112,28 @@ export default function AdminJobsPage() {
 
             {/* Action Buttons */}
             <div className="space-y-4 pt-4 border-t">
+              {/* Processing Options */}
+              <div className="border rounded-lg p-4">
+                <h5 className="font-medium mb-3 text-sm text-muted-foreground">Processing Options</h5>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="thumbnail-parallel-processing"
+                      checked={useThumbnailParallelProcessing}
+                      onChange={(e) => setUseThumbnailParallelProcessing(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <label htmlFor="thumbnail-parallel-processing" className="text-sm font-medium">
+                      Use parallel processing for thumbnails (recommended)
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Parallel processing utilizes {Math.max(1, navigator.hardwareConcurrency - 1)} CPU cores for faster thumbnail generation
+                  </p>
+                </div>
+              </div>
+              
               {/* Photo Thumbnails Section */}
               <div className="border rounded-lg p-4">
                 <h5 className="font-medium mb-3 text-sm text-muted-foreground">Photo Thumbnails</h5>
