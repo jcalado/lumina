@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,17 +31,22 @@ export async function GET(request: NextRequest) {
     ` as any[];
 
     // Transform the results to include additional metadata
-    const searchResults = albums.map((album: any) => ({
-      id: album.id,
-      path: album.path,
-      slug: album.slug,
-      name: album.name,
-      description: album.description,
-      createdAt: album.createdAt,
-      updatedAt: album.updatedAt,
-      photoCount: Number(album.photoCount),
-      isSubAlbum: album.path.includes('/'),
-      slugPath: album.slug
+    const searchResults = await Promise.all(albums.map(async (album: any) => {
+      // Convert the path to proper slug path for navigation
+      const slugPath = await pathToSlugPath(album.path);
+      
+      return {
+        id: album.id,
+        path: album.path,
+        slug: album.slug,
+        name: album.name,
+        description: album.description,
+        createdAt: album.createdAt,
+        updatedAt: album.updatedAt,
+        photoCount: Number(album.photoCount),
+        isSubAlbum: album.path.includes('/'),
+        slugPath: slugPath
+      };
     }));
 
     return NextResponse.json({

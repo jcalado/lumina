@@ -113,8 +113,8 @@ export function SearchBar() {
   }, []);
 
   const handleSelectResult = (result: SearchResult) => {
-    const albumPath = result.isSubAlbum ? result.path : result.slug;
-    router.push(`/albums/${albumPath}`);
+    // Use the slugPath for navigation, which is the proper URL-friendly path
+    router.push(`/albums/${result.slugPath}`);
     setQuery('');
     setIsOpen(false);
     setSelectedIndex(-1);
