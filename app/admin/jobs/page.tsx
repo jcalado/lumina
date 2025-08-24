@@ -44,36 +44,50 @@ interface ThumbnailStats {
   totalPhotos: number
   photosWithThumbnails: number
   photosWithoutThumbnails: number
+  totalPhotoThumbnails: number
+  photoCompletionPercentage: number
+  totalVideos: number
+  videosWithThumbnails: number
+  videosWithoutThumbnails: number
+  totalVideoThumbnails: number
+  videoCompletionPercentage: number
+  totalMediaItems: number
+  totalMediaWithThumbnails: number
+  totalMediaWithoutThumbnails: number
   totalThumbnails: number
-  completionPercentage: number
+  overallCompletionPercentage: number
   lastCompletedJob?: ThumbnailJob
 }
 
 export default function AdminJobsPage() {
   const [blurhashJob, setBlurhashJob] = useState<BlurhashJob | null>(null)
   const [thumbnailJob, setThumbnailJob] = useState<ThumbnailJob | null>(null)
+  const [videoThumbnailJob, setVideoThumbnailJob] = useState<ThumbnailJob | null>(null)
   const [jobStats, setJobStats] = useState<JobStats | null>(null)
   const [thumbnailStats, setThumbnailStats] = useState<ThumbnailStats | null>(null)
   const [blurhashJobLoading, setBlurhashJobLoading] = useState(false)
   const [thumbnailJobLoading, setThumbnailJobLoading] = useState(false)
+  const [videoThumbnailJobLoading, setVideoThumbnailJobLoading] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchBlurhashJobs()
     fetchThumbnailJobs()
+    fetchVideoThumbnailJobs()
     fetchJobStats()
     fetchThumbnailStats()
     
     // Poll for job updates every 3 seconds if there's a running job
     const interval = setInterval(() => {
-      if (blurhashJob?.status === 'RUNNING' || thumbnailJob?.status === 'RUNNING') {
+      if (blurhashJob?.status === 'RUNNING' || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING') {
         fetchBlurhashJobs()
         fetchThumbnailJobs()
+        fetchVideoThumbnailJobs()
       }
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [blurhashJob?.status, thumbnailJob?.status])
+  }, [blurhashJob?.status, thumbnailJob?.status, videoThumbnailJob?.status])
 
   const fetchBlurhashJobs = async () => {
     try {
@@ -102,6 +116,20 @@ export default function AdminJobsPage() {
       }
     } catch (error) {
       console.error('Error fetching thumbnail jobs:', error)
+    }
+  }
+
+  const fetchVideoThumbnailJobs = async () => {
+    try {
+      const response = await fetch("/api/admin/video-thumbnails")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.latestJob) {
+          setVideoThumbnailJob(data.latestJob) // Get the latest job
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching video thumbnail jobs:', error)
     }
   }
 
@@ -352,6 +380,118 @@ export default function AdminJobsPage() {
       })
     } finally {
       setThumbnailJobLoading(false)
+    }
+  }
+
+  // Video thumbnail handlers
+  const handleStartVideoThumbnailJob = async () => {
+    setVideoThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/video-thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "start" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Video thumbnail processing started"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchVideoThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to start video thumbnail job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start video thumbnail job",
+        variant: "destructive"
+      })
+    } finally {
+      setVideoThumbnailJobLoading(false)
+    }
+  }
+
+  const handleStopVideoThumbnailJob = async () => {
+    setVideoThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/video-thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "stop" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Video thumbnail processing stop requested"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchVideoThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to stop video thumbnail job")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to stop video thumbnail job",
+        variant: "destructive"
+      })
+    } finally {
+      setVideoThumbnailJobLoading(false)
+    }
+  }
+
+  const handleReprocessVideoThumbnails = async () => {
+    setVideoThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/video-thumbnails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "reprocess" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "All video thumbnails are being reprocessed. This may take a while."
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchVideoThumbnailJobs()
+          fetchThumbnailStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to start video thumbnail reprocessing")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start video thumbnail reprocessing",
+        variant: "destructive"
+      })
+    } finally {
+      setVideoThumbnailJobLoading(false)
     }
   }
 
@@ -652,27 +792,35 @@ export default function AdminJobsPage() {
               {thumbnailJob && getStatusBadge(thumbnailJob.status)}
             </CardTitle>
             <CardDescription>
-              Background thumbnail processing and optimization for fast image loading
+              Background thumbnail processing and optimization for photos and videos for fast media loading
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Job Statistics Overview */}
             {thumbnailStats && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-primary">{thumbnailStats.totalPhotos}</div>
                   <div className="text-sm text-muted-foreground">Total Photos</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">{thumbnailStats.photosWithThumbnails}</div>
-                  <div className="text-sm text-muted-foreground">With Thumbnails</div>
+                  <div className="text-sm text-muted-foreground">Photos w/ Thumbs</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600">{thumbnailStats.photosWithoutThumbnails}</div>
-                  <div className="text-sm text-muted-foreground">Remaining</div>
+                  <div className="text-2xl font-bold text-blue-600">{thumbnailStats.totalVideos}</div>
+                  <div className="text-sm text-muted-foreground">Total Videos</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{thumbnailStats.totalThumbnails}</div>
+                  <div className="text-2xl font-bold text-green-600">{thumbnailStats.videosWithThumbnails}</div>
+                  <div className="text-sm text-muted-foreground">Videos w/ Thumbs</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-600">{thumbnailStats.totalMediaWithoutThumbnails}</div>
+                  <div className="text-sm text-muted-foreground">Total Remaining</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">{thumbnailStats.totalThumbnails}</div>
                   <div className="text-sm text-muted-foreground">Total Thumbnails</div>
                 </div>
               </div>
@@ -798,6 +946,120 @@ export default function AdminJobsPage() {
               </div>
             )}
 
+            {/* Video Job Status */}
+            {videoThumbnailJob && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Current Video Job Status</h4>
+                  <span className="text-sm text-muted-foreground">
+                    Started: {formatDate(videoThumbnailJob.startedAt)}
+                  </span>
+                </div>
+                
+                {videoThumbnailJob.status === 'RUNNING' && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span>Progress:</span>
+                      <span className="font-medium">{videoThumbnailJob.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div 
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                        style={{ width: `${videoThumbnailJob.progress}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Processed:</span>
+                        <div className="font-medium">{videoThumbnailJob.processedPhotos} / {videoThumbnailJob.totalPhotos}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Created:</span>
+                        <div className="font-medium">{videoThumbnailJob.thumbnailsCreated} thumbnails</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Remaining:</span>
+                        <div className="font-medium">{videoThumbnailJob.totalPhotos - videoThumbnailJob.processedPhotos}</div>
+                      </div>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Duration:</span>
+                      <span className="ml-2 font-medium">
+                        {formatDuration(videoThumbnailJob.startedAt, null)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {videoThumbnailJob.status === 'COMPLETED' && (
+                  <div className="space-y-2 p-4 border rounded-lg bg-green-50">
+                    <div className="flex items-center text-green-700">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Video Job Completed Successfully</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm text-green-700">
+                      <div>
+                        <span>Processed:</span>
+                        <span className="ml-2 font-medium">{videoThumbnailJob.processedPhotos} videos</span>
+                      </div>
+                      <div>
+                        <span>Created:</span>
+                        <span className="ml-2 font-medium">{videoThumbnailJob.thumbnailsCreated} thumbnails</span>
+                      </div>
+                      <div>
+                        <span>Duration:</span>
+                        <span className="ml-2 font-medium">
+                          {formatDuration(videoThumbnailJob.startedAt, videoThumbnailJob.completedAt)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-green-700">
+                      <span>Completed:</span>
+                      <span className="ml-2">{formatDate(videoThumbnailJob.completedAt)}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {videoThumbnailJob.status === 'FAILED' && (
+                  <div className="space-y-2 p-4 border rounded-lg bg-red-50">
+                    <div className="flex items-center text-red-700">
+                      <XCircle className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Video Job Failed</span>
+                    </div>
+                    <div className="text-sm text-red-700">
+                      <span>Failed at:</span>
+                      <span className="ml-2">{formatDate(videoThumbnailJob.completedAt)}</span>
+                    </div>
+                    {videoThumbnailJob.errors && (
+                      <div className="text-sm text-red-700">
+                        <span>Errors:</span>
+                        <div className="mt-1 p-2 bg-red-100 rounded text-xs font-mono">
+                          {JSON.parse(videoThumbnailJob.errors).slice(0, 3).map((error: string, index: number) => (
+                            <div key={index}>{error}</div>
+                          ))}
+                          {JSON.parse(videoThumbnailJob.errors).length > 3 && (
+                            <div>... and {JSON.parse(videoThumbnailJob.errors).length - 3} more errors</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {videoThumbnailJob.status === 'PENDING' && (
+                  <div className="p-4 border rounded-lg bg-yellow-50">
+                    <div className="flex items-center text-yellow-700">
+                      <Clock className="h-4 w-4 mr-2" />
+                      <span className="font-medium">Video Job Pending</span>
+                    </div>
+                    <div className="text-sm text-yellow-700 mt-1">
+                      Waiting to start video processing...
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Last Completed Job Summary */}
             {thumbnailStats?.lastCompletedJob && thumbnailStats.lastCompletedJob.id !== thumbnailJob?.id && (
               <div className="border-t pt-4">
@@ -826,89 +1088,171 @@ export default function AdminJobsPage() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button
-                onClick={handleStartThumbnailJob}
-                disabled={thumbnailJobLoading || thumbnailJob?.status === 'RUNNING'}
-                className="flex items-center space-x-2"
-              >
-                <Play className="h-4 w-4" />
-                <span>
-                  {thumbnailJob?.status === 'RUNNING' 
-                    ? 'Processing...' 
-                    : thumbnailStats?.photosWithoutThumbnails === 0
-                    ? 'Reprocess All Photos'
-                    : `Process ${thumbnailStats?.photosWithoutThumbnails || 0} Remaining Photos`
-                  }
-                </span>
-              </Button>
-
-              {thumbnailJob?.status === 'RUNNING' && (
-                <Button
-                  onClick={handleStopThumbnailJob}
-                  disabled={thumbnailJobLoading}
-                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
-                >
-                  <Pause className="h-4 w-4" />
-                  <span>Stop Processing</span>
-                </Button>
-              )}
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+            <div className="space-y-4 pt-4 border-t">
+              {/* Photo Thumbnails Section */}
+              <div className="border rounded-lg p-4">
+                <h5 className="font-medium mb-3 text-sm text-muted-foreground">Photo Thumbnails</h5>
+                <div className="flex gap-3 flex-wrap">
                   <Button
-                    disabled={thumbnailJobLoading || thumbnailJob?.status === 'RUNNING'}
-                    className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white"
+                    onClick={handleStartThumbnailJob}
+                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                    className="flex items-center space-x-2"
+                  >
+                    <Play className="h-4 w-4" />
+                    <span>
+                      {thumbnailJob?.status === 'RUNNING' 
+                        ? 'Processing Photos...' 
+                        : thumbnailStats?.photosWithoutThumbnails === 0
+                        ? 'Reprocess All Photos'
+                        : `Process ${thumbnailStats?.photosWithoutThumbnails || 0} Photos`
+                      }
+                    </span>
+                  </Button>
+
+                  {thumbnailJob?.status === 'RUNNING' && (
+                    <Button
+                      onClick={handleStopThumbnailJob}
+                      disabled={thumbnailJobLoading}
+                      className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      <Pause className="h-4 w-4" />
+                      <span>Stop Photos</span>
+                    </Button>
+                  )}
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Reprocess All Photos</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reprocess All Photo Thumbnails</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to reprocess all photo thumbnails? This will:
+                          <br />
+                          • Delete all existing photo thumbnails from storage
+                          <br />
+                          • Generate new thumbnails for all {thumbnailStats?.totalPhotos || 0} photos
+                          <br />
+                          <br />
+                          This operation may take a long time and cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleReprocessThumbnails}
+                          className="bg-orange-600 hover:bg-orange-700"
+                        >
+                          Reprocess Photo Thumbnails
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+
+              {/* Video Thumbnails Section */}
+              <div className="border rounded-lg p-4">
+                <h5 className="font-medium mb-3 text-sm text-muted-foreground">Video Thumbnails</h5>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    onClick={handleStartVideoThumbnailJob}
+                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                    className="flex items-center space-x-2"
+                  >
+                    <Play className="h-4 w-4" />
+                    <span>
+                      {videoThumbnailJob?.status === 'RUNNING' 
+                        ? 'Processing Videos...' 
+                        : thumbnailStats?.videosWithoutThumbnails === 0
+                        ? 'Reprocess All Videos'
+                        : `Process ${thumbnailStats?.videosWithoutThumbnails || 0} Videos`
+                      }
+                    </span>
+                  </Button>
+
+                  {videoThumbnailJob?.status === 'RUNNING' && (
+                    <Button
+                      onClick={handleStopVideoThumbnailJob}
+                      disabled={videoThumbnailJobLoading}
+                      className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      <Pause className="h-4 w-4" />
+                      <span>Stop Videos</span>
+                    </Button>
+                  )}
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                        className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Reprocess All Videos</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reprocess All Video Thumbnails</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to reprocess all video thumbnails? This will:
+                          <br />
+                          • Delete all existing video thumbnails from storage
+                          <br />
+                          • Generate new thumbnails for all {thumbnailStats?.totalVideos || 0} videos
+                          <br />
+                          <br />
+                          This operation may take a long time and cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleReprocessVideoThumbnails}
+                          className="bg-orange-600 hover:bg-orange-700"
+                        >
+                          Reprocess Video Thumbnails
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+
+              {/* Global Actions */}
+              <div className="border rounded-lg p-4">
+                <h5 className="font-medium mb-3 text-sm text-muted-foreground">System Actions</h5>
+                <div className="flex gap-3 flex-wrap">
+                  <Button
+                    onClick={handleCleanupJobs}
+                    disabled={thumbnailJobLoading || videoThumbnailJobLoading}
+                    className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white"
                   >
                     <Trash2 className="h-4 w-4" />
-                    <span>Reprocess All Thumbnails</span>
+                    <span>Cleanup Stuck Jobs</span>
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Reprocess All Thumbnails</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to reprocess all thumbnails? This will:
-                      <br />
-                      • Delete all existing thumbnails from storage
-                      <br />
-                      • Generate new thumbnails for all {thumbnailStats?.totalPhotos || 0} photos
-                      <br />
-                      <br />
-                      This operation may take a long time and cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleReprocessThumbnails}
-                      className="bg-orange-600 hover:bg-orange-700"
-                    >
-                      Reprocess All Thumbnails
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-              
-              <Button
-                onClick={handleCleanupJobs}
-                disabled={thumbnailJobLoading}
-                className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Cleanup Stuck Jobs</span>
-              </Button>
-              
-              <Button
-                onClick={() => {
-                  fetchThumbnailJobs()
-                  fetchThumbnailStats()
-                }}
-                className="flex items-center space-x-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-              >
-                <RotateCcw className="h-4 w-4" />
-                <span>Refresh</span>
-              </Button>
+                  
+                  <Button
+                    onClick={() => {
+                      fetchThumbnailJobs()
+                      fetchVideoThumbnailJobs()
+                      fetchThumbnailStats()
+                    }}
+                    className="flex items-center space-x-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Refresh</span>
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
