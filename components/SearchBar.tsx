@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Clock, Folder, FolderOpen } from 'lucide-react';
+import { Search, Folder } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
@@ -121,13 +121,6 @@ export function SearchBar() {
     inputRef.current?.blur();
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short' 
-    });
-  };
-
   const highlightMatch = (text: string, searchQuery: string) => {
     if (!searchQuery) return text;
     
@@ -181,11 +174,7 @@ export function SearchBar() {
                 onClick={() => handleSelectResult(result)}
               >
                 <div className="flex-shrink-0 mt-0.5">
-                  {result.isSubAlbum ? (
-                    <FolderOpen className="h-4 w-4 text-blue-500" />
-                  ) : (
-                    <Folder className="h-4 w-4 text-yellow-600" />
-                  )}
+                  <Folder className="h-4 w-4 text-gray-500" />
                 </div>
                 
                 <div className="flex-grow min-w-0">
@@ -198,21 +187,6 @@ export function SearchBar() {
                       {highlightMatch(result.description, query)}
                     </div>
                   )}
-                  
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <span>{result.photoCount} photos</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(result.updatedAt)}
-                    </span>
-                    {result.isSubAlbum && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                        Sub-album
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
             ))}
