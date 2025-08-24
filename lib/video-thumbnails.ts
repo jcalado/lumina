@@ -6,11 +6,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
-// Video thumbnail sizes (same as photo thumbnails)
+// Video thumbnail sizes (small is square, medium/large maintain aspect ratio)
 export const VIDEO_THUMBNAIL_SIZES = {
   SMALL: { width: 300, height: 300, size: 'SMALL' },
-  MEDIUM: { width: 800, height: 800, size: 'MEDIUM' },
-  LARGE: { width: 1200, height: 1200, size: 'LARGE' },
+  MEDIUM: { width: 800, height: 450, size: 'MEDIUM' },
+  LARGE: { width: 1200, height: 675, size: 'LARGE' },
 } as const;
 
 interface VideoThumbnailJobData {
@@ -27,13 +27,17 @@ async function extractVideoFrame(videoPath: string, outputPath: string, timeOffs
     // Check if ffmpeg is available
     const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
     
+    console.log(`Extracting frame from: ${videoPath}`);
+    console.log(`Output frame to: ${outputPath}`);
+    
     ffmpeg(videoPath)
       .setFfmpegPath(ffmpegPath)
       .screenshots({
         timestamps: [timeOffset],
         filename: path.basename(outputPath),
         folder: path.dirname(outputPath),
-        size: '1920x1080' // Extract at high resolution, we'll resize later
+        // Remove size parameter to preserve original aspect ratio
+        // Let FFmpeg extract the frame at original dimensions
       })
       .on('end', () => {
         console.log(`Video frame extracted to: ${outputPath}`);
@@ -55,8 +59,8 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
     
     const s3Service = new S3Service();
     const tempDir = os.tmpdir();
-    const tempVideoPath = path.join(tempDir, `temp_video_${Date.now()}_${filename}`);
-    const tempFramePath = path.join(tempDir, `temp_frame_${Date.now()}.jpg`);
+    const tempVideoPath = path.join(tempDir, `temp_video_${videoId}_${Date.now()}_${filename}`);
+    const tempFramePath = path.join(tempDir, `temp_frame_${videoId}_${Date.now()}.jpg`);
     
     let videoBuffer: Buffer;
     
@@ -86,6 +90,7 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
       // Check if frame was created
       await fs.access(tempFramePath);
       const frameBuffer = await fs.readFile(tempFramePath);
+      console.log(`Frame extracted: ${frameBuffer.length} bytes from ${filename}`);
       
       // Use Sharp to process the extracted frame like we do for photos
       const sharp = require('sharp');
@@ -102,34 +107,49 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
           // Get original dimensions
           const metadata = await processedImage.metadata();
           
-          // Calculate dimensions maintaining aspect ratio
+          // Calculate dimensions and cropping strategy based on thumbnail size
           const { width: targetWidth, height: targetHeight } = config;
-          let newWidth: number = targetWidth;
-          let newHeight: number = targetHeight;
+          let thumbnailBuffer: Buffer;
+          let finalWidth: number;
+          let finalHeight: number;
           
-          if (metadata.width && metadata.height) {
-            const aspectRatio = metadata.width / metadata.height;
+          if (sizeName === 'SMALL') {
+            // For small thumbnails, create perfect squares using Sharp's cover mode
+            const squareSize = 300; // Always 300x300 for small
             
-            if (aspectRatio > 1) {
-              // Landscape: fit to width
-              newHeight = Math.round(targetWidth / aspectRatio);
-            } else {
-              // Portrait: fit to height
-              newWidth = Math.round(targetHeight * aspectRatio);
-            }
+            // Let Sharp handle all the math - it's designed for this
+            thumbnailBuffer = await processedImage
+              .resize(squareSize, squareSize, {
+                fit: 'cover', // Crop to fill the entire square
+                position: 'attention', // Smart positioning for faces/subjects
+                withoutEnlargement: false
+              })
+              .sharpen()
+              .jpeg({ quality: 90 })
+              .toBuffer();
+            
+            finalWidth = squareSize;
+            finalHeight = squareSize;
+          } else {
+            // For medium and large thumbnails, preserve aspect ratio
+            // Use Sharp's 'inside' fit to ensure the image fits within bounds without cropping
+            thumbnailBuffer = await processedImage
+              .resize(targetWidth, targetHeight, {
+                fit: 'inside', // Preserve aspect ratio, no cropping
+                withoutEnlargement: false
+              })
+              .jpeg({ quality: 85 })
+              .toBuffer();
+            
+            // Get actual dimensions after resize
+            const resizedMetadata = await require('sharp')(thumbnailBuffer).metadata();
+            finalWidth = resizedMetadata.width || targetWidth;
+            finalHeight = resizedMetadata.height || targetHeight;
           }
           
-          // Generate thumbnail buffer
-          const thumbnailBuffer = await processedImage
-            .resize(newWidth, newHeight, {
-              fit: 'inside',
-              withoutEnlargement: true,
-            })
-            .jpeg({ quality: 85 })
-            .toBuffer();
-          
-          // Generate S3 key for video thumbnail (using thumbnail type and adding video prefix)
-          const thumbnailS3Key = `videos/${s3Service.generateKey(albumPath, filename, 'thumbnail')}_${sizeName.toLowerCase()}`;
+          // Generate S3 key for video thumbnail (include video ID for uniqueness)
+          const baseKey = s3Service.generateKey(albumPath, filename, 'thumbnail');
+          const thumbnailS3Key = `videos/thumbnails/${videoId}_${baseKey.split('/').pop()}_${sizeName.toLowerCase()}`;
           
           // Upload to S3
           await s3Service.uploadFile(thumbnailS3Key, thumbnailBuffer, 'image/jpeg');
@@ -140,13 +160,13 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
               videoId,
               size: config.size,
               s3Key: thumbnailS3Key,
-              width: newWidth,
-              height: newHeight,
+              width: finalWidth,
+              height: finalHeight,
             },
           });
           
           thumbnailsCreated.push(videoThumbnail);
-          console.log(`Created ${sizeName} video thumbnail: ${newWidth}x${newHeight}`);
+          console.log(`Created ${sizeName} video thumbnail: ${finalWidth}x${finalHeight}`);
           
         } catch (error) {
           console.error(`Error creating ${sizeName} video thumbnail:`, error);
