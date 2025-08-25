@@ -130,11 +130,10 @@ export default function FaceRecognitionAdminPage() {
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null); // New state for selected person
   
   const [creatingPerson, setCreatingPerson] = useState(false);
-  const [newPersonName, setNewPersonName] = useState('');
   const [deletingPerson, setDeletingPerson] = useState<string | null>(null);
   const [assigneePersonId, setAssigneePersonId] = useState<string | null>(null);
   const [assigningToPerson, setAssigningToPerson] = useState(false);
-  const [assigneeQuery, setAssigneeQuery] = useState('');
+  const [personQuery, setPersonQuery] = useState('');
   const [assigneeResults, setAssigneeResults] = useState<Person[]>([]);
   const [assigneeSearching, setAssigneeSearching] = useState(false);
   const assigneeDebounce = useRef<number | null>(null);
@@ -350,37 +349,30 @@ export default function FaceRecognitionAdminPage() {
       return;
     }
 
-    if (!newPersonName.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a name for the person',
-        variant: 'destructive',
-      });
+    if (!personQuery.trim()) {
+      toast({ title: 'Error', description: 'Please enter a name for the person', variant: 'destructive' });
       return;
     }
 
     try {
       setCreatingPerson(true);
-      const response = await fetch('/api/admin/people/create-from-faces', {
+    const response = await fetch('/api/admin/people/create-from-faces', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: newPersonName.trim(),
+      name: personQuery.trim(),
           faceIds: Array.from(selectedFaces),
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: 'Success',
-          description: data.message || `Created person "${newPersonName}" with ${selectedFaces.size} faces`,
-        });
+  toast({ title: 'Success', description: data.message || `Created person "${personQuery}" with ${selectedFaces.size} faces` });
         
         // Reset form
-        setNewPersonName('');
+  setPersonQuery('');
         setSelectedFaces(new Set());
         
         // Reload data
@@ -390,7 +382,7 @@ export default function FaceRecognitionAdminPage() {
         const error = await response.json();
         toast({
           title: 'Error',
-          description: error.error || 'Failed to create person',
+    description: error.error || 'Failed to create person',
           variant: 'destructive',
         });
       }
@@ -817,12 +809,8 @@ export default function FaceRecognitionAdminPage() {
                   <div className="flex items-center gap-2 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-yellow-600" />
                     <div>
-                      <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                        Face Recognition Required
-                      </p>
-                      <p className="text-sm text-yellow-600 dark:text-yellow-300">
-                        Enable face recognition to manage people and faces
-                      </p>
+                      <p className="font-medium text-yellow-800 dark:text-yellow-200">Face Recognition Required</p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-300">Enable face recognition to manage people and faces</p>
                     </div>
                   </div>
                 ) : peopleLoading ? (
@@ -834,144 +822,55 @@ export default function FaceRecognitionAdminPage() {
                   <div className="text-center py-8">
                     <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Start processing photos to detect and group faces into people
-                    </p>
-                    <Button onClick={startProcessing} className="flex items-center gap-2">
-                      <Play className="h-4 w-4" />
-                      Start Face Detection
-                    </Button>
+                    <p className="text-muted-foreground mb-4">Start processing photos to detect and group faces into people</p>
+                    <Button onClick={startProcessing} className="flex items-center gap-2"><Play className="h-4 w-4" /> Start Face Detection</Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}
-                        </p>
-                        <Input
-                          placeholder="Filter people by name..."
-                          value={peopleSearch}
-                          onChange={(e) => { setPeopleSearch(e.target.value); }}
-                          className="max-w-xs"
-                        />
-                        <Button
-                          variant={peopleSort === 'alpha' ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => { setPeopleSort(prev => prev === 'alpha' ? 'default' : 'alpha'); }}
-                        >
-                          A–Z
-                        </Button>
-                        <Button
-                          onClick={mergeSelectedPeople}
-                          variant="destructive"
-                          size="sm"
-                          disabled={selectedPeople.size < 2}
-                          className="ml-2"
-                        >
-                          Merge Selected ({selectedPeople.size})
-                        </Button>
+                        <p className="text-sm text-muted-foreground">Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}</p>
+                        <Input placeholder="Filter people by name..." value={peopleSearch} onChange={(e) => { setPeopleSearch(e.target.value); }} className="max-w-xs" />
+                        <Button variant={peopleSort === 'alpha' ? 'default' : 'outline'} size="sm" onClick={() => { setPeopleSort(prev => prev === 'alpha' ? 'default' : 'alpha'); }}>A–Z</Button>
+                        <Button onClick={mergeSelectedPeople} variant="destructive" size="sm" disabled={selectedPeople.size < 2} className="ml-2">Merge Selected ({selectedPeople.size})</Button>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
-                          <Button
-                            onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }}
-                            variant="outline"
-                            size="sm"
-                            disabled={peopleLoading || ((pagination?.page || page) <= 1)}
-                          >
-                            Prev
-                          </Button>
-                          <Button
-                            onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }}
-                            variant="outline"
-                            size="sm"
-                            disabled={peopleLoading || !(pagination?.hasMore ?? true)}
-                          >
-                            Next
-                          </Button>
+                          <Button onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }} variant="outline" size="sm" disabled={peopleLoading || ((pagination?.page || page) <= 1)}>Prev</Button>
+                          <Button onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }} variant="outline" size="sm" disabled={peopleLoading || !(pagination?.hasMore ?? true)}>Next</Button>
                         </div>
-                        <Button
-                          onClick={() => loadPeople()}
-                          variant="outline"
-                          size="sm"
-                          className="flex items-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          Refresh
-                        </Button>
+                        <Button onClick={() => loadPeople()} variant="outline" size="sm" className="flex items-center gap-2"><Eye className="h-4 w-4" /> Refresh</Button>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {people.map((person) => (
-                        <Card 
-                          key={person.id} 
-                          className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
-                          onClick={() => loadPersonDetails(person.id)} // Click to view details
-                        >
+                        <Card key={person.id} className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => loadPersonDetails(person.id)}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-2">
                               <h4 className="font-medium truncate">{person.name}</h4>
-                              <input
-                                type="checkbox"
-                                checked={selectedPeople.has(person.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  togglePersonSelection(person.id);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
+                              <input type="checkbox" checked={selectedPeople.has(person.id)} onChange={(e) => { e.stopPropagation(); togglePersonSelection(person.id); }} onClick={(e) => e.stopPropagation()} />
                             </div>
 
                             <div className="flex items-start gap-3">
                               {person.previewFace && (
                                 <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                  <img
-                                    src={`/api/faces/${person.previewFace.id}/serve`}
-                                    alt={`${person.name} preview`}
-                                    className="w-full h-full object-cover"
-                                  />
+                                  <img src={`/api/faces/${person.previewFace.id}/serve`} alt={`${person.name} preview`} className="w-full h-full object-cover" />
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                   {person.confirmed ? (
-                                    <Badge variant="default" className="text-xs">
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      OK
-                                    </Badge>
+                                    <Badge variant="default" className="text-xs"><CheckCircle className="h-3 w-3 mr-1" />OK</Badge>
                                   ) : (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      Pending
-                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
                                   )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {person.faceCount} face{person.faceCount !== 1 ? 's' : ''}
-                                </p>
-                                {person.previewFace && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Confidence: {Math.round(person.previewFace.confidence * 100)}%
-                                  </p>
-                                )}
+                                <p className="text-sm text-muted-foreground">{person.faceCount} face{person.faceCount !== 1 ? 's' : ''}</p>
+                                {person.previewFace && (<p className="text-xs text-muted-foreground mt-1">Confidence: {Math.round(person.previewFace.confidence * 100)}%</p>)}
                               </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => { // Prevent click from propagating to card
-                                  e.stopPropagation(); 
-                                  deletePerson(person.id.toString(), person.name);
-                                }}
-                                disabled={deletingPerson === person.id.toString()}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
-                              >
-                                {deletingPerson === person.id.toString() ? (
-                                  <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
+                              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); deletePerson(person.id.toString(), person.name); }} disabled={deletingPerson === person.id.toString()} className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0">
+                                {deletingPerson === person.id.toString() ? (<div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />) : (<Trash2 className="h-4 w-4" />)}
                               </Button>
                             </div>
                           </CardContent>
@@ -982,118 +881,42 @@ export default function FaceRecognitionAdminPage() {
                     {/* Unassigned Faces Section */}
                     <div className="mt-8">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-medium flex items-center gap-2">
-                          <Grid3X3 className="h-5 w-5" />
-                          Unassigned Faces
-                        </h3>
-                        
+                        <h3 className="text-lg font-medium flex items-center gap-2"><Grid3X3 className="h-5 w-5" /> Unassigned Faces</h3>
                       </div>
 
                       <Card>
-                          <CardContent className="p-4">
-                            {unassignedLoading ? (
-                              <div className="text-center py-8">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                                <p className="text-muted-foreground">Loading unassigned faces...</p>
-                              </div>
-                            ) : unassignedFaces.length === 0 ? (
-                              <div className="text-center py-8">
-                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                                <h4 className="font-medium mb-2">All Faces Assigned</h4>
-                                <p className="text-muted-foreground">
-                                  All detected faces have been assigned to people
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-4">
-                                {/* Create/Assign UI moved to floating panel */}
+                        <CardContent className="p-4">
+                          {unassignedLoading ? (
+                            <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div><p className="text-muted-foreground">Loading unassigned faces...</p></div>
+                          ) : unassignedFaces.length === 0 ? (
+                            <div className="text-center py-8"><CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" /><h4 className="font-medium mb-2">All Faces Assigned</h4><p className="text-muted-foreground">All detected faces have been assigned to people</p></div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-sm text-muted-foreground mb-3">Click faces to select them for grouping into a person. Selected: {selectedFaces.size}</p>
+                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                  {unassignedFaces.map((face) => (
+                                    <div key={face.id} className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${selectedFaces.has(face.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`} onClick={() => toggleFaceSelection(face.id)}>
+                                      <div className="aspect-square bg-gray-100"><img src={`/api/faces/${face.id}/serve`} alt={`face-${face.id}`} className="w-full h-full object-cover" /></div>
+                                      {face.ignored && (<div className="absolute top-1 left-1 bg-yellow-100 text-yellow-800 text-xs px-1 rounded">Ignored</div>)}
+                                      <div className="absolute bottom-1 right-1 flex gap-1"><Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); ignoreFace(face.id); }}>Ignore</Button></div>
+                                    </div>
+                                  ))}
+                                </div>
 
-                                {/* Unassigned Faces Grid */}
-                                <div>
-                                  <p className="text-sm text-muted-foreground mb-3">
-                                    Click faces to select them for grouping into a person. Selected: {selectedFaces.size}
-                                  </p>
-                                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                                    {unassignedFaces.map((face) => (
-                                      <div
-                                        key={face.id}
-                                        className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-                                          selectedFaces.has(face.id)
-                                            ? 'border-blue-500 ring-2 ring-blue-200'
-                                            : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                        onClick={() => toggleFaceSelection(face.id)}
-                                      >
-                                        <div className="aspect-square bg-gray-100">
-                                          <img
-                                            src={`/api/faces/${face.id}/serve`}
-                                            alt={`Face from ${face.photo.filename}`}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                        {/* Selection indicator */}
-                                        {selectedFaces.has(face.id) && (
-                                          <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                                            ✓
-                                          </div>
-                                        )}
-                                        {/* Confidence badge */}
-                                        <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                                          {Math.round(face.confidence * 100)}%
-                                        </div>
-                                        {/* Ignore button */}
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="absolute top-1 left-1 text-white bg-black/50 hover:bg-black/70 rounded-full w-6 h-6"
-                                          onClick={(e) => {
-                                            e.stopPropagation(); // Prevent selecting the face
-                                            ignoreFace(face.id);
-                                          }}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  {/* Unassigned pagination controls */}
-                                  <div className="flex items-center justify-between mt-3">
-                                    <div className="text-sm text-muted-foreground">
-                                      Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          const current = unassignedPagination?.page ?? unassignedPage;
-                                          if (current > 1) setUnassignedPage(current - 1);
-                                        }}
-                                        disabled={(unassignedPagination?.page ?? unassignedPage) <= 1}
-                                      >
-                                        Prev
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          const current = unassignedPagination?.page ?? unassignedPage;
-                                          const totalPages = unassignedPagination?.totalPages ?? 1;
-                                          if (current < totalPages) setUnassignedPage(current + 1);
-                                        }}
-                                        disabled={(unassignedPagination?.page ?? unassignedPage) >= (unassignedPagination?.totalPages ?? 1)}
-                                      >
-                                        Next
-                                      </Button>
-                                    </div>
+                                <div className="mt-4 flex items-center justify-between">
+                                  <p className="text-sm text-muted-foreground">Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1} · {unassignedPagination?.total ?? unassignedFaces.length} faces</p>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="sm" disabled={unassignedLoading || ((unassignedPagination?.page ?? unassignedPage) <= 1)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; if (current > 1) setUnassignedPage(current - 1); }}>Prev</Button>
+                                    <Button variant="outline" size="sm" disabled={unassignedLoading || !(unassignedPagination?.hasMore ?? false)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; setUnassignedPage(current + 1); }}>Next</Button>
                                   </div>
                                 </div>
                               </div>
-                            )}
-                          </CardContent>
-                        </Card>
-
-                  </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -1110,78 +933,84 @@ export default function FaceRecognitionAdminPage() {
       </h4>
       <div className="space-y-2">
         <div>
-          <label className="text-xs text-muted-foreground">Person Name</label>
+            <label className="text-xs text-muted-foreground">Person</label>
           <Input
-            placeholder="Enter person name..."
-            value={newPersonName}
-            onChange={(e) => setNewPersonName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') createPersonFromFaces(); }}
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button onClick={createPersonFromFaces} disabled={creatingPerson || selectedFaces.size === 0 || !newPersonName.trim()} className="flex-1">
-            {creatingPerson ? 'Creating...' : 'Create Person'}
-          </Button>
-          <Button variant="outline" onClick={() => { setSelectedFaces(new Set()); setNewPersonName(''); }}>
-            Clear
-          </Button>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground">Assign to existing person</label>
-          <div className="relative">
-            <Input
-              placeholder="Search people by name..."
-              value={assigneeQuery || (assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name || '') : '')}
-              onChange={(e) => {
-                const q = e.target.value;
-                setAssigneeQuery(q);
-                setAssigneePersonId(null);
-                if (assigneeDebounce.current) window.clearTimeout(assigneeDebounce.current);
-                if (!q.trim()) {
-                  setAssigneeResults([]);
-                  setAssigneeSearching(false);
-                  return;
-                }
-                setAssigneeSearching(true);
-                assigneeDebounce.current = window.setTimeout(async () => {
-                  try {
-                    const res = await fetch(`/api/admin/people?search=${encodeURIComponent(q)}&limit=50`);
-                    if (res.ok) {
-                      const data = await res.json();
-                      setAssigneeResults(data.people || []);
-                    } else {
-                      setAssigneeResults([]);
-                    }
-                  } catch (err) {
+            placeholder="Type to find or create a person..."
+            value={personQuery || (assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name || '') : '')}
+            onChange={(e) => {
+              const q = e.target.value;
+              setPersonQuery(q);
+              // selecting a person should clear selected person id when typing
+              setAssigneePersonId(null);
+              if (assigneeDebounce.current) window.clearTimeout(assigneeDebounce.current);
+              if (!q.trim()) {
+                setAssigneeResults([]);
+                setAssigneeSearching(false);
+                return;
+              }
+              setAssigneeSearching(true);
+              assigneeDebounce.current = window.setTimeout(async () => {
+                try {
+                  const res = await fetch(`/api/admin/people?search=${encodeURIComponent(q)}&limit=50`);
+                  if (res.ok) {
+                    const data = await res.json();
+                    setAssigneeResults(data.people || []);
+                  } else {
                     setAssigneeResults([]);
-                  } finally {
-                    setAssigneeSearching(false);
                   }
-                }, 300);
-              }}
-            />
-            {assigneeSearching && <div className="absolute right-2 top-2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
-
-            {assigneeResults.length > 0 && (
-              <ul className="absolute z-50 mt-1 w-full bg-white border rounded shadow max-h-40 overflow-auto">
-                {assigneeResults.map(p => (
-                  <li key={p.id} className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between" onClick={() => { setAssigneePersonId(p.id); setAssigneeQuery(''); setAssigneeResults([]); }}>
-                    <span className="truncate">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">{p.faceCount}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                } catch (err) {
+                  setAssigneeResults([]);
+                } finally {
+                  setAssigneeSearching(false);
+                }
+              }, 300);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                // If an existing person is highlighted/selected, assign; otherwise create
+                if (assigneePersonId) assignSelectedFacesToPerson();
+                else createPersonFromFaces();
+              }
+            }}
+          />
+          {/* Autocomplete dropdown for existing people */}
+          {(assigneeSearching || (assigneeResults && assigneeResults.length > 0)) && (
+            <div className="mt-2 max-h-48 overflow-auto rounded-md border bg-white dark:bg-slate-800">
+              {assigneeSearching ? (
+                <div className="p-2 text-sm text-muted-foreground">Searching...</div>
+              ) : (
+                assigneeResults.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between gap-2 p-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700 ${assigneePersonId === p.id ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
+                    onClick={() => {
+                      setAssigneePersonId(p.id);
+                      setPersonQuery(p.name);
+                      setAssigneeResults([]);
+                    }}
+                  >
+                    <div className="truncate">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">{p.faceCount} face{p.faceCount !== 1 ? 's' : ''}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
+        
         <div className="flex items-center gap-2">
-          <Button onClick={assignSelectedFacesToPerson} disabled={assigningToPerson || selectedFaces.size === 0 || !assigneePersonId} className="flex-1">
-            {assigningToPerson ? 'Assigning...' : (assigneePersonId ? `Assign to ${people.find(p => p.id === assigneePersonId)?.name ?? 'person'}` : 'Assign')}
+          <Button
+            onClick={() => {
+              if (assigneePersonId) assignSelectedFacesToPerson();
+              else createPersonFromFaces();
+            }}
+            disabled={creatingPerson || assigningToPerson || selectedFaces.size === 0 || (!personQuery.trim() && !assigneePersonId)}
+            className="flex-1"
+          >
+            {assigneePersonId ? (assigningToPerson ? 'Assigning...' : `Assign to ${people.find(p => p.id === assigneePersonId)?.name ?? 'person'}`) : (creatingPerson ? 'Creating...' : `Create Person`)}
           </Button>
-          <Button variant="ghost" onClick={() => { setAssigneePersonId(null); setAssigneeQuery(''); setAssigneeResults([]); }}>
+          <Button variant="ghost" onClick={() => { setAssigneePersonId(null); setPersonQuery(''); setAssigneeResults([]); }}>
             Cancel
           </Button>
         </div>
