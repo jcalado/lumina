@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -128,6 +128,10 @@ export default function FaceRecognitionAdminPage() {
   const [deletingPerson, setDeletingPerson] = useState<string | null>(null);
   const [assigneePersonId, setAssigneePersonId] = useState<string | null>(null);
   const [assigningToPerson, setAssigningToPerson] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState('');
+  const [assigneeResults, setAssigneeResults] = useState<Person[]>([]);
+  const [assigneeSearching, setAssigneeSearching] = useState(false);
+  const assigneeDebounce = useRef<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -933,17 +937,62 @@ export default function FaceRecognitionAdminPage() {
                                     {/* Assign to existing person */}
                                     <div className="flex items-end gap-3 mt-3">
                                       <div className="flex-1">
-                                        <label className="text-sm font-medium mb-1 block">Assign selected faces to existing person</label>
-                                        <select
-                                          className="w-full border rounded px-2 py-1"
-                                          value={assigneePersonId ?? ''}
-                                          onChange={(e) => setAssigneePersonId(e.target.value || null)}
-                                        >
-                                          <option value="">-- Select a person --</option>
-                                          {people.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name} ({p.faceCount})</option>
-                                          ))}
-                                        </select>
+                                              <label className="text-sm font-medium mb-1 block">Assign selected faces to existing person</label>
+                                              <div className="relative">
+                                                <Input
+                                                  placeholder="Search people by name..."
+                                                  value={assigneeQuery || (assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name || '') : '')}
+                                                  onChange={(e) => {
+                                                    const q = e.target.value;
+                                                    setAssigneeQuery(q);
+                                                    setAssigneePersonId(null);
+                                                    if (assigneeDebounce.current) window.clearTimeout(assigneeDebounce.current);
+                                                    if (!q.trim()) {
+                                                      setAssigneeResults([]);
+                                                      setAssigneeSearching(false);
+                                                      return;
+                                                    }
+                                                    setAssigneeSearching(true);
+                                                    assigneeDebounce.current = window.setTimeout(async () => {
+                                                      try {
+                                                        const res = await fetch(`/api/admin/people?search=${encodeURIComponent(q)}&limit=50`);
+                                                        if (res.ok) {
+                                                          const data = await res.json();
+                                                          setAssigneeResults(data.people || []);
+                                                        } else {
+                                                          setAssigneeResults([]);
+                                                        }
+                                                      } catch (err) {
+                                                        setAssigneeResults([]);
+                                                      } finally {
+                                                        setAssigneeSearching(false);
+                                                      }
+                                                    }, 300);
+                                                  }}
+                                                />
+                                                {assigneeSearching && (
+                                                  <div className="absolute right-2 top-2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                )}
+
+                                                {assigneeResults.length > 0 && (
+                                                  <ul className="absolute z-20 mt-1 w-full bg-white border rounded shadow max-h-48 overflow-auto">
+                                                    {assigneeResults.map(p => (
+                                                      <li
+                                                        key={p.id}
+                                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between"
+                                                        onClick={() => {
+                                                          setAssigneePersonId(p.id);
+                                                          setAssigneeQuery('');
+                                                          setAssigneeResults([]);
+                                                        }}
+                                                      >
+                                                        <span className="truncate">{p.name}</span>
+                                                        <span className="text-xs text-muted-foreground">{p.faceCount}</span>
+                                                      </li>
+                                                    ))}
+                                                  </ul>
+                                                )}
+                                              </div>
                                       </div>
                                       <Button
                                         onClick={assignSelectedFacesToPerson}
@@ -956,9 +1005,9 @@ export default function FaceRecognitionAdminPage() {
                                             Assigning...
                                           </>
                                         ) : (
-                                          <>
-                                            Assign
-                                          </>
+                                            <>
+                                              Assign to {assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name ?? 'selected person') : 'person'}
+                                            </>
                                         )}
                                       </Button>
                                     </div>

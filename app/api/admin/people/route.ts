@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+function safeParseBoundingBox(value: any) {
+  try {
+    if (value == null) return null;
+    if (typeof value === 'string') return JSON.parse(value);
+    return value;
+  } catch (err) {
+    console.warn('Failed to parse boundingBox:', err);
+    return null;
+  }
+}
+
 // GET: List all people with face counts or unassigned faces
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +49,7 @@ export async function GET(request: NextRequest) {
 
       const formattedFaces = unassignedFaces.map(face => ({
         id: face.id,
-        boundingBox: JSON.parse(face.boundingBox),
+        boundingBox: safeParseBoundingBox(face.boundingBox),
         confidence: face.confidence,
         photo: {
           id: face.photo.id,
@@ -55,9 +66,13 @@ export async function GET(request: NextRequest) {
     const whereClause: any = {};
     
     if (search) {
+      // Note: some Prisma client versions in this repo/runtime don't accept the `mode` option
+      // on string filters. Avoid passing `mode` to prevent server 500 (validation error).
+      // This makes the search DB-default case-sensitivity. If you want case-insensitive
+      // search, regenerate Prisma client / enable `mode: 'insensitive'` after confirming
+      // the runtime Prisma supports it.
       whereClause.name = {
         contains: search,
-        mode: 'insensitive',
       };
     }
     
@@ -109,13 +124,13 @@ export async function GET(request: NextRequest) {
       faceCount: person._count.faces,
       previewFace: person.faces[0] ? {
         id: person.faces[0].id,
-        boundingBox: JSON.parse(person.faces[0].boundingBox),
+        boundingBox: safeParseBoundingBox(person.faces[0].boundingBox),
         confidence: person.faces[0].confidence,
-        photo: {
+        photo: person.faces[0].photo ? {
           id: person.faces[0].photo.id,
           filename: person.faces[0].photo.filename,
           thumbnails: person.faces[0].photo.thumbnails,
-        },
+        } : null,
       } : null,
       createdAt: person.createdAt,
       updatedAt: person.updatedAt,
