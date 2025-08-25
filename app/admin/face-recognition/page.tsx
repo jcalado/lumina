@@ -117,6 +117,8 @@ export default function FaceRecognitionAdminPage() {
     totalPages: number;
     hasMore: boolean;
   } | null>(null);
+  const [peopleSearch, setPeopleSearch] = useState('');
+  const [peopleSort, setPeopleSort] = useState<'default' | 'alpha'>('default');
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
@@ -132,6 +134,7 @@ export default function FaceRecognitionAdminPage() {
   const [assigneeResults, setAssigneeResults] = useState<Person[]>([]);
   const [assigneeSearching, setAssigneeSearching] = useState(false);
   const assigneeDebounce = useRef<number | null>(null);
+  const peopleSearchDebounce = useRef<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -145,6 +148,18 @@ export default function FaceRecognitionAdminPage() {
   useEffect(() => {
     loadPeople();
   }, [page, limit]);
+
+  // Debounced reload when peopleSearch or peopleSort change
+  useEffect(() => {
+    if (peopleSearchDebounce.current) window.clearTimeout(peopleSearchDebounce.current);
+    peopleSearchDebounce.current = window.setTimeout(() => {
+      loadPeople(1);
+    }, 300);
+
+    return () => {
+      if (peopleSearchDebounce.current) window.clearTimeout(peopleSearchDebounce.current);
+    };
+  }, [peopleSearch, peopleSort]);
 
   // Poll status when job is running
   useEffect(() => {
@@ -163,10 +178,15 @@ export default function FaceRecognitionAdminPage() {
     };
   }, [status?.status]);
 
-  const loadPeople = async () => {
+  const loadPeople = async (overridePage?: number) => {
     try {
       setPeopleLoading(true);
-      const response = await fetch(`/api/admin/people?page=${page}&limit=${limit}`);
+  const params = new URLSearchParams();
+  params.set('page', String(overridePage ?? page));
+  params.set('limit', String(limit));
+  if (peopleSearch.trim()) params.set('search', peopleSearch.trim());
+  if (peopleSort === 'alpha') params.set('sort', 'alpha');
+  const response = await fetch(`/api/admin/people?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setPeople(data.people || []);
@@ -758,9 +778,24 @@ export default function FaceRecognitionAdminPage() {
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">
-                        Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}
+                        </p>
+                        <Input
+                          placeholder="Filter people by name..."
+                          value={peopleSearch}
+                          onChange={(e) => { setPeopleSearch(e.target.value); }}
+                          className="max-w-xs"
+                        />
+                        <Button
+                          variant={peopleSort === 'alpha' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => { setPeopleSort(prev => prev === 'alpha' ? 'default' : 'alpha'); }}
+                        >
+                          A–Z
+                        </Button>
+                      </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
                           <Button
@@ -781,7 +816,7 @@ export default function FaceRecognitionAdminPage() {
                           </Button>
                         </div>
                         <Button
-                          onClick={loadPeople}
+                          onClick={() => loadPeople()}
                           variant="outline"
                           size="sm"
                           className="flex items-center gap-2"

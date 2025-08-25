@@ -80,6 +80,17 @@ export async function GET(request: NextRequest) {
       whereClause.confirmed = confirmed === 'true';
     }
 
+    const sort = searchParams.get('sort') || '';
+
+    // Build orderBy depending on sort param
+    const orderByClause: any[] = [];
+    if (sort === 'alpha') {
+      orderByClause.push({ name: 'asc' });
+    } else {
+      orderByClause.push({ confirmed: 'desc' });
+      orderByClause.push({ updatedAt: 'desc' });
+    }
+
     const [people, totalCount] = await Promise.all([
       prisma.person.findMany({
         where: whereClause,
@@ -107,10 +118,7 @@ export async function GET(request: NextRequest) {
             take: 1, // Get the best face for preview
           },
         },
-        orderBy: [
-          { confirmed: 'desc' },
-          { updatedAt: 'desc' },
-        ],
+        orderBy: orderByClause,
         skip: offset,
         take: limit,
       }),
