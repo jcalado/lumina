@@ -47,6 +47,7 @@ model Photo {
   createdAt    DateTime    @default(now())
   album        Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
   thumbnails   Thumbnail[]
+  faces        Face[]
 
   @@index([albumId])
   @@map("photos")
@@ -151,6 +152,52 @@ model ThumbnailJob {
   createdAt         DateTime  @default(now())
 
   @@map("thumbnail_jobs")
+}
+
+model Person {
+  id        String   @id @default(cuid())
+  name      String?  // Name given by admin, null for unnamed/grouped faces
+  confirmed Boolean  @default(false) // Admin confirmed this person grouping
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  faces     Face[]
+
+  @@map("people")
+}
+
+model Face {
+  id           String  @id @default(cuid())
+  photoId      String
+  personId     String?
+  boundingBox  String  // JSON: {x, y, width, height} coordinates for LARGE thumbnail
+  confidence   Float   // Detection confidence (0.0 - 1.0)
+  embedding    String? // Face encoding for recognition (JSON array)
+  verified     Boolean @default(false) // Admin verified this face belongs to this person
+  createdAt    DateTime @default(now())
+  photo        Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([photoId])
+  @@index([personId])
+  @@map("faces")
+}
+
+model FaceRecognitionJob {
+  id                String    @id @default(cuid())
+  status            JobStatus @default(PENDING)
+  progress          Int       @default(0)
+  totalPhotos       Int       @default(0)
+  processedPhotos   Int       @default(0)
+  facesDetected     Int       @default(0)
+  facesMatched      Int       @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  pausedAt          DateTime?
+  errors            String?   // JSON string for error details
+  logs              String?   // JSON array of detailed log entries
+  createdAt         DateTime  @default(now())
+
+  @@map("face_recognition_jobs")
 }
 
 model SiteSettings {
