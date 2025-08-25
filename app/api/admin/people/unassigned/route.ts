@@ -18,11 +18,12 @@ export async function GET(request: NextRequest) {
         t.id as thumbnailId,
         t.s3Key,
         t.width,
-        t.height
+        t.height,
+        f.ignored
       FROM faces f
       JOIN photos p ON f.photoId = p.id
       LEFT JOIN thumbnails t ON p.id = t.photoId AND t.size = 'SMALL'
-      WHERE f.personId IS NULL
+      WHERE f.personId IS NULL AND f.ignored = FALSE
       ORDER BY f.confidence DESC
       LIMIT ${limit}
     `;
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
       id: face.id,
       boundingBox: JSON.parse(face.boundingBox),
       confidence: face.confidence,
+      ignored: face.ignored === 1, // SQLite returns 1 for true, 0 for false
       photo: {
         id: face.photoId,
         filename: face.filename,

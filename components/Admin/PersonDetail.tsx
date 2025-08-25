@@ -15,6 +15,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import Link from 'next/link'; // Import Link
 
 interface PhotoThumbnail {
   id: string;
@@ -29,6 +30,8 @@ interface Photo {
   id: string;
   filename: string;
   thumbnails: PhotoThumbnail[];
+  albumId: string; // Add albumId to Photo interface
+  albumSlug: string; // Add albumSlug to Photo interface
 }
 
 interface Face {
@@ -197,6 +200,9 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
     face.photo.filename.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Get unique photos where this person's faces appear
+  const uniquePhotos = Array.from(new Map(person.faces.map(face => [face.photo.id, face.photo])).values());
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -359,6 +365,37 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
                   </Button>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Section for photos with this person */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+            Photos with {person.name}
+          </h3>
+          {uniquePhotos.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4">No photos found with this person.</p>
+          ) : (
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {uniquePhotos.map((photo) => (
+                <Link key={photo.id} href={`/albums/${photo.albumSlug}/photos/${photo.id}`} passHref>
+                  <div className="relative group rounded-lg overflow-hidden border border-gray-200 cursor-pointer">
+                    <div className="aspect-square bg-gray-100">
+                      {photo.thumbnails.length > 0 && (
+                        <img
+                          src={`/api/photos/${photo.id}/serve?size=small`}
+                          alt={photo.filename}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs px-2 py-1 truncate">
+                      {photo.filename}
+                    </div>
+                  </div>
+                </Link>
+              ))}
             </div>
           )}
         </div>

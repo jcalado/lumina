@@ -23,7 +23,8 @@ import {
   Plus,
   UserPlus,
   Grid3X3,
-  Trash2
+  Trash2,
+  X // Import X icon
 } from 'lucide-react';
 
 interface PhotoThumbnail {
@@ -86,6 +87,7 @@ interface UnassignedFace {
       height: number;
     }>;
   };
+  ignored?: boolean; // Add ignored field
 }
 
 export default function FaceRecognitionAdminPage() {
@@ -186,7 +188,8 @@ export default function FaceRecognitionAdminPage() {
   const loadUnassignedFaces = async () => {
     try {
       setUnassignedLoading(true);
-      const response = await fetch('/api/admin/people/unassigned');
+      // Fetch only non-ignored unassigned faces
+      const response = await fetch('/api/admin/people/unassigned?ignored=false');
       if (response.ok) {
         const data = await response.json();
         setUnassignedFaces(data.unassignedFaces || []);
@@ -217,6 +220,20 @@ export default function FaceRecognitionAdminPage() {
       toast({
         title: 'Error',
         description: 'Please select at least one face',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check if any selected face is ignored
+    const hasIgnoredFace = Array.from(selectedFaces).some(faceId => 
+      unassignedFaces.find(f => f.id === faceId)?.ignored
+    );
+
+    if (hasIgnoredFace) {
+      toast({
+        title: 'Error',
+        description: 'Cannot create person with ignored faces. Please unselect them.',
         variant: 'destructive',
       });
       return;
@@ -315,6 +332,44 @@ export default function FaceRecognitionAdminPage() {
       });
     } finally {
       setDeletingPerson(null);
+    }
+  };
+
+  const ignoreFace = async (faceId: string) => {
+    if (!confirm('Are you sure you want to ignore this face? It will no longer appear in the unassigned list.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/faces/${faceId}/ignore`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Face ignored successfully.',
+        });
+        loadUnassignedFaces(); // Refresh unassigned faces
+        setSelectedFaces(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(faceId); // Deselect the ignored face
+          return newSet;
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Error',
+          description: error.error || 'Failed to ignore face.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to ignore face.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -823,6 +878,18 @@ export default function FaceRecognitionAdminPage() {
                                         <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
                                           {Math.round(face.confidence * 100)}%
                                         </div>
+                                        {/* Ignore button */}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="absolute top-1 left-1 text-white bg-black/50 hover:bg-black/70 rounded-full w-6 h-6"
+                                          onClick={(e) => {
+                                            e.stopPropagation(); // Prevent selecting the face
+                                            ignoreFace(face.id);
+                                          }}
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
                                       </div>
                                     ))}
                                   </div>

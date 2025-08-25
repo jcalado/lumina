@@ -40,18 +40,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    // Increment faceCount for the person
-    if (updateResult.count > 0) {
-      await prisma.person.update({
-        where: { id: personId },
-        data: {
-          faceCount: {
-            increment: updateResult.count,
-          },
-        },
-      });
-    }
-
     return NextResponse.json({
       success: true,
       message: `Successfully added ${updateResult.count} faces to person ${person.name}`,

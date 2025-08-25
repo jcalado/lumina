@@ -20,22 +20,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Face not found' }, { status: 404 });
     }
 
-    if (face.personId === null) {
-      return NextResponse.json({ message: 'Face is already unassigned' }, { status: 200 });
-    }
-
     await prisma.face.update({
       where: { id: faceId },
       data: {
-        personId: null,
+        ignored: true,
+        personId: null, // Ensure it's unassigned if ignored
       },
     });
 
-    return NextResponse.json({ success: true, message: 'Face unassigned successfully' });
+    return NextResponse.json({ success: true, message: 'Face ignored successfully' });
   } catch (error) {
-    console.error('Error unassigning face:', error);
+    console.error('Error ignoring face:', error);
     return NextResponse.json(
-      { error: 'Failed to unassign face' },
+      { error: 'Failed to ignore face' },
       { status: 500 }
     );
   }

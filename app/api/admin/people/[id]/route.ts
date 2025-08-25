@@ -51,6 +51,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const faces = person.faces.map(face => ({
       ...face,
       boundingBox: JSON.parse(face.boundingBox),
+      photo: {
+        ...face.photo,
+        albumId: face.photo.album.id, // Include albumId directly in photo
+        albumSlug: face.photo.album.path, // Include albumSlug directly in photo
+      },
     }));
 
     return NextResponse.json({
