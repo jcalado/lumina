@@ -709,6 +709,8 @@ export default function FaceRecognitionAdminPage() {
                           onClick={() => loadPersonDetails(person.id)} // Click to view details
                         >
                           <CardContent className="p-4">
+                                                              <h4 className="font-medium truncate">{person.name}</h4>
+
                             <div className="flex items-start gap-3">
                               {person.previewFace && (
                                 <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
@@ -721,11 +723,10 @@ export default function FaceRecognitionAdminPage() {
                               )}
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-medium truncate">{person.name}</h4>
                                   {person.confirmed ? (
                                     <Badge variant="default" className="text-xs">
                                       <CheckCircle className="h-3 w-3 mr-1" />
-                                      Confirmed
+                                      OK
                                     </Badge>
                                   ) : (
                                     <Badge variant="secondary" className="text-xs">

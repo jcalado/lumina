@@ -12,7 +12,10 @@ import {
   Search,
   CheckCircle,
   Clock,
-  XCircle
+  XCircle,
+  Edit,
+  Save,
+  X
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link'; // Import Link
@@ -66,12 +69,21 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   const [loadingSimilar, setLoadingSimilar] = useState(false);
   const [selectedSimilarFaces, setSelectedSimilarFaces] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  // Name editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(person.name);
+  const [isConfirmed, setIsConfirmed] = useState(person.confirmed);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   useEffect(() => {
     // When person changes, clear similar faces and selections
     setSimilarFaces([]);
     setSelectedSimilarFaces(new Set());
     setSearchQuery('');
+  // sync name input and cancel any edit state
+  setNameInput(person.name);
+  setIsEditingName(false);
+  setIsConfirmed(person.confirmed);
   }, [person.id]);
 
   const fetchSimilarFaces = async () => {
@@ -97,6 +109,31 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
       });
     } finally {
       setLoadingSimilar(false);
+    }
+  };
+
+  const toggleConfirmed = async () => {
+    const newConfirmed = !isConfirmed;
+    setConfirmLoading(true);
+    try {
+      const response = await fetch(`/api/admin/people/${person.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: newConfirmed }),
+      });
+
+      if (response.ok) {
+        setIsConfirmed(newConfirmed);
+        toast({ title: 'Success', description: `Person marked as ${newConfirmed ? 'confirmed' : 'pending'}.` });
+        onPersonUpdated();
+      } else {
+        const err = await response.json();
+        toast({ title: 'Error', description: err.error || 'Failed to update status', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' });
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -160,6 +197,41 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
     }
   };
 
+  const saveName = async () => {
+    const newName = nameInput?.trim();
+    if (!newName) {
+      toast({ title: 'Error', description: 'Name cannot be empty.', variant: 'destructive' });
+      return;
+    }
+
+    if (newName === person.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/admin/people/${person.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+
+      if (response.ok) {
+        toast({ title: 'Success', description: `Renamed person to "${newName}".` });
+        setIsEditingName(false);
+        onPersonUpdated();
+      } else {
+        const err = await response.json();
+        toast({ title: 'Error', description: err.error || 'Failed to update name', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to update name', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const removeFaceFromPerson = async (faceId: string) => {
     if (!confirm('Are you sure you want to remove this face from the person?')) {
       return;
@@ -210,20 +282,49 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          {person.name}
+          {!isEditingName ? (
+            <div className="flex items-center gap-2">
+              <span>{person.name}</span>
+              <Button variant="ghost" size="icon" onClick={() => setIsEditingName(true)}>
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Input
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                className="max-w-xs"
+                disabled={loading}
+              />
+              <Button onClick={saveName} disabled={loading} className="flex items-center gap-2">
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" onClick={() => { setIsEditingName(false); setNameInput(person.name); }}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </CardTitle>
         <div className="flex items-center gap-2">
-          {person.confirmed ? (
-            <Badge variant="default" className="text-sm">
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Confirmed
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="text-sm">
-              <Clock className="h-4 w-4 mr-1" />
-              Pending
-            </Badge>
-          )}
+          <div>
+            <Button
+              variant={isConfirmed ? 'default' : 'secondary'}
+              size="sm"
+              onClick={toggleConfirmed}
+              disabled={confirmLoading}
+              className="text-sm flex items-center gap-1"
+            >
+              {confirmLoading ? (
+                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : isConfirmed ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+              {isConfirmed ? 'Confirmed' : 'Pending'}
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
             {person.faces.length} face{person.faces.length !== 1 ? 's' : ''}
           </p>
