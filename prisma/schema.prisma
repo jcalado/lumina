@@ -173,6 +173,7 @@ model Face {
   confidence   Float   // Detection confidence (0.0 - 1.0)
   embedding    String? // Face encoding for recognition (JSON array)
   verified     Boolean @default(false) // Admin verified this face belongs to this person
+  ignored      Boolean @default(false) // New field: true if face should be ignored
   createdAt    DateTime @default(now())
   photo        Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
   person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)

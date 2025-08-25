@@ -47,32 +47,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Person not found' }, { status: 404 });
     }
 
-    // Group faces by photo and calculate face counts
-    const photosWithFaces = person.faces.reduce((acc, face) => {
-      const photoId = face.photo.id;
-      if (!acc[photoId]) {
-        acc[photoId] = {
-          photo: face.photo,
-          faces: [],
-        };
-      }
-      acc[photoId].faces.push({
-        id: face.id,
-        boundingBox: JSON.parse(face.boundingBox),
-        confidence: face.confidence,
-        verified: face.verified,
-      });
-      return acc;
-    }, {} as Record<string, any>);
+    // Map faces to parse boundingBox and ensure correct structure
+    const faces = person.faces.map(face => ({
+      ...face,
+      boundingBox: JSON.parse(face.boundingBox),
+    }));
 
     return NextResponse.json({
-      id: person.id,
-      name: person.name,
-      confirmed: person.confirmed,
-      faceCount: person._count.faces,
-      photos: Object.values(photosWithFaces),
-      createdAt: person.createdAt,
-      updatedAt: person.updatedAt,
+      person: {
+        id: person.id,
+        name: person.name,
+        confirmed: person.confirmed,
+        faceCount: person._count.faces,
+        createdAt: person.createdAt,
+        updatedAt: person.updatedAt,
+        faces: faces, // Directly return the faces array
+      },
     });
   } catch (error) {
     console.error('Error fetching person:', error);

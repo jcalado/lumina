@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { FaceRecognitionSettings } from '@/components/Admin/FaceRecognitionSettings';
+import { PersonDetail } from '@/components/Admin/PersonDetail'; // Import the new component
 import { 
   Eye, 
   Play, 
@@ -25,6 +26,29 @@ import {
   Trash2
 } from 'lucide-react';
 
+interface PhotoThumbnail {
+  id: string;
+  photoId: string;
+  size: string;
+  s3Key: string;
+  width: number;
+  height: number;
+}
+
+interface Photo {
+  id: string;
+  filename: string;
+  thumbnails: PhotoThumbnail[];
+}
+
+interface Face {
+  id: string;
+  boundingBox: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  photo: Photo;
+  personId?: string;
+}
+
 interface FaceRecognitionSettings {
   faceRecognitionEnabled: boolean;
   faceRecognitionPublicEnabled: boolean;
@@ -40,25 +64,10 @@ interface Person {
   name: string;
   confirmed: boolean;
   faceCount: number;
-  previewFace?: {
-    id: string;
-    boundingBox: { x: number; y: number; width: number; height: number };
-    confidence: number;
-    photo: {
-      id: string;
-      filename: string;
-      thumbnails: Array<{
-        id: string;
-        photoId: string;
-        size: string;
-        s3Key: string;
-        width: number;
-        height: number;
-      }>;
-    };
-  };
+  previewFace?: Face;
   createdAt: string;
   updatedAt: string;
+  faces: Face[]; // Add faces array to Person interface
 }
 
 interface UnassignedFace {
@@ -99,6 +108,7 @@ export default function FaceRecognitionAdminPage() {
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
   const [selectedFaces, setSelectedFaces] = useState<Set<string>>(new Set());
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null); // New state for selected person
   
   const [creatingPerson, setCreatingPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
@@ -141,6 +151,33 @@ export default function FaceRecognitionAdminPage() {
       }
     } catch (error) {
       console.error('Failed to load people:', error);
+    } finally {
+      setPeopleLoading(false);
+    }
+  };
+
+  const loadPersonDetails = async (personId: string) => {
+    setPeopleLoading(true);
+    try {
+      const response = await fetch(`/api/admin/people/${personId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedPerson(data.person);
+      } else {
+        console.error('Failed to load person details');
+        toast({
+          title: 'Error',
+          description: 'Failed to load person details.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load person details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load person details.',
+        variant: 'destructive',
+      });
     } finally {
       setPeopleLoading(false);
     }
@@ -261,6 +298,7 @@ export default function FaceRecognitionAdminPage() {
         // Reload data
         loadPeople();
         loadUnassignedFaces();
+        setSelectedPerson(null); // Close detail view if open
       } else {
         const error = await response.json();
         toast({
@@ -401,6 +439,14 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
+  const handlePersonUpdated = () => {
+    loadPeople(); // Refresh the main people list
+    if (selectedPerson) {
+      loadPersonDetails(selectedPerson.id); // Refresh the currently viewed person's details
+    }
+    loadUnassignedFaces(); // Also refresh unassigned faces as they might change
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
@@ -539,244 +585,259 @@ export default function FaceRecognitionAdminPage() {
         </TabsContent>
 
         <TabsContent value="people" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                People Management
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!settings.faceRecognitionEnabled ? (
-                <div className="flex items-center gap-2 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-yellow-600" />
-                  <div>
-                    <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                      Face Recognition Required
-                    </p>
-                    <p className="text-sm text-yellow-600 dark:text-yellow-300">
-                      Enable face recognition to manage people and faces
-                    </p>
+          {selectedPerson ? (
+            <PersonDetail 
+              person={selectedPerson} 
+              onBack={() => setSelectedPerson(null)} 
+              onPersonUpdated={handlePersonUpdated} 
+            />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  People Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!settings.faceRecognitionEnabled ? (
+                  <div className="flex items-center gap-2 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                    <div>
+                      <p className="font-medium text-yellow-800 dark:text-yellow-200">
+                        Face Recognition Required
+                      </p>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-300">
+                        Enable face recognition to manage people and faces
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : peopleLoading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Loading people...</p>
-                </div>
-              ) : people.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Start processing photos to detect and group faces into people
-                  </p>
-                  <Button onClick={startProcessing} className="flex items-center gap-2">
-                    <Play className="h-4 w-4" />
-                    Start Face Detection
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Found {people.length} people with {people.reduce((total, person) => total + person.faceCount, 0)} faces
+                ) : peopleLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading people...</p>
+                  </div>
+                ) : people.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Start processing photos to detect and group faces into people
                     </p>
-                    <Button
-                      onClick={loadPeople}
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      Refresh
+                    <Button onClick={startProcessing} className="flex items-center gap-2">
+                      <Play className="h-4 w-4" />
+                      Start Face Detection
                     </Button>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {people.map((person) => (
-                      <Card key={person.id} className="overflow-hidden">
-                        <CardContent className="p-4">
-                          <div className="flex items-start gap-3">
-                            {person.previewFace && (
-                              <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                <img
-                                  src={`/api/faces/${person.previewFace.id}/serve`}
-                                  alt={`${person.name} preview`}
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-medium truncate">{person.name}</h4>
-                                {person.confirmed ? (
-                                  <Badge variant="default" className="text-xs">
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Confirmed
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="secondary" className="text-xs">
-                                    <Clock className="h-3 w-3 mr-1" />
-                                    Pending
-                                  </Badge>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Found {people.length} people with {people.reduce((total, person) => total + person.faceCount, 0)} faces
+                      </p>
+                      <Button
+                        onClick={loadPeople}
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Refresh
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {people.map((person) => (
+                        <Card 
+                          key={person.id} 
+                          className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+                          onClick={() => loadPersonDetails(person.id)} // Click to view details
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-3">
+                              {person.previewFace && (
+                                <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                  <img
+                                    src={`/api/faces/${person.previewFace.id}/serve`}
+                                    alt={`${person.name} preview`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-medium truncate">{person.name}</h4>
+                                  {person.confirmed ? (
+                                    <Badge variant="default" className="text-xs">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Confirmed
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      Pending
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {person.faceCount} face{person.faceCount !== 1 ? 's' : ''}
+                                </p>
+                                {person.previewFace && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Confidence: {Math.round(person.previewFace.confidence * 100)}%
+                                  </p>
                                 )}
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                {person.faceCount} face{person.faceCount !== 1 ? 's' : ''}
-                              </p>
-                              {person.previewFace && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Confidence: {Math.round(person.previewFace.confidence * 100)}%
-                                </p>
-                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => { // Prevent click from propagating to card
+                                  e.stopPropagation(); 
+                                  deletePerson(person.id.toString(), person.name);
+                                }}
+                                disabled={deletingPerson === person.id.toString()}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                              >
+                                {deletingPerson === person.id.toString() ? (
+                                  <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => deletePerson(person.id.toString(), person.name)}
-                              disabled={deletingPerson === person.id.toString()}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
-                            >
-                              {deletingPerson === person.id.toString() ? (
-                                <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  {/* Unassigned Faces Section */}
-                  <div className="mt-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-medium flex items-center gap-2">
-                        <Grid3X3 className="h-5 w-5" />
-                        Unassigned Faces
-                      </h3>
-                      
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
 
-                    <Card>
-                        <CardContent className="p-4">
-                          {unassignedLoading ? (
-                            <div className="text-center py-8">
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                              <p className="text-muted-foreground">Loading unassigned faces...</p>
-                            </div>
-                          ) : unassignedFaces.length === 0 ? (
-                            <div className="text-center py-8">
-                              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                              <h4 className="font-medium mb-2">All Faces Assigned</h4>
-                              <p className="text-muted-foreground">
-                                All detected faces have been assigned to people
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              {/* Create Person Form */}
-                              {selectedFaces.size > 0 && (
-                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                  <h4 className="font-medium mb-3 flex items-center gap-2">
-                                    <UserPlus className="h-4 w-4" />
-                                    Create Person from {selectedFaces.size} Selected Faces
-                                  </h4>
-                                  <div className="flex items-end gap-3">
-                                    <div className="flex-1">
-                                      <label className="text-sm font-medium mb-1 block">
-                                        Person Name
-                                      </label>
-                                      <Input
-                                        placeholder="Enter person name..."
-                                        value={newPersonName}
-                                        onChange={(e) => setNewPersonName(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            createPersonFromFaces();
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                    <Button
-                                      onClick={createPersonFromFaces}
-                                      disabled={creatingPerson || !newPersonName.trim()}
-                                      className="flex items-center gap-2"
-                                    >
-                                      {creatingPerson ? (
-                                        <>
-                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                          Creating...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Plus className="h-4 w-4" />
-                                          Create Person
-                                        </>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      onClick={() => {
-                                        setSelectedFaces(new Set());
-                                        setNewPersonName('');
-                                      }}
-                                      variant="outline"
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
+                    {/* Unassigned Faces Section */}
+                    <div className="mt-8">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium flex items-center gap-2">
+                          <Grid3X3 className="h-5 w-5" />
+                          Unassigned Faces
+                        </h3>
+                        
+                      </div>
 
-                              {/* Unassigned Faces Grid */}
-                              <div>
-                                <p className="text-sm text-muted-foreground mb-3">
-                                  Click faces to select them for grouping into a person. Selected: {selectedFaces.size}
+                      <Card>
+                          <CardContent className="p-4">
+                            {unassignedLoading ? (
+                              <div className="text-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                                <p className="text-muted-foreground">Loading unassigned faces...</p>
+                              </div>
+                            ) : unassignedFaces.length === 0 ? (
+                              <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <h4 className="font-medium mb-2">All Faces Assigned</h4>
+                                <p className="text-muted-foreground">
+                                  All detected faces have been assigned to people
                                 </p>
-                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                                  {unassignedFaces.map((face) => (
-                                    <div
-                                      key={face.id}
-                                      className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
-                                        selectedFaces.has(face.id)
-                                          ? 'border-blue-500 ring-2 ring-blue-200'
-                                          : 'border-gray-200 hover:border-gray-300'
-                                      }`}
-                                      onClick={() => toggleFaceSelection(face.id)}
-                                    >
-                                      <div className="aspect-square bg-gray-100">
-                                        <img
-                                          src={`/api/faces/${face.id}/serve`}
-                                          alt={`Face from ${face.photo.filename}`}
-                                          className="w-full h-full object-cover"
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {/* Create Person Form */}
+                                {selectedFaces.size > 0 && (
+                                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                                      <UserPlus className="h-4 w-4" />
+                                      Create Person from {selectedFaces.size} Selected Faces
+                                    </h4>
+                                    <div className="flex items-end gap-3">
+                                      <div className="flex-1">
+                                        <label className="text-sm font-medium mb-1 block">
+                                          Person Name
+                                        </label>
+                                        <Input
+                                          placeholder="Enter person name..."
+                                          value={newPersonName}
+                                          onChange={(e) => setNewPersonName(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              createPersonFromFaces();
+                                            }
+                                          }}
                                         />
                                       </div>
-                                      {/* Selection indicator */}
-                                      {selectedFaces.has(face.id) && (
-                                        <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                                          ✓
-                                        </div>
-                                      )}
-                                      {/* Confidence badge */}
-                                      <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                                        {Math.round(face.confidence * 100)}%
-                                      </div>
+                                      <Button
+                                        onClick={createPersonFromFaces}
+                                        disabled={creatingPerson || !newPersonName.trim()}
+                                        className="flex items-center gap-2"
+                                      >
+                                        {creatingPerson ? (
+                                          <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            Creating...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Plus className="h-4 w-4" />
+                                            Create Person
+                                          </>
+                                        )}
+                                      </Button>
+                                      <Button
+                                        onClick={() => {
+                                          setSelectedFaces(new Set());
+                                          setNewPersonName('');
+                                        }}
+                                        variant="outline"
+                                      >
+                                        Cancel
+                                      </Button>
                                     </div>
-                                  ))}
+                                  </div>
+                                )}
+
+                                {/* Unassigned Faces Grid */}
+                                <div>
+                                  <p className="text-sm text-muted-foreground mb-3">
+                                    Click faces to select them for grouping into a person. Selected: {selectedFaces.size}
+                                  </p>
+                                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                    {unassignedFaces.map((face) => (
+                                      <div
+                                        key={face.id}
+                                        className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                                          selectedFaces.has(face.id)
+                                            ? 'border-blue-500 ring-2 ring-blue-200'
+                                            : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                        onClick={() => toggleFaceSelection(face.id)}
+                                      >
+                                        <div className="aspect-square bg-gray-100">
+                                          <img
+                                            src={`/api/faces/${face.id}/serve`}
+                                            alt={`Face from ${face.photo.filename}`}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                        {/* Selection indicator */}
+                                        {selectedFaces.has(face.id) && (
+                                          <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                                            ✓
+                                          </div>
+                                        )}
+                                        {/* Confidence badge */}
+                                        <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
+                                          {Math.round(face.confidence * 100)}%
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                            )}
+                          </CardContent>
+                        </Card>
 
-                </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>
