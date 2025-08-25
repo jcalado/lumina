@@ -70,6 +70,7 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   const [selectedSimilarFaces, setSelectedSimilarFaces] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [localThreshold, setLocalThreshold] = useState<number | null>(null);
+  const [usedThreshold, setUsedThreshold] = useState<number | null>(null);
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(person.name);
@@ -96,6 +97,7 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
       if (response.ok) {
         const data = await response.json();
         setSimilarFaces(data.similarFaces || []);
+        setUsedThreshold(typeof data.usedThreshold === 'number' ? data.usedThreshold : null);
       } else {
         const error = await response.json();
         toast({
@@ -433,9 +435,14 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Select faces to add to {person.name}. Selected: {selectedSimilarFaces.size}
-              </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Select faces to add to {person.name}. Selected: {selectedSimilarFaces.size}
+                    </p>
+                    {usedThreshold !== null && (
+                      <p className="text-sm text-muted-foreground">Used threshold: {Math.round(usedThreshold * 100)}%</p>
+                    )}
+                  </div>
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {similarFaces.map((face) => (
                   <div
@@ -460,7 +467,9 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
                       </div>
                     )}
                     <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                      {Math.round(face.confidence * 100)}%
+                      {typeof (face as any).similarity === 'number'
+                        ? `${Math.round((face as any).similarity * 100)}%`
+                        : `${Math.round(face.confidence * 100)}%`}
                     </div>
                     <p className="absolute top-1 left-1 text-white text-xs bg-black/70 px-1 py-0.5 rounded max-w-[calc(100%-10px)] truncate">
                       {face.photo.filename}

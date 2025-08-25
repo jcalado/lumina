@@ -111,10 +111,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Sort by similarity in descending order
-    similarFaces.sort((a, b) => b.similarity - a.similarity);
+  // Sort by similarity in descending order
+  similarFaces.sort((a, b) => b.similarity - a.similarity);
 
-    return NextResponse.json({ similarFaces });
+  return NextResponse.json({ similarFaces, usedThreshold: faceRecognitionSimilarityThreshold });
   } catch (error) {
     console.error('Error finding similar faces:', error);
     return NextResponse.json(
