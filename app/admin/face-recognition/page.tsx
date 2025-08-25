@@ -107,6 +107,7 @@ export default function FaceRecognitionAdminPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<any>(null);
   const [people, setPeople] = useState<Person[]>([]);
+  const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set());
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(12);
@@ -199,6 +200,51 @@ export default function FaceRecognitionAdminPage() {
       console.error('Failed to load people:', error);
     } finally {
       setPeopleLoading(false);
+    }
+  };
+
+  const togglePersonSelection = (personId: string) => {
+    setSelectedPeople(prev => {
+      const next = new Set(prev);
+      if (next.has(personId)) next.delete(personId);
+      else next.add(personId);
+      return next;
+    });
+  };
+
+  const mergeSelectedPeople = async () => {
+    if (selectedPeople.size < 2) {
+      toast({ title: 'Error', description: 'Select at least two people to merge', variant: 'destructive' });
+      return;
+    }
+
+    const ids = Array.from(selectedPeople);
+    // Ask admin to choose a target (simple: pick the first as target) or confirm
+    const targetId = ids[0];
+    if (!confirm(`Are you sure you want to merge ${ids.length} people into the person with ID ${targetId}? This will reassign faces and delete the other person records.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/people/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId, sourceIds: ids.filter(id => id !== targetId) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({ title: 'Success', description: data.message || 'People merged successfully' });
+        setSelectedPeople(new Set());
+        loadPeople();
+        loadUnassignedFaces();
+        setSelectedPerson(null);
+      } else {
+        const err = await response.json();
+        toast({ title: 'Error', description: err.error || 'Merge failed', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Merge failed', variant: 'destructive' });
     }
   };
 
@@ -795,6 +841,15 @@ export default function FaceRecognitionAdminPage() {
                         >
                           A–Z
                         </Button>
+                        <Button
+                          onClick={mergeSelectedPeople}
+                          variant="destructive"
+                          size="sm"
+                          disabled={selectedPeople.size < 2}
+                          className="ml-2"
+                        >
+                          Merge Selected ({selectedPeople.size})
+                        </Button>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
@@ -835,7 +890,18 @@ export default function FaceRecognitionAdminPage() {
                           onClick={() => loadPersonDetails(person.id)} // Click to view details
                         >
                           <CardContent className="p-4">
-                                                              <h4 className="font-medium truncate">{person.name}</h4>
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="font-medium truncate">{person.name}</h4>
+                              <input
+                                type="checkbox"
+                                checked={selectedPeople.has(person.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  togglePersonSelection(person.id);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
 
                             <div className="flex items-start gap-3">
                               {person.previewFace && (

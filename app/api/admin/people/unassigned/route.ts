@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '300');
 
     // Get unassigned faces using raw query since TypeScript types are having issues
     const unassignedFaces = await prisma.$queryRaw`
