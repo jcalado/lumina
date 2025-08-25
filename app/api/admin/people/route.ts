@@ -25,27 +25,33 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     if (unassigned) {
-      // Return unassigned faces
-      const unassignedFaces = await prisma.face.findMany({
-        where: {
-          personId: null,
-        },
-        include: {
-          photo: {
-            include: {
-              thumbnails: {
-                where: {
-                  size: 'SMALL',
-                },
+      // Return paginated unassigned faces
+      const unassignedPage = parseInt(searchParams.get('page') || '1');
+      const unassignedLimit = parseInt(searchParams.get('limit') || '50');
+      const unassignedOffset = (unassignedPage - 1) * unassignedLimit;
+      const ignoredParam = searchParams.get('ignored');
+
+      const faceWhere: any = { personId: null };
+      if (ignoredParam !== null) {
+        faceWhere.ignored = ignoredParam === 'true';
+      }
+
+      const [unassignedFaces, totalCount] = await Promise.all([
+        prisma.face.findMany({
+          where: faceWhere,
+          include: {
+            photo: {
+              include: {
+                thumbnails: { where: { size: 'SMALL' } },
               },
             },
           },
-        },
-        orderBy: {
-          confidence: 'desc',
-        },
-        take: 50, // Limit to 50 unassigned faces
-      });
+          orderBy: { confidence: 'desc' },
+          skip: unassignedOffset,
+          take: unassignedLimit,
+        }),
+        prisma.face.count({ where: faceWhere }),
+      ]);
 
       const formattedFaces = unassignedFaces.map(face => ({
         id: face.id,
@@ -60,6 +66,13 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         unassignedFaces: formattedFaces,
+        pagination: {
+          page: unassignedPage,
+          limit: unassignedLimit,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / unassignedLimit),
+          hasMore: unassignedOffset + unassignedFaces.length < totalCount,
+        },
       });
     }
 

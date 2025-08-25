@@ -123,6 +123,9 @@ export default function FaceRecognitionAdminPage() {
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
+  const [unassignedPage, setUnassignedPage] = useState(1);
+  const [unassignedLimit, setUnassignedLimit] = useState(48);
+  const [unassignedPagination, setUnassignedPagination] = useState<any | null>(null);
   const [selectedFaces, setSelectedFaces] = useState<Set<string>>(new Set());
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null); // New state for selected person
   
@@ -278,11 +281,24 @@ export default function FaceRecognitionAdminPage() {
   const loadUnassignedFaces = async () => {
     try {
       setUnassignedLoading(true);
-      // Fetch only non-ignored unassigned faces
-      const response = await fetch('/api/admin/people/unassigned?ignored=false');
+      // Fetch paginated unassigned faces from the main people route (returns pagination)
+      const params = new URLSearchParams();
+      params.set('unassigned', 'true');
+      params.set('ignored', 'false');
+      params.set('page', String(unassignedPage));
+      params.set('limit', String(unassignedLimit));
+      const response = await fetch(`/api/admin/people?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
+        // people route returns { unassignedFaces, pagination }
         setUnassignedFaces(data.unassignedFaces || []);
+        // Ensure we always have a pagination object (fallback if server omitted it)
+        if (data.pagination) {
+          setUnassignedPagination(data.pagination);
+        } else {
+          const total = (data.unassignedFaces || []).length;
+          setUnassignedPagination({ page: unassignedPage, limit: unassignedLimit, total, totalPages: Math.max(1, Math.ceil(total / unassignedLimit)), hasMore: false });
+        }
       } else {
         console.error('Failed to load unassigned faces');
       }
@@ -292,6 +308,11 @@ export default function FaceRecognitionAdminPage() {
       setUnassignedLoading(false);
     }
   };
+
+  // Reload unassigned faces when page or limit change
+  useEffect(() => {
+    loadUnassignedFaces();
+  }, [unassignedPage, unassignedLimit]);
 
   const toggleFaceSelection = (faceId: string) => {
     setSelectedFaces(prev => {
@@ -985,135 +1006,7 @@ export default function FaceRecognitionAdminPage() {
                               </div>
                             ) : (
                               <div className="space-y-4">
-                                {/* Create Person Form */}
-                                {selectedFaces.size > 0 && (
-                                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                    <h4 className="font-medium mb-3 flex items-center gap-2">
-                                      <UserPlus className="h-4 w-4" />
-                                      Create Person from {selectedFaces.size} Selected Faces
-                                    </h4>
-                                    <div className="flex items-end gap-3">
-                                      <div className="flex-1">
-                                        <label className="text-sm font-medium mb-1 block">
-                                          Person Name
-                                        </label>
-                                        <Input
-                                          placeholder="Enter person name..."
-                                          value={newPersonName}
-                                          onChange={(e) => setNewPersonName(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              createPersonFromFaces();
-                                            }
-                                          }}
-                                        />
-                                      </div>
-                                      <Button
-                                        onClick={createPersonFromFaces}
-                                        disabled={creatingPerson || !newPersonName.trim()}
-                                        className="flex items-center gap-2"
-                                      >
-                                        {creatingPerson ? (
-                                          <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                            Creating...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Plus className="h-4 w-4" />
-                                            Create Person
-                                          </>
-                                        )}
-                                      </Button>
-                                      <Button
-                                        onClick={() => {
-                                          setSelectedFaces(new Set());
-                                          setNewPersonName('');
-                                        }}
-                                        variant="outline"
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                    {/* Assign to existing person */}
-                                    <div className="flex items-end gap-3 mt-3">
-                                      <div className="flex-1">
-                                              <label className="text-sm font-medium mb-1 block">Assign selected faces to existing person</label>
-                                              <div className="relative">
-                                                <Input
-                                                  placeholder="Search people by name..."
-                                                  value={assigneeQuery || (assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name || '') : '')}
-                                                  onChange={(e) => {
-                                                    const q = e.target.value;
-                                                    setAssigneeQuery(q);
-                                                    setAssigneePersonId(null);
-                                                    if (assigneeDebounce.current) window.clearTimeout(assigneeDebounce.current);
-                                                    if (!q.trim()) {
-                                                      setAssigneeResults([]);
-                                                      setAssigneeSearching(false);
-                                                      return;
-                                                    }
-                                                    setAssigneeSearching(true);
-                                                    assigneeDebounce.current = window.setTimeout(async () => {
-                                                      try {
-                                                        const res = await fetch(`/api/admin/people?search=${encodeURIComponent(q)}&limit=50`);
-                                                        if (res.ok) {
-                                                          const data = await res.json();
-                                                          setAssigneeResults(data.people || []);
-                                                        } else {
-                                                          setAssigneeResults([]);
-                                                        }
-                                                      } catch (err) {
-                                                        setAssigneeResults([]);
-                                                      } finally {
-                                                        setAssigneeSearching(false);
-                                                      }
-                                                    }, 300);
-                                                  }}
-                                                />
-                                                {assigneeSearching && (
-                                                  <div className="absolute right-2 top-2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                                )}
-
-                                                {assigneeResults.length > 0 && (
-                                                  <ul className="absolute z-20 mt-1 w-full bg-white border rounded shadow max-h-48 overflow-auto">
-                                                    {assigneeResults.map(p => (
-                                                      <li
-                                                        key={p.id}
-                                                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between"
-                                                        onClick={() => {
-                                                          setAssigneePersonId(p.id);
-                                                          setAssigneeQuery('');
-                                                          setAssigneeResults([]);
-                                                        }}
-                                                      >
-                                                        <span className="truncate">{p.name}</span>
-                                                        <span className="text-xs text-muted-foreground">{p.faceCount}</span>
-                                                      </li>
-                                                    ))}
-                                                  </ul>
-                                                )}
-                                              </div>
-                                      </div>
-                                      <Button
-                                        onClick={assignSelectedFacesToPerson}
-                                        disabled={assigningToPerson || !assigneePersonId}
-                                        className="flex items-center gap-2"
-                                      >
-                                        {assigningToPerson ? (
-                                          <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                            Assigning...
-                                          </>
-                                        ) : (
-                                            <>
-                                              Assign to {assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name ?? 'selected person') : 'person'}
-                                            </>
-                                        )}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                )}
+                                {/* Create/Assign UI moved to floating panel */}
 
                                 {/* Unassigned Faces Grid */}
                                 <div>
@@ -1163,6 +1056,37 @@ export default function FaceRecognitionAdminPage() {
                                       </div>
                                     ))}
                                   </div>
+                                  {/* Unassigned pagination controls */}
+                                  <div className="flex items-center justify-between mt-3">
+                                    <div className="text-sm text-muted-foreground">
+                                      Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          const current = unassignedPagination?.page ?? unassignedPage;
+                                          if (current > 1) setUnassignedPage(current - 1);
+                                        }}
+                                        disabled={(unassignedPagination?.page ?? unassignedPage) <= 1}
+                                      >
+                                        Prev
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          const current = unassignedPagination?.page ?? unassignedPage;
+                                          const totalPages = unassignedPagination?.totalPages ?? 1;
+                                          if (current < totalPages) setUnassignedPage(current + 1);
+                                        }}
+                                        disabled={(unassignedPagination?.page ?? unassignedPage) >= (unassignedPagination?.totalPages ?? 1)}
+                                      >
+                                        Next
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -1177,6 +1101,93 @@ export default function FaceRecognitionAdminPage() {
           )}
         </TabsContent>
       </Tabs>
-    </div>
+    {/* Floating Create / Assign Panel (shown only when faces selected) */}
+    {selectedFaces.size > 0 && (
+      <div className="fixed right-6 bottom-6 z-50 w-80 bg-white dark:bg-slate-800 border rounded-lg shadow-lg p-4">
+      <h4 className="font-medium mb-2 flex items-center gap-2">
+        <UserPlus className="h-4 w-4" />
+        {selectedFaces.size > 0 ? `Create Person from ${selectedFaces.size}` : 'Create / Assign'}
+      </h4>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-muted-foreground">Person Name</label>
+          <Input
+            placeholder="Enter person name..."
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') createPersonFromFaces(); }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button onClick={createPersonFromFaces} disabled={creatingPerson || selectedFaces.size === 0 || !newPersonName.trim()} className="flex-1">
+            {creatingPerson ? 'Creating...' : 'Create Person'}
+          </Button>
+          <Button variant="outline" onClick={() => { setSelectedFaces(new Set()); setNewPersonName(''); }}>
+            Clear
+          </Button>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground">Assign to existing person</label>
+          <div className="relative">
+            <Input
+              placeholder="Search people by name..."
+              value={assigneeQuery || (assigneePersonId ? (people.find(p => p.id === assigneePersonId)?.name || '') : '')}
+              onChange={(e) => {
+                const q = e.target.value;
+                setAssigneeQuery(q);
+                setAssigneePersonId(null);
+                if (assigneeDebounce.current) window.clearTimeout(assigneeDebounce.current);
+                if (!q.trim()) {
+                  setAssigneeResults([]);
+                  setAssigneeSearching(false);
+                  return;
+                }
+                setAssigneeSearching(true);
+                assigneeDebounce.current = window.setTimeout(async () => {
+                  try {
+                    const res = await fetch(`/api/admin/people?search=${encodeURIComponent(q)}&limit=50`);
+                    if (res.ok) {
+                      const data = await res.json();
+                      setAssigneeResults(data.people || []);
+                    } else {
+                      setAssigneeResults([]);
+                    }
+                  } catch (err) {
+                    setAssigneeResults([]);
+                  } finally {
+                    setAssigneeSearching(false);
+                  }
+                }, 300);
+              }}
+            />
+            {assigneeSearching && <div className="absolute right-2 top-2 w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
+
+            {assigneeResults.length > 0 && (
+              <ul className="absolute z-50 mt-1 w-full bg-white border rounded shadow max-h-40 overflow-auto">
+                {assigneeResults.map(p => (
+                  <li key={p.id} className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between" onClick={() => { setAssigneePersonId(p.id); setAssigneeQuery(''); setAssigneeResults([]); }}>
+                    <span className="truncate">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">{p.faceCount}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button onClick={assignSelectedFacesToPerson} disabled={assigningToPerson || selectedFaces.size === 0 || !assigneePersonId} className="flex-1">
+            {assigningToPerson ? 'Assigning...' : (assigneePersonId ? `Assign to ${people.find(p => p.id === assigneePersonId)?.name ?? 'person'}` : 'Assign')}
+          </Button>
+          <Button variant="ghost" onClick={() => { setAssigneePersonId(null); setAssigneeQuery(''); setAssigneeResults([]); }}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+      </div>
+    )}
+  </div>
   );
 }
