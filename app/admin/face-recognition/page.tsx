@@ -40,6 +40,8 @@ interface Photo {
   id: string;
   filename: string;
   thumbnails: PhotoThumbnail[];
+  albumId: string;
+  albumSlug: string;
 }
 
 interface Face {
@@ -115,6 +117,8 @@ export default function FaceRecognitionAdminPage() {
   const [creatingPerson, setCreatingPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
   const [deletingPerson, setDeletingPerson] = useState<string | null>(null);
+  const [assigneePersonId, setAssigneePersonId] = useState<string | null>(null);
+  const [assigningToPerson, setAssigningToPerson] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -291,6 +295,53 @@ export default function FaceRecognitionAdminPage() {
       });
     } finally {
       setCreatingPerson(false);
+    }
+  };
+
+  const assignSelectedFacesToPerson = async () => {
+    if (selectedFaces.size === 0) {
+      toast({ title: 'Error', description: 'Please select at least one face', variant: 'destructive' });
+      return;
+    }
+
+    if (!assigneePersonId) {
+      toast({ title: 'Error', description: 'Please select a person to assign to', variant: 'destructive' });
+      return;
+    }
+
+    // Check if any selected face is ignored
+    const hasIgnoredFace = Array.from(selectedFaces).some(faceId => 
+      unassignedFaces.find(f => f.id === faceId)?.ignored
+    );
+
+    if (hasIgnoredFace) {
+      toast({ title: 'Error', description: 'Cannot assign ignored faces. Please unselect them.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      setAssigningToPerson(true);
+      const response = await fetch(`/api/admin/people/${assigneePersonId}/add-faces`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceIds: Array.from(selectedFaces) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({ title: 'Success', description: data.message || `Assigned ${data.count || selectedFaces.size} faces to person.` });
+        setSelectedFaces(new Set());
+        setAssigneePersonId(null);
+        loadPeople();
+        loadUnassignedFaces();
+      } else {
+        const error = await response.json();
+        toast({ title: 'Error', description: error.error || 'Failed to assign faces', variant: 'destructive' });
+      }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to assign faces', variant: 'destructive' });
+    } finally {
+      setAssigningToPerson(false);
     }
   };
 
@@ -841,6 +892,38 @@ export default function FaceRecognitionAdminPage() {
                                         variant="outline"
                                       >
                                         Cancel
+                                      </Button>
+                                    </div>
+                                    {/* Assign to existing person */}
+                                    <div className="flex items-end gap-3 mt-3">
+                                      <div className="flex-1">
+                                        <label className="text-sm font-medium mb-1 block">Assign selected faces to existing person</label>
+                                        <select
+                                          className="w-full border rounded px-2 py-1"
+                                          value={assigneePersonId ?? ''}
+                                          onChange={(e) => setAssigneePersonId(e.target.value || null)}
+                                        >
+                                          <option value="">-- Select a person --</option>
+                                          {people.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name} ({p.faceCount})</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <Button
+                                        onClick={assignSelectedFacesToPerson}
+                                        disabled={assigningToPerson || !assigneePersonId}
+                                        className="flex items-center gap-2"
+                                      >
+                                        {assigningToPerson ? (
+                                          <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            Assigning...
+                                          </>
+                                        ) : (
+                                          <>
+                                            Assign
+                                          </>
+                                        )}
                                       </Button>
                                     </div>
                                   </div>

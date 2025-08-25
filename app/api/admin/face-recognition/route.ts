@@ -294,7 +294,7 @@ async function processJob(jobId: string) {
     }>>`
       SELECT id, filename, s3Key 
         FROM photos 
-        LIMIT ${Math.min(jobState.totalPhotos, 20)}
+        LIMIT ${Math.min(jobState.totalPhotos)}
     `;
 
     const photoIds = photos.map(p => p.id);
@@ -510,12 +510,12 @@ export async function POST(request: NextRequest) {
       id: jobId,
       status: 'PENDING',
       progress: 0,
-  totalPhotos: Math.min(photoCount, 20), // Limit for testing
+      totalPhotos: Math.min(photoCount), // Limit for testing
       processedPhotos: 0,
       facesDetected: 0,
       facesMatched: 0,
       batchSize: settings.batchSize,
-  logs: [`Job created to process ${Math.min(photoCount, 20)} photos (limited for testing)`],
+  logs: [`Job created to process ${Math.min(photoCount)} photos`],
       errors: [],
     };
 
