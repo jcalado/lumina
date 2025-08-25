@@ -108,6 +108,15 @@ export default function FaceRecognitionAdminPage() {
   const [status, setStatus] = useState<any>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(12);
+  const [pagination, setPagination] = useState<{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  } | null>(null);
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
@@ -127,6 +136,11 @@ export default function FaceRecognitionAdminPage() {
     loadPeople();
     loadUnassignedFaces();
   }, []);
+
+  // Reload people when page or limit change
+  useEffect(() => {
+    loadPeople();
+  }, [page, limit]);
 
   // Poll status when job is running
   useEffect(() => {
@@ -148,10 +162,12 @@ export default function FaceRecognitionAdminPage() {
   const loadPeople = async () => {
     try {
       setPeopleLoading(true);
-      const response = await fetch('/api/admin/people');
+      const response = await fetch(`/api/admin/people?page=${page}&limit=${limit}`);
       if (response.ok) {
         const data = await response.json();
         setPeople(data.people || []);
+        setPagination(data.pagination || null);
+        if (data.pagination?.page) setPage(data.pagination.page);
       } else {
         console.error('Failed to load people');
       }
@@ -739,17 +755,37 @@ export default function FaceRecognitionAdminPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
-                        Found {people.length} people with {people.reduce((total, person) => total + person.faceCount, 0)} faces
+                        Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}
                       </p>
-                      <Button
-                        onClick={loadPeople}
-                        variant="outline"
-                        size="sm"
-                        className="flex items-center gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        Refresh
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }}
+                            variant="outline"
+                            size="sm"
+                            disabled={peopleLoading || ((pagination?.page || page) <= 1)}
+                          >
+                            Prev
+                          </Button>
+                          <Button
+                            onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }}
+                            variant="outline"
+                            size="sm"
+                            disabled={peopleLoading || !(pagination?.hasMore ?? true)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                        <Button
+                          onClick={loadPeople}
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Refresh
+                        </Button>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
