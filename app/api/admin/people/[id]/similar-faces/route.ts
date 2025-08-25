@@ -34,8 +34,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const resolvedParams = await params;
     const personId = resolvedParams.id;
+    const settings = await getFaceRecognitionSettings();
+    let { faceRecognitionSimilarityThreshold } = settings;
 
-    const { faceRecognitionSimilarityThreshold } = await getFaceRecognitionSettings();
+    // Allow optional override via query param: ?threshold=0.6
+    try {
+      const url = new URL(request.url);
+      const qp = url.searchParams.get('threshold');
+      if (qp) {
+        const parsed = parseFloat(qp);
+        if (!Number.isNaN(parsed) && parsed >= 0.0 && parsed <= 1.0) {
+          faceRecognitionSimilarityThreshold = parsed;
+        }
+      }
+    } catch (e) {
+      // ignore malformed url/param - fall back to settings
+    }
 
     // Get all faces for the given person
     const personFaces = await prisma.face.findMany({

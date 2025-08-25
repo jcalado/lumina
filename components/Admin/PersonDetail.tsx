@@ -69,6 +69,7 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   const [loadingSimilar, setLoadingSimilar] = useState(false);
   const [selectedSimilarFaces, setSelectedSimilarFaces] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [localThreshold, setLocalThreshold] = useState<number | null>(null);
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(person.name);
@@ -89,7 +90,9 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   const fetchSimilarFaces = async () => {
     setLoadingSimilar(true);
     try {
-      const response = await fetch(`/api/admin/people/${person.id}/similar-faces`);
+  const params = new URLSearchParams();
+  if (localThreshold !== null) params.set('threshold', String(localThreshold));
+  const response = await fetch(`/api/admin/people/${person.id}/similar-faces?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setSimilarFaces(data.similarFaces || []);
@@ -384,20 +387,35 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
         <div className="mt-8 pt-6 border-t border-gray-200">
           <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
             Add Similar Faces
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchSimilarFaces}
-              disabled={loadingSimilar}
-              className="ml-auto flex items-center gap-2"
-            >
-              {loadingSimilar ? (
-                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-              Find Similar
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                Threshold
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1.0}
+                  step={0.05}
+                  value={localThreshold ?? 0.7}
+                  onChange={(e) => setLocalThreshold(parseFloat(e.target.value))}
+                  className="w-28"
+                />
+                <span className="w-10 text-right">{Math.round((localThreshold ?? 0.7) * 100)}%</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchSimilarFaces}
+                disabled={loadingSimilar}
+                className="flex items-center gap-2"
+              >
+                {loadingSimilar ? (
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Find Similar
+              </Button>
+            </div>
           </h3>
 
           {loadingSimilar ? (
