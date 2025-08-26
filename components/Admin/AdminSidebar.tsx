@@ -11,7 +11,8 @@ import {
   RefreshCw,
   Activity,
   FileText,
-  Users
+  Users,
+  Eye
 } from "lucide-react"
 
 const navigationItems = [
@@ -49,6 +50,11 @@ const navigationItems = [
     name: "Users",
     href: "/admin/users",
     icon: Users,
+  },
+  {
+    name: "Face Recognition",
+    href: "/admin/face-recognition",
+    icon: Eye,
   },
   {
     name: "Settings",
