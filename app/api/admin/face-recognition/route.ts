@@ -174,7 +174,7 @@ async function intermediateClusteringAndSave(
         });
       }
       
-      jobState.facesDetected += cluster.faces.length;
+      // Update matched count (faces are already counted in facesDetected)
       jobState.facesMatched += cluster.faces.length;
       
     } catch (error) {
@@ -844,11 +844,18 @@ async function processJob(jobId: string) {
                   confidence: face.confidence,
                   boundingBox: face.boundingBox
                 });
+                
+                // Update face count immediately
+                jobState.facesDetected++;
               }
             }
           }
 
           jobState.processedPhotos += batch.length;
+          
+          // Log detection results for this batch
+          const batchFaceCount = detectionResults.reduce((total, result) => total + result.faces.length, 0);
+          jobState.logs.push(`Batch detected ${batchFaceCount} faces in ${batch.length} photos`);
 
           // Checkpoint: Every CHECKPOINT_INTERVAL photos, do intermediate clustering to manage memory
           if ((i + settings.batchSize) % CHECKPOINT_INTERVAL === 0 || i + settings.batchSize >= photoIds.length) {
