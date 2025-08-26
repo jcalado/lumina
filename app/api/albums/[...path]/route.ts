@@ -3,10 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { slugPathToPath, pathToSlugPath } from '@/lib/slug-paths';
 import { getPhotoOrientation } from '@/lib/photo-orientation';
 
-interface RouteParams {
-  params: Promise<{
-    path: string[];
-  }>;
+interface Params {
+  path: string[];
 }
 
 interface SubAlbumWithMedia {
@@ -31,11 +29,14 @@ interface SubAlbumWithMedia {
   } | null;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   let albumPath = '';
   try {
-    const resolvedParams = await params;
-    console.log('Raw path segments:', resolvedParams.path);
+    const { path } = await context.params;
+    console.log('Raw path segments:', path);
     
     // Get query parameters for sorting and pagination
     const { searchParams } = new URL(request.url);
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const offset = (page - 1) * limit;
     
     // Decode each path segment to handle URL encoding
-    const decodedPath = resolvedParams.path.map(segment => decodeURIComponent(segment));
+    const decodedPath = path.map((segment: string) => decodeURIComponent(segment));
     const slugPath = decodedPath.join('/');
     
     // Convert slug path back to filesystem path for database query

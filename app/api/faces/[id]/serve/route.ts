@@ -3,13 +3,16 @@ import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
 import sharp from 'sharp';
 
-interface RouteParams {
-  params: { id: string };
+interface Params {
+  id: string;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const faceId = params.id;
+    const { id: faceId } = await context.params;
 
     const face = await prisma.face.findUnique({
       where: { id: faceId },
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .jpeg({ quality: 85 })
       .toBuffer();
 
-    return new NextResponse(croppedBuffer, {
+    return new NextResponse(new Uint8Array(croppedBuffer), {
       headers: {
         'Content-Type': 'image/jpeg',
         'Content-Length': croppedBuffer.length.toString(),

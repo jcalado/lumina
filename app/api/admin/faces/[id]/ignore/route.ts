@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+interface Params {
+  id: string;
 }
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const faceId = resolvedParams.id;
+    const { id: faceId } = await context.params;
 
     const face = await prisma.face.findUnique({
       where: { id: faceId },

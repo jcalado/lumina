@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+interface Params {
+  id: string;
 }
 
 // GET: Get faces in a photo
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const photoId = resolvedParams.id;
+    const { id: photoId } = await context.params;
 
     // Check if face recognition is enabled
     const faceRecognitionSetting = await prisma.siteSettings.findUnique({

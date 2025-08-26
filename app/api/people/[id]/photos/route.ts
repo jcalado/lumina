@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+interface Params {
+  id: string;
 }
 
 // GET: Get photos containing a specific person
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const personId = resolvedParams.id;
+    const { id: personId } = await context.params;
 
     // Check if people page is enabled
     const peoplePageSetting = await prisma.siteSettings.findUnique({

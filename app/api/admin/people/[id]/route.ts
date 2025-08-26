@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+interface Params {
+  id: string;
 }
 
 // GET: Get person details with faces
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const personId = resolvedParams.id;
+    const { id: personId } = await context.params;
 
     const person = await prisma.person.findUnique({
       where: { id: personId },
@@ -79,10 +79,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // PATCH: Update person (name, confirmed status)
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const personId = resolvedParams.id;
+    const { id: personId } = await context.params;
     const body = await request.json();
     const { name, confirmed } = body;
 
@@ -109,10 +111,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 }
 
 // DELETE: Delete person and reassign faces
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const personId = resolvedParams.id;
+    const { id: personId } = await context.params;
 
     // Get person info before deletion using raw query
     const personInfo = await prisma.$queryRaw`

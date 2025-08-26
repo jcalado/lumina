@@ -12,17 +12,18 @@ const updateAdminUserSchema = z.object({
   enabled: z.boolean().optional(),
 })
 
-interface RouteParams {
-  params: Promise<{
-    id: string
-  }>
+interface Params {
+  id: string;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   const session = await requireAdmin()
   if (session instanceof NextResponse) return session
 
-  const { id } = await params
+  const { id } = await context.params
 
   try {
     const adminUser = await prisma.adminUser.findUnique({
@@ -63,11 +64,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   const session = await requireAdmin()
   if (session instanceof NextResponse) return session
 
-  const { id } = await params
+  const { id } = await context.params
 
   try {
     const body = await request.json()
@@ -186,11 +190,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   const session = await requireAdmin()
   if (session instanceof NextResponse) return session
 
-  const { id } = await params
+  const { id } = await context.params
 
   try {
     // Get the existing user to check permissions

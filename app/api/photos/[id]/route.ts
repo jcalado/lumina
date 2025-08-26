@@ -2,16 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
 
-interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+interface Params {
+  id: string;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<Params> }
+) {
   try {
-    const resolvedParams = await params;
-    const photoId = resolvedParams.id;
+    const { id: photoId } = await context.params;
     
     // Get photo from database
     const photo = await prisma.photo.findUnique({
