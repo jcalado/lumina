@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { processPhotoBatch } from '@/lib/face-detection';
 
+// Interface for face data during processing
+interface ProcessingFace {
+  id: string;
+  photoId: string;
+  embedding: number[];
+  confidence: number;
+  boundingBox: any;
+}
+
+// Function to generate unique face IDs
+function generateFaceId(): string {
+  return `face_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
 // Function to calculate similarity between two face embeddings
 function calculateFaceSimilarity(embedding1: number[], embedding2: number[]): number {
   if (embedding1.length !== embedding2.length) return 0;
@@ -20,6 +34,319 @@ function calculateFaceSimilarity(embedding1: number[], embedding2: number[]): nu
   if (norm1 === 0 || norm2 === 0) return 0;
   
   return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+}
+
+// Efficient clustering using union-find for large datasets
+function performClustering(faces: ProcessingFace[], similarityThreshold: number): Array<{
+  faces: ProcessingFace[];
+  representativeEmbedding: number[];
+}> {
+  const n = faces.length;
+  if (n === 0) return [];
+  
+  // Normalize embeddings for faster cosine similarity calculation
+  const normalizedFaces = faces.map(face => {
+    const embedding = face.embedding;
+    let norm = 0;
+    for (let i = 0; i < embedding.length; i++) {
+      norm += embedding[i] * embedding[i];
+    }
+    norm = Math.sqrt(norm);
+    
+    const normalizedEmbedding = norm === 0 ? embedding.slice() : embedding.map(v => v / norm);
+    
+    return {
+      ...face,
+      normalizedEmbedding
+    };
+  });
+  
+  // Union-Find data structure
+  const parent = Array.from({ length: n }, (_, i) => i);
+  
+  function find(x: number): number {
+    if (parent[x] !== x) {
+      parent[x] = find(parent[x]);
+    }
+    return parent[x];
+  }
+  
+  function union(x: number, y: number) {
+    const rootX = find(x);
+    const rootY = find(y);
+    if (rootX !== rootY) {
+      parent[rootY] = rootX;
+    }
+  }
+  
+  // Find similar faces and union them
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      // Dot product of normalized vectors gives cosine similarity
+      let similarity = 0;
+      const embA = normalizedFaces[i].normalizedEmbedding;
+      const embB = normalizedFaces[j].normalizedEmbedding;
+      
+      for (let k = 0; k < embA.length; k++) {
+        similarity += embA[k] * embB[k];
+      }
+      
+      if (similarity >= similarityThreshold) {
+        union(i, j);
+      }
+    }
+  }
+  
+  // Group faces by their root parent
+  const clusters = new Map<number, ProcessingFace[]>();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    if (!clusters.has(root)) {
+      clusters.set(root, []);
+    }
+    clusters.get(root)!.push(faces[i]);
+  }
+  
+  // Create cluster objects with representative embeddings
+  return Array.from(clusters.values()).map(clusterFaces => {
+    // Calculate average embedding as representative
+    const embeddingLength = clusterFaces[0].embedding.length;
+    const avgEmbedding = new Array(embeddingLength).fill(0);
+    
+    for (const face of clusterFaces) {
+      for (let i = 0; i < embeddingLength; i++) {
+        avgEmbedding[i] += face.embedding[i];
+      }
+    }
+    
+    for (let i = 0; i < embeddingLength; i++) {
+      avgEmbedding[i] /= clusterFaces.length;
+    }
+    
+    return {
+      faces: clusterFaces,
+      representativeEmbedding: avgEmbedding
+    };
+  });
+}
+
+// Save clustered faces with temporary person assignments
+async function intermediateClusteringAndSave(
+  faces: ProcessingFace[],
+  similarityThreshold: number,
+  jobState: FaceRecognitionJobState
+): Promise<void> {
+  if (faces.length === 0) return;
+  
+  jobState.logs.push(`Clustering ${faces.length} faces...`);
+  
+  // Perform clustering
+  const clusters = performClustering(faces, similarityThreshold);
+  
+  jobState.logs.push(`Created ${clusters.length} face clusters`);
+  
+  // Save faces to database with temporary person assignments
+  for (let i = 0; i < clusters.length; i++) {
+    const cluster = clusters[i];
+    const tempPersonId = `temp_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      // Create temporary person
+      await prisma.person.create({
+        data: {
+          id: tempPersonId,
+          name: `Processing ${tempPersonId}`,
+          confirmed: false
+        }
+      });
+
+      // Save all faces in cluster
+      for (const face of cluster.faces) {
+        await prisma.face.create({
+          data: {
+            id: face.id,
+            photoId: face.photoId,
+            personId: tempPersonId,
+            boundingBox: JSON.stringify(face.boundingBox),
+            confidence: face.confidence,
+            embedding: JSON.stringify(face.embedding)
+          }
+        });
+      }
+      
+      jobState.facesDetected += cluster.faces.length;
+      jobState.facesMatched += cluster.faces.length;
+      
+    } catch (error) {
+      console.error(`Error saving cluster ${i}:`, error);
+      jobState.errors.push(`Error saving cluster: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+// Find groups of similar persons for consolidation
+function findSimilarPersonGroups(
+  persons: Array<{ id: string; faces: Array<{ embedding: string | null }> }>,
+  similarityThreshold: number
+): string[][] {
+  const n = persons.length;
+  if (n === 0) return [];
+  
+  // Extract representative embeddings for each person
+  const personEmbeddings: Array<{ personId: string; embedding: number[] | null }> = [];
+  
+  for (const person of persons) {
+    let representativeEmbedding: number[] | null = null;
+    
+    // Use the first valid embedding as representative (could be improved with averaging)
+    for (const face of person.faces) {
+      if (face.embedding) {
+        try {
+          representativeEmbedding = JSON.parse(face.embedding) as number[];
+          break;
+        } catch (e) {
+          // Skip invalid embeddings
+        }
+      }
+    }
+    
+    personEmbeddings.push({
+      personId: person.id,
+      embedding: representativeEmbedding
+    });
+  }
+  
+  // Union-Find for grouping similar persons
+  const parent = Array.from({ length: n }, (_, i) => i);
+  
+  function find(x: number): number {
+    if (parent[x] !== x) {
+      parent[x] = find(parent[x]);
+    }
+    return parent[x];
+  }
+  
+  function union(x: number, y: number) {
+    const rootX = find(x);
+    const rootY = find(y);
+    if (rootX !== rootY) {
+      parent[rootY] = rootX;
+    }
+  }
+  
+  // Compare all pairs of persons
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const embA = personEmbeddings[i].embedding;
+      const embB = personEmbeddings[j].embedding;
+      
+      if (embA && embB) {
+        const similarity = calculateFaceSimilarity(embA, embB);
+        if (similarity >= similarityThreshold) {
+          union(i, j);
+        }
+      }
+    }
+  }
+  
+  // Group person IDs by their root parent
+  const groups = new Map<number, string[]>();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    if (!groups.has(root)) {
+      groups.set(root, []);
+    }
+    groups.get(root)!.push(personEmbeddings[i].personId);
+  }
+  
+  // Return only groups with more than one person
+  return Array.from(groups.values()).filter(group => group.length > 1);
+}
+
+// Merge multiple persons into a single person
+async function mergePersons(personIds: string[], jobState: FaceRecognitionJobState): Promise<void> {
+  if (personIds.length <= 1) return;
+  
+  try {
+    // Keep the first person as the target
+    const targetPersonId = personIds[0];
+    const sourcePersonIds = personIds.slice(1);
+    
+    jobState.logs.push(`Merging ${sourcePersonIds.length} persons into ${targetPersonId}`);
+    
+    // Move all faces from source persons to target person
+    for (const sourcePersonId of sourcePersonIds) {
+      await prisma.face.updateMany({
+        where: { personId: sourcePersonId },
+        data: { personId: targetPersonId }
+      });
+    }
+    
+    // Delete the source persons
+    await prisma.person.deleteMany({
+      where: { id: { in: sourcePersonIds } }
+    });
+    
+    jobState.logs.push(`Successfully merged ${sourcePersonIds.length} persons`);
+    
+  } catch (error) {
+    console.error(`Error merging persons:`, error);
+    jobState.errors.push(`Error merging persons: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Final person consolidation pass
+async function consolidatePersons(similarityThreshold: number, jobState: FaceRecognitionJobState): Promise<void> {
+  jobState.logs.push("Starting final person consolidation...");
+  
+  try {
+    // Get all persons with their face embeddings (limit faces for performance)
+    const persons = await prisma.person.findMany({
+      include: {
+        faces: {
+          where: { embedding: { not: null } },
+          take: 3, // Sample a few faces for comparison
+          select: { embedding: true }
+        }
+      }
+    });
+
+    if (persons.length === 0) {
+      jobState.logs.push("No persons found for consolidation");
+      return;
+    }
+
+    // Find similar person groups
+    const personGroups = findSimilarPersonGroups(persons, similarityThreshold);
+    
+    jobState.logs.push(`Found ${personGroups.length} groups of similar persons to merge`);
+    
+    // Merge persons in each group
+    for (const group of personGroups) {
+      await mergePersons(group, jobState);
+    }
+
+    // Update person names to be more descriptive
+    const finalPersons = await prisma.person.findMany({
+      include: { _count: { select: { faces: true } } }
+    });
+    
+    for (const person of finalPersons) {
+      if (person.name && (person.name.startsWith('Processing ') || person.name.startsWith('Person '))) {
+        const newName = `Person ${person.id.slice(-8)} (${person._count.faces} faces)`;
+        await prisma.person.update({
+          where: { id: person.id },
+          data: { name: newName }
+        });
+      }
+    }
+    
+    jobState.logs.push(`Person consolidation completed. Final count: ${finalPersons.length} persons`);
+    
+  } catch (error) {
+    console.error('Error in person consolidation:', error);
+    jobState.errors.push(`Person consolidation error: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 // Function to group unassigned faces into people
@@ -323,6 +650,78 @@ async function updateJobInDatabase(jobId: string, jobState: FaceRecognitionJobSt
   }
 }
 
+// Process photos for face detection only (no person matching)
+async function processPhotoBatchDetectionOnly(
+  photoIds: string[],
+  minConfidence: number
+): Promise<Array<{
+  photoId: string;
+  faces: Array<{
+    embedding: number[];
+    confidence: number;
+    boundingBox: any;
+  }>;
+  error?: string;
+}>> {
+  const result = await processPhotoBatch(
+    photoIds,
+    minConfidence,
+    1.0, // Use high similarity threshold to prevent automatic matching
+    undefined,
+    photoIds.length // Process all as one batch
+  );
+
+  // Convert the result format and extract face data
+  const detectionResults: Array<{
+    photoId: string;
+    faces: Array<{
+      embedding: number[];
+      confidence: number;
+      boundingBox: any;
+    }>;
+    error?: string;
+  }> = [];
+
+  for (const photoId of photoIds) {
+    try {
+      // Get the faces that were just detected for this photo
+      const faces = await prisma.face.findMany({
+        where: { photoId },
+        select: {
+          embedding: true,
+          confidence: true,
+          boundingBox: true
+        }
+      });
+
+      const parsedFaces = faces.map(face => ({
+        embedding: face.embedding ? JSON.parse(face.embedding) as number[] : [],
+        confidence: face.confidence,
+        boundingBox: face.boundingBox ? JSON.parse(face.boundingBox) : {}
+      })).filter(face => face.embedding.length > 0);
+
+      detectionResults.push({
+        photoId,
+        faces: parsedFaces
+      });
+
+      // Clean up the faces from database since we'll handle them in memory
+      await prisma.face.deleteMany({
+        where: { photoId }
+      });
+
+    } catch (error) {
+      detectionResults.push({
+        photoId,
+        faces: [],
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return detectionResults;
+}
+
 async function processJob(jobId: string) {
   const jobState = activeJobs.get(jobId);
   if (!jobState) return;
@@ -353,99 +752,201 @@ async function processJob(jobId: string) {
 
     jobState.status = 'RUNNING';
     jobState.startedAt = new Date();
-    jobState.logs.push(`Starting to process ${photoIds.length} photos in batches of ${settings.batchSize}`);
-    await updateJobInDatabase(jobId, jobState);
+    
+    const LARGE_JOB_THRESHOLD = 1000;
+    const CHECKPOINT_INTERVAL = 500;
 
-    // Process photos in batches
-    for (let i = 0; i < photoIds.length; i += settings.batchSize) {
-      // Check if job was cancelled or paused
-      const currentState = activeJobs.get(jobId);
-      if (!currentState || currentState.status !== 'RUNNING') {
-        jobState.logs.push('Job was stopped or paused');
-        break;
-      }
+    if (photoIds.length > LARGE_JOB_THRESHOLD) {
+      // Use optimized approach for large jobs
+      jobState.logs.push(`Large job detected (${photoIds.length} photos). Using optimized processing with checkpoints every ${CHECKPOINT_INTERVAL} photos.`);
+      await updateJobInDatabase(jobId, jobState);
+      
+      // Store all face embeddings in memory for efficient clustering
+      const allDetectedFaces: ProcessingFace[] = [];
 
-      const batch = photoIds.slice(i, i + settings.batchSize);
-      jobState.currentBatch = batch;
-
-      try {
-        jobState.logs.push(`Processing batch ${Math.floor(i / settings.batchSize) + 1} with ${batch.length} photos`);
-        
-        const result = await processPhotoBatch(
-          batch,
-          settings.confidenceThreshold,
-          settings.similarityThreshold,
-          (processed, total) => {
-            // Update progress for current batch
-            const batchProgress = processed / total;
-            const overallProgress = (i + (batchProgress * batch.length)) / photoIds.length;
-            jobState.progress = Math.round(overallProgress * 100);
-          }
-        );
-
-        jobState.processedPhotos += result.processed;
-        jobState.errors.push(...result.errors);
-
-        // Count actual faces detected for this batch using raw SQL
-        const placeholders = batch.map(() => '?').join(',');
-        const facesDetectedResult = await prisma.$queryRawUnsafe(
-          `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders})`,
-          ...batch
-        ) as { count: number }[];
-  let facesDetectedRaw = facesDetectedResult[0]?.count ?? 0;
-  const facesDetectedCount = typeof facesDetectedRaw === 'bigint' ? Number(facesDetectedRaw) : Number(facesDetectedRaw || 0);
-        
-        const facesMatchedResult = await prisma.$queryRawUnsafe(
-          `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders}) AND personId IS NOT NULL`,
-          ...batch
-        ) as { count: number }[];
-  let facesMatchedRaw = facesMatchedResult[0]?.count ?? 0;
-  const facesMatchedCount = typeof facesMatchedRaw === 'bigint' ? Number(facesMatchedRaw) : Number(facesMatchedRaw || 0);
-
-        jobState.facesDetected += facesDetectedCount;
-        jobState.facesMatched += facesMatchedCount;
-
-        jobState.logs.push(
-          `Batch ${Math.floor(i / settings.batchSize) + 1} completed: ${result.processed}/${batch.length} photos processed`
-        );
-        
-        jobState.logs.push(
-          `Detected ${facesDetectedCount} faces, matched ${facesMatchedCount} faces in this batch`
-        );
-
-        if (result.errors.length > 0) {
-          jobState.logs.push(`Batch had ${result.errors.length} errors`);
+      // Process photos in batches but don't create persons yet
+      for (let i = 0; i < photoIds.length; i += settings.batchSize) {
+        // Check if job was cancelled or paused
+        const currentState = activeJobs.get(jobId);
+        if (!currentState || currentState.status !== 'RUNNING') {
+          jobState.logs.push('Job was stopped or paused');
+          break;
         }
 
-        // Update progress
-        jobState.progress = Math.round(((i + batch.length) / photoIds.length) * 100);
-        await updateJobInDatabase(jobId, jobState);
+        const batch = photoIds.slice(i, i + settings.batchSize);
+        jobState.currentBatch = batch;
 
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        jobState.errors.push(`Batch processing error: ${errorMessage}`);
-        jobState.logs.push(`Error in batch ${Math.floor(i / settings.batchSize) + 1}: ${errorMessage}`);
-        console.error(`Error processing batch for job ${jobId}:`, error);
+        try {
+          jobState.logs.push(`Processing detection batch ${Math.floor(i / settings.batchSize) + 1} with ${batch.length} photos`);
+          
+          // Detect faces only (no person matching yet)
+          const detectionResults = await processPhotoBatchDetectionOnly(
+            batch,
+            settings.confidenceThreshold
+          );
+
+          // Store embeddings in memory
+          for (const photoResult of detectionResults) {
+            if (photoResult.error) {
+              jobState.errors.push(`${photoResult.photoId}: ${photoResult.error}`);
+              continue;
+            }
+            
+            for (const face of photoResult.faces) {
+              if (face.embedding.length > 0) {
+                allDetectedFaces.push({
+                  id: generateFaceId(),
+                  photoId: photoResult.photoId,
+                  embedding: face.embedding,
+                  confidence: face.confidence,
+                  boundingBox: face.boundingBox
+                });
+              }
+            }
+          }
+
+          jobState.processedPhotos += batch.length;
+
+          // Checkpoint: Every CHECKPOINT_INTERVAL photos, do intermediate clustering to manage memory
+          if ((i + settings.batchSize) % CHECKPOINT_INTERVAL === 0 || i + settings.batchSize >= photoIds.length) {
+            if (allDetectedFaces.length > 0) {
+              jobState.logs.push(`Checkpoint reached. Clustering ${allDetectedFaces.length} faces...`);
+              await intermediateClusteringAndSave(allDetectedFaces, settings.similarityThreshold, jobState);
+              allDetectedFaces.length = 0; // Clear memory
+            }
+          }
+
+          // Update progress
+          jobState.progress = Math.round(((i + batch.length) / photoIds.length) * 80); // Reserve 20% for consolidation
+          await updateJobInDatabase(jobId, jobState);
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          jobState.errors.push(`Batch processing error: ${errorMessage}`);
+          jobState.logs.push(`Error in batch ${Math.floor(i / settings.batchSize) + 1}: ${errorMessage}`);
+          console.error(`Error processing batch for job ${jobId}:`, error);
+        }
+      }
+
+      // Final clustering for any remaining faces
+      if (allDetectedFaces.length > 0) {
+        jobState.logs.push(`Final clustering of ${allDetectedFaces.length} remaining faces...`);
+        await intermediateClusteringAndSave(allDetectedFaces, settings.similarityThreshold, jobState);
+      }
+
+      // Final person consolidation pass
+      if (jobState.status === 'RUNNING') {
+        jobState.logs.push('Starting final person consolidation...');
+        jobState.progress = 85;
+        await updateJobInDatabase(jobId, jobState);
+        
+        try {
+          await consolidatePersons(settings.similarityThreshold, jobState);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          jobState.logs.push(`Person consolidation error: ${errorMessage}`);
+          jobState.errors.push(`Person consolidation failed: ${errorMessage}`);
+        }
+      }
+
+    } else {
+      // Use existing logic for smaller jobs
+      jobState.logs.push(`Standard job processing ${photoIds.length} photos in batches of ${settings.batchSize}`);
+      await updateJobInDatabase(jobId, jobState);
+
+      // Process photos in batches
+      for (let i = 0; i < photoIds.length; i += settings.batchSize) {
+        // Check if job was cancelled or paused
+        const currentState = activeJobs.get(jobId);
+        if (!currentState || currentState.status !== 'RUNNING') {
+          jobState.logs.push('Job was stopped or paused');
+          break;
+        }
+
+        const batch = photoIds.slice(i, i + settings.batchSize);
+        jobState.currentBatch = batch;
+
+        try {
+          jobState.logs.push(`Processing batch ${Math.floor(i / settings.batchSize) + 1} with ${batch.length} photos`);
+          
+          const result = await processPhotoBatch(
+            batch,
+            settings.confidenceThreshold,
+            settings.similarityThreshold,
+            (processed, total) => {
+              // Update progress for current batch
+              const batchProgress = processed / total;
+              const overallProgress = (i + (batchProgress * batch.length)) / photoIds.length;
+              jobState.progress = Math.round(overallProgress * 100);
+            }
+          );
+
+          jobState.processedPhotos += result.processed;
+          jobState.errors.push(...result.errors);
+
+          // Count actual faces detected for this batch using raw SQL
+          const placeholders = batch.map(() => '?').join(',');
+          const facesDetectedResult = await prisma.$queryRawUnsafe(
+            `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders})`,
+            ...batch
+          ) as { count: number }[];
+          let facesDetectedRaw = facesDetectedResult[0]?.count ?? 0;
+          const facesDetectedCount = typeof facesDetectedRaw === 'bigint' ? Number(facesDetectedRaw) : Number(facesDetectedRaw || 0);
+          
+          const facesMatchedResult = await prisma.$queryRawUnsafe(
+            `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders}) AND personId IS NOT NULL`,
+            ...batch
+          ) as { count: number }[];
+          let facesMatchedRaw = facesMatchedResult[0]?.count ?? 0;
+          const facesMatchedCount = typeof facesMatchedRaw === 'bigint' ? Number(facesMatchedRaw) : Number(facesMatchedRaw || 0);
+
+          jobState.facesDetected += facesDetectedCount;
+          jobState.facesMatched += facesMatchedCount;
+
+          jobState.logs.push(
+            `Batch ${Math.floor(i / settings.batchSize) + 1} completed: ${result.processed}/${batch.length} photos processed`
+          );
+          
+          jobState.logs.push(
+            `Detected ${facesDetectedCount} faces, matched ${facesMatchedCount} faces in this batch`
+          );
+
+          if (result.errors.length > 0) {
+            jobState.logs.push(`Batch had ${result.errors.length} errors`);
+          }
+
+          // Update progress
+          jobState.progress = Math.round(((i + batch.length) / photoIds.length) * 100);
+          await updateJobInDatabase(jobId, jobState);
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          jobState.errors.push(`Batch processing error: ${errorMessage}`);
+          jobState.logs.push(`Error in batch ${Math.floor(i / settings.batchSize) + 1}: ${errorMessage}`);
+          console.error(`Error processing batch for job ${jobId}:`, error);
+        }
+      }
+
+      // For smaller jobs, still do the traditional grouping
+      if (jobState.status === 'RUNNING') {
+        jobState.logs.push('Starting automatic face grouping...');
+        await updateJobInDatabase(jobId, jobState);
+        
+        try {
+          const groupingResult = await groupUnassignedFaces(settings.similarityThreshold, jobState);
+          jobState.logs.push(`Face grouping completed: ${groupingResult.newPeopleCreated} new people created from ${groupingResult.facesGrouped} faces`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          jobState.logs.push(`Face grouping error: ${errorMessage}`);
+          jobState.errors.push(`Face grouping failed: ${errorMessage}`);
+        }
       }
     }
 
     if (jobState.status === 'RUNNING') {
-      // After processing all photos, group unassigned faces
-      jobState.logs.push('Starting automatic face grouping...');
-      await updateJobInDatabase(jobId, jobState);
-      
-      try {
-        const groupingResult = await groupUnassignedFaces(settings.similarityThreshold, jobState);
-        jobState.logs.push(`Face grouping completed: ${groupingResult.newPeopleCreated} new people created from ${groupingResult.facesGrouped} faces`);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        jobState.logs.push(`Face grouping error: ${errorMessage}`);
-        jobState.errors.push(`Face grouping failed: ${errorMessage}`);
-      }
-      
       jobState.status = 'COMPLETED';
       jobState.progress = 100;
-      jobState.logs.push(`Job completed successfully! Processed ${jobState.processedPhotos} photos, detected ${jobState.facesDetected} faces`);
+      jobState.logs.push(`Job completed successfully! Processed ${jobState.processedPhotos} photos, detected ${jobState.facesDetected} faces, matched ${jobState.facesMatched} faces`);
     }
 
   } catch (error) {
