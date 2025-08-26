@@ -9,6 +9,7 @@ import {
   Readable
 } from 'stream';
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import os from 'os';
 import path from 'path';
 import {
@@ -173,6 +174,23 @@ export async function getImageFromS3(s3Key: string): Promise<Buffer> {
   });
 }
 
+export async function getImageBuffer(originalPath: string, s3Key: string, filename: string): Promise<Buffer> {
+  // Try to read from local file first, fall back to S3
+  try {
+    await fsPromises.access(originalPath);
+    const imageBuffer = await fsPromises.readFile(originalPath);
+    console.log(`Reading image from local path: ${originalPath}`);
+    return imageBuffer;
+  } catch (error) {
+    console.log(`Local file not found for ${filename}, fetching from S3: ${s3Key}`);
+    try {
+      return await getImageFromS3(s3Key);
+    } catch (s3Error) {
+      throw new Error(`Failed to read image from both local and S3: ${error} | ${s3Error}`);
+    }
+  }
+}
+
 export function calculateSimilarity(embedding1: number[], embedding2: number[]): number {
   if (embedding1.length !== embedding2.length) {
     return 0;
@@ -280,14 +298,15 @@ export async function processPhotoBatch(
         select: {
           id: true,
           s3Key: true,
-          filename: true
+          filename: true,
+          originalPath: true
         }
       });
       if (!photo) {
         errors.push(`Photo not found: ${photoId}`);
         continue;
       }
-      const imageBuffer = await getImageFromS3(photo.s3Key);
+      const imageBuffer = await getImageBuffer(photo.originalPath, photo.s3Key, photo.filename);
       const result = await detectFacesInPhoto(photoId, imageBuffer, minConfidence);
       if (result.error) {
         errors.push(`${photo.filename}: ${result.error}`);
