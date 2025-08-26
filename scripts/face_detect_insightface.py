@@ -80,7 +80,7 @@ def main():
 
         print(json.dumps({"faces": out}))
 
-    except Exception as e: # Added except block
+    except Exception as e:
         print(json.dumps({"error": f"Python script error: {e}"}))
         sys.exit(1)
 
