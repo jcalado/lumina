@@ -50,10 +50,19 @@ export async function detectFacesInPhoto(photoId: string, imageBuffer: Buffer, m
       };
     }
 
-    const out = execFileSync('python', [scriptPath, imgPath], {
-      encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024
-    });
+    let out: string;
+    try {
+      out = execFileSync('python', [scriptPath, imgPath], {
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024
+      });
+    } catch (subprocessError) {
+      return {
+        photoId,
+        faces: [],
+        error: subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
+      };
+    }
 
     const parsed = JSON.parse(out);
     if (parsed.error) {
