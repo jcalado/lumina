@@ -79,11 +79,8 @@ export async function GET(request: NextRequest) {
     const whereClause: any = {};
     
     if (search) {
-      // Note: some Prisma client versions in this repo/runtime don't accept the `mode` option
-      // on string filters. Avoid passing `mode` to prevent server 500 (validation error).
-      // This makes the search DB-default case-sensitivity. If you want case-insensitive
-      // search, regenerate Prisma client / enable `mode: 'insensitive'` after confirming
       // the runtime Prisma supports it.
+      // TODO: Once Prisma client/runtime supports `mode: 'insensitive'` on string filters, update this code to enable case-insensitive search.
       whereClause.name = {
         contains: search,
       };
