@@ -26,7 +26,7 @@ except Exception as e:
 
 
 def main():
-    try: # Added try block
+    try:
         if len(sys.argv) < 2:
             print(json.dumps({"error": "missing image path"}))
             sys.exit(1)
