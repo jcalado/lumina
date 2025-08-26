@@ -663,15 +663,9 @@ async function processPhotoBatchDetectionOnly(
   }>;
   error?: string;
 }>> {
-  const result = await processPhotoBatch(
-    photoIds,
-    minConfidence,
-    1.0, // Use high similarity threshold to prevent automatic matching
-    undefined,
-    photoIds.length // Process all as one batch
-  );
-
-  // Convert the result format and extract face data
+  // Import the detection functions directly
+  const { detectFacesInPhotoBatch, getImageBuffer } = await import('@/lib/face-detection');
+  
   const detectionResults: Array<{
     photoId: string;
     faces: Array<{
@@ -682,41 +676,90 @@ async function processPhotoBatchDetectionOnly(
     error?: string;
   }> = [];
 
-  for (const photoId of photoIds) {
-    try {
-      // Get the faces that were just detected for this photo
-      const faces = await prisma.face.findMany({
-        where: { photoId },
-        select: {
-          embedding: true,
-          confidence: true,
-          boundingBox: true
+  // Get photo data for the batch
+  const photos = await Promise.all(
+    photoIds.map(async (photoId) => {
+      try {
+        const photo = await prisma.photo.findUnique({
+          where: { id: photoId },
+          select: {
+            id: true,
+            s3Key: true,
+            filename: true,
+            originalPath: true
+          }
+        });
+
+        if (!photo) {
+          return { photoId, error: 'Photo not found' };
         }
-      });
 
-      const parsedFaces = faces.map(face => ({
-        embedding: face.embedding ? JSON.parse(face.embedding) as number[] : [],
-        confidence: face.confidence,
-        boundingBox: face.boundingBox ? JSON.parse(face.boundingBox) : {}
-      })).filter(face => face.embedding.length > 0);
+        const imageBuffer = await getImageBuffer(photo.originalPath, photo.s3Key, photo.filename);
+        return {
+          photoId: photo.id,
+          imageBuffer,
+          filename: photo.filename
+        };
+      } catch (error) {
+        return {
+          photoId,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    })
+  );
 
-      detectionResults.push({
-        photoId,
-        faces: parsedFaces
-      });
+  // Filter out failed photos and prepare for batch detection
+  const validPhotos = photos.filter((photo): photo is { photoId: string; imageBuffer: Buffer; filename: string } => 
+    'imageBuffer' in photo
+  );
 
-      // Clean up the faces from database since we'll handle them in memory
-      await prisma.face.deleteMany({
-        where: { photoId }
-      });
+  if (validPhotos.length === 0) {
+    return photoIds.map(photoId => ({ photoId, faces: [], error: 'No valid photos to process' }));
+  }
 
-    } catch (error) {
-      detectionResults.push({
-        photoId,
-        faces: [],
-        error: error instanceof Error ? error.message : String(error)
-      });
+  try {
+    // Use the batch detection function directly
+    const batchResults = await detectFacesInPhotoBatch(validPhotos, minConfidence);
+    
+    // Convert results to the expected format
+    for (const result of batchResults) {
+      if (result.error) {
+        detectionResults.push({
+          photoId: result.photoId,
+          faces: [],
+          error: result.error
+        });
+      } else {
+        detectionResults.push({
+          photoId: result.photoId,
+          faces: result.faces.map(face => ({
+            embedding: face.embedding,
+            confidence: face.confidence,
+            boundingBox: face.boundingBox
+          }))
+        });
+      }
     }
+
+    // Add any photos that failed during data retrieval
+    for (const photo of photos) {
+      if ('error' in photo) {
+        detectionResults.push({
+          photoId: photo.photoId,
+          faces: [],
+          error: photo.error
+        });
+      }
+    }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return photoIds.map(photoId => ({
+      photoId,
+      faces: [],
+      error: errorMessage
+    }));
   }
 
   return detectionResults;
