@@ -12,6 +12,48 @@ const updateAlbumSchema = z.object({
   enabled: z.boolean().optional(),
 })
 
+// GET /api/admin/albums/[id] - Get album details
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authResult = await requireAdmin()
+  if (authResult instanceof NextResponse) {
+    return authResult
+  }
+
+  try {
+    const { id } = await params
+
+    const album = await prisma.album.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { 
+            photos: true,
+            videos: true
+          }
+        }
+      }
+    })
+
+    if (!album) {
+      return NextResponse.json(
+        { error: "Album not found" },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({ album })
+  } catch (error) {
+    console.error("Error fetching album:", error)
+    return NextResponse.json(
+      { error: "Failed to fetch album" },
+      { status: 500 }
+    )
+  }
+}
+
 // PUT /api/admin/albums/[id] - Update album settings
 export async function PUT(
   request: NextRequest,

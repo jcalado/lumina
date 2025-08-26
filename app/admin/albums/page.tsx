@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Calendar, HardDrive, Cloud, CheckCircle2, XCircle, Clock } from "lucide-react"
+import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Calendar, HardDrive, Cloud, CheckCircle2, XCircle, Clock, ImageIcon } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface Album {
@@ -207,6 +207,16 @@ export default function AdminAlbumsPage() {
 
           {/* Actions - Col 12 */}
           <div className="col-span-1 flex items-center justify-end gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 w-6 p-0 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+              onClick={() => window.open(`/admin/albums/${album.id}/photos`, '_blank')}
+              title="Browse Photos"
+            >
+              <ImageIcon className="h-3 w-3" />
+            </Button>
+            
             <Switch
               checked={album.enabled}
               onCheckedChange={() => toggleAlbumStatus(album)}
