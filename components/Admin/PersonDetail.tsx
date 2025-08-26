@@ -82,10 +82,10 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
     setSimilarFaces([]);
     setSelectedSimilarFaces(new Set());
     setSearchQuery('');
-  // sync name input and cancel any edit state
-  setNameInput(person.name);
-  setIsEditingName(false);
-  setIsConfirmed(person.confirmed);
+    // sync name input and cancel any edit state
+    setNameInput(person.name);
+    setIsEditingName(false);
+    setIsConfirmed(person.confirmed);
   }, [person.id]);
 
   const fetchSimilarFaces = async () => {
