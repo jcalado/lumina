@@ -36,6 +36,129 @@ export interface ProcessPhotoResult {
   error?: string;
 }
 
+export async function detectFacesInPhotoBatch(
+  photos: Array<{ photoId: string; imageBuffer: Buffer; filename: string }>,
+  minConfidence: number = 0.5
+): Promise<ProcessPhotoResult[]> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumina-face-batch-'));
+  
+  try {
+    // Write all images to temp directory
+    const batchConfig = {
+      files: [] as Array<{ photoId: string; filename: string }>
+    };
+
+    for (const photo of photos) {
+      const imgPath = path.join(tmpDir, `${photo.photoId}.jpg`);
+      fs.writeFileSync(imgPath, photo.imageBuffer);
+      batchConfig.files.push({
+        photoId: photo.photoId,
+        filename: `${photo.photoId}.jpg`
+      });
+    }
+
+    // Write batch configuration
+    const batchConfigPath = path.join(tmpDir, 'batch.json');
+    fs.writeFileSync(batchConfigPath, JSON.stringify(batchConfig, null, 2));
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'face_detect_insightface_batch.py');
+    if (!fs.existsSync(scriptPath)) {
+      return photos.map(photo => ({
+        photoId: photo.photoId,
+        faces: [],
+        error: 'InsightFace batch helper not found'
+      }));
+    }
+
+    let out: string;
+    try {
+      out = execFileSync('python', [scriptPath, tmpDir], {
+        encoding: 'utf8',
+        maxBuffer: 50 * 1024 * 1024 // Increased buffer for batch processing
+      });
+    } catch (subprocessError) {
+      const error = subprocessError instanceof Error ? subprocessError.message : String(subprocessError);
+      return photos.map(photo => ({
+        photoId: photo.photoId,
+        faces: [],
+        error
+      }));
+    }
+
+    const parsed = JSON.parse(out);
+    if (parsed.error) {
+      return photos.map(photo => ({
+        photoId: photo.photoId,
+        faces: [],
+        error: parsed.error
+      }));
+    }
+
+    // Process results and apply confidence filtering
+    const results: ProcessPhotoResult[] = [];
+    for (const result of parsed.results || []) {
+      const faces: FaceDetectionResult[] = [];
+      
+      for (const f of result.faces || []) {
+        const box = f.box || f.bbox;
+        if (!box || box.length < 4) {
+          continue;
+        }
+
+        const x1 = Math.max(0, box[0]);
+        const y1 = Math.max(0, box[1]);
+        const x2 = Math.max(x1, box[2]);
+        const y2 = Math.max(y1, box[3]);
+
+        const boundingBox = {
+          x: x1,
+          y: y1,
+          width: x2 - x1,
+          height: y2 - y1
+        };
+
+        const score = typeof f.score === 'number' ? f.score : (f.det_score || 0);
+        const embedding = Array.isArray(f.embedding) ? f.embedding.map((n: any) => Number(n)) : [];
+
+        if (score >= minConfidence) {
+          faces.push({
+            boundingBox,
+            confidence: score,
+            embedding
+          });
+        }
+      }
+
+      results.push({
+        photoId: result.photoId,
+        faces,
+        error: result.error
+      });
+    }
+
+    return results;
+
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return photos.map(photo => ({
+      photoId: photo.photoId,
+      faces: [],
+      error: errorMsg
+    }));
+  } finally {
+    // Cleanup temp directory
+    try {
+      const files = fs.readdirSync(tmpDir);
+      for (const file of files) {
+        fs.unlinkSync(path.join(tmpDir, file));
+      }
+      fs.rmdirSync(tmpDir);
+    } catch (e) {
+      // ignore cleanup errors
+    }
+  }
+}
+
 export async function detectFacesInPhoto(photoId: string, imageBuffer: Buffer, minConfidence: number = 0.5): Promise<ProcessPhotoResult> {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumina-face-'));
   const imgPath = path.join(tmpDir, `${photoId}.jpg`);
@@ -283,45 +406,137 @@ export async function processPhotoBatch(
   minConfidence: number = 0.5,
   similarityThreshold: number = 0.7,
   onProgress ? : (processed: number, total: number) => void,
+  batchSize: number = 10 // New parameter for batch size
 ): Promise < {
   processed: number;
   errors: string[];
 } > {
   const errors: string[] = [];
   let processed = 0;
-  for (const photoId of photoIds) {
+
+  // Process photos in batches to optimize model loading
+  for (let i = 0; i < photoIds.length; i += batchSize) {
+    const batchIds = photoIds.slice(i, i + batchSize);
+    
     try {
-      const photo = await prisma.photo.findUnique({
-        where: {
-          id: photoId
-        },
-        select: {
-          id: true,
-          s3Key: true,
-          filename: true,
-          originalPath: true
+      // Fetch all photos in the batch
+      const photos = await Promise.all(
+        batchIds.map(async (photoId) => {
+          try {
+            const photo = await prisma.photo.findUnique({
+              where: { id: photoId },
+              select: {
+                id: true,
+                s3Key: true,
+                filename: true,
+                originalPath: true
+              }
+            });
+
+            if (!photo) {
+              errors.push(`Photo not found: ${photoId}`);
+              return null;
+            }
+
+            const imageBuffer = await getImageBuffer(photo.originalPath, photo.s3Key, photo.filename);
+            return {
+              photoId: photo.id,
+              imageBuffer,
+              filename: photo.filename
+            };
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            errors.push(`${photoId}: ${msg}`);
+            return null;
+          }
+        })
+      );
+
+      // Filter out failed photos
+      const validPhotos = photos.filter((photo): photo is NonNullable<typeof photo> => photo !== null);
+
+      if (validPhotos.length === 0) {
+        continue;
+      }
+
+      // Process the entire batch with a single model load
+      const results = await detectFacesInPhotoBatch(validPhotos, minConfidence);
+
+      // Save face detections for each photo in the batch
+      for (const result of results) {
+        try {
+          if (result.error) {
+            const photo = validPhotos.find(p => p.photoId === result.photoId);
+            errors.push(`${photo?.filename || result.photoId}: ${result.error}`);
+            continue;
+          }
+
+          await saveFaceDetections(result.photoId, result.faces, similarityThreshold);
+          processed++;
+          
+          if (onProgress) {
+            onProgress(processed, photoIds.length);
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          const photo = validPhotos.find(p => p.photoId === result.photoId);
+          errors.push(`${photo?.filename || result.photoId}: ${msg}`);
         }
-      });
-      if (!photo) {
-        errors.push(`Photo not found: ${photoId}`);
-        continue;
       }
-      const imageBuffer = await getImageBuffer(photo.originalPath, photo.s3Key, photo.filename);
-      const result = await detectFacesInPhoto(photoId, imageBuffer, minConfidence);
-      if (result.error) {
-        errors.push(`${photo.filename}: ${result.error}`);
-        continue;
-      }
-      await saveFaceDetections(photoId, result.faces, similarityThreshold);
-      processed++;
-      if (onProgress) {
-        onProgress(processed, photoIds.length);
-      }
+
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      errors.push(`${photoId}: ${msg}`);
+      errors.push(`Batch processing error: ${msg}`);
     }
   }
+
+  return {
+    processed,
+    errors
+  };
+}
+
+// Keep the original single-photo function for backward compatibility
+export async function processPhotoSingle(
+  photoId: string,
+  minConfidence: number = 0.5,
+  similarityThreshold: number = 0.7
+): Promise < {
+  processed: number;
+  errors: string[];
+} > {
+  const errors: string[] = [];
+  let processed = 0;
+  
+  try {
+    const photo = await prisma.photo.findUnique({
+      where: {
+        id: photoId
+      },
+      select: {
+        id: true,
+        s3Key: true,
+        filename: true,
+        originalPath: true
+      }
+    });
+    if (!photo) {
+      errors.push(`Photo not found: ${photoId}`);
+      return { processed, errors };
+    }
+    const imageBuffer = await getImageBuffer(photo.originalPath, photo.s3Key, photo.filename);
+    const result = await detectFacesInPhoto(photoId, imageBuffer, minConfidence);
+    if (result.error) {
+      errors.push(`${photo.filename}: ${result.error}`);
+      return { processed, errors };
+    }
+    await saveFaceDetections(photoId, result.faces, similarityThreshold);
+    processed++;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    errors.push(`${photoId}: ${msg}`);
+  }
+  
   return {
     processed,
     errors
