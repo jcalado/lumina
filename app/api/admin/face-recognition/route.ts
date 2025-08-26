@@ -274,6 +274,50 @@ async function updateJobInDatabase(jobId: string, jobState: FaceRecognitionJobSt
   console.log(`Processed: ${jobState.processedPhotos}/${jobState.totalPhotos} photos`);
   console.log(`Faces detected: ${jobState.facesDetected}, matched: ${jobState.facesMatched}`);
   
+  // Calculate elapsed time and estimated time to finish
+  if (jobState.startedAt) {
+    const now = new Date();
+    const elapsedMs = now.getTime() - jobState.startedAt.getTime();
+    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    
+    let elapsedTimeStr = '';
+    if (elapsedHours > 0) {
+      elapsedTimeStr = `${elapsedHours}h ${elapsedMinutes % 60}m ${elapsedSeconds % 60}s`;
+    } else if (elapsedMinutes > 0) {
+      elapsedTimeStr = `${elapsedMinutes}m ${elapsedSeconds % 60}s`;
+    } else {
+      elapsedTimeStr = `${elapsedSeconds}s`;
+    }
+    
+    console.log(`Elapsed time: ${elapsedTimeStr}`);
+    
+    // Calculate estimated time to finish (only if we have meaningful progress)
+    if (jobState.progress > 0 && jobState.status === 'RUNNING') {
+      const progressRatio = jobState.progress / 100;
+      const estimatedTotalMs = elapsedMs / progressRatio;
+      const remainingMs = estimatedTotalMs - elapsedMs;
+      
+      if (remainingMs > 0) {
+        const remainingSeconds = Math.floor(remainingMs / 1000);
+        const remainingMinutes = Math.floor(remainingSeconds / 60);
+        const remainingHours = Math.floor(remainingMinutes / 60);
+        
+        let estimatedTimeStr = '';
+        if (remainingHours > 0) {
+          estimatedTimeStr = `${remainingHours}h ${remainingMinutes % 60}m ${remainingSeconds % 60}s`;
+        } else if (remainingMinutes > 0) {
+          estimatedTimeStr = `${remainingMinutes}m ${remainingSeconds % 60}s`;
+        } else {
+          estimatedTimeStr = `${remainingSeconds}s`;
+        }
+        
+        console.log(`Estimated time to finish: ${estimatedTimeStr}`);
+      }
+    }
+  }
+  
   if (jobState.logs.length > 0) {
     console.log('Latest log:', jobState.logs[jobState.logs.length - 1]);
   }
@@ -308,6 +352,7 @@ async function processJob(jobId: string) {
     }
 
     jobState.status = 'RUNNING';
+    jobState.startedAt = new Date();
     jobState.logs.push(`Starting to process ${photoIds.length} photos in batches of ${settings.batchSize}`);
     await updateJobInDatabase(jobId, jobState);
 
@@ -429,6 +474,21 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Job not found' }, { status: 404 });
       }
       
+      // Calculate elapsed time and estimated time for the response
+      let elapsedTimeMs = 0;
+      let estimatedTimeRemainingMs = 0;
+      
+      if (jobState.startedAt) {
+        const now = new Date();
+        elapsedTimeMs = now.getTime() - jobState.startedAt.getTime();
+        
+        if (jobState.progress > 0 && jobState.status === 'RUNNING') {
+          const progressRatio = jobState.progress / 100;
+          const estimatedTotalMs = elapsedTimeMs / progressRatio;
+          estimatedTimeRemainingMs = Math.max(0, estimatedTotalMs - elapsedTimeMs);
+        }
+      }
+      
       return NextResponse.json({
         id: jobState.id,
         status: jobState.status,
@@ -440,6 +500,9 @@ export async function GET(request: NextRequest) {
         logs: jobState.logs,
         errors: jobState.errors,
         currentBatch: jobState.currentBatch,
+        elapsedTimeMs,
+        estimatedTimeRemainingMs,
+        startedAt: jobState.startedAt,
       });
     } else {
       // Get overall status
