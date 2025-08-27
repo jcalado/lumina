@@ -290,6 +290,16 @@ async function migratePhotos() {
             });
             
             if (!existing) {
+              // Verify the album exists before creating photo
+              const albumExists = await tx.album.findUnique({
+                where: { id: photo.albumId }
+              });
+              
+              if (!albumExists) {
+                console.log(`  ⚠️  Skipping photo ${photo.filename} - album ${photo.albumId} not found`);
+                continue;
+              }
+              
               await tx.photo.create({
                 data: {
                   id: photo.id,
@@ -336,6 +346,16 @@ async function migrateVideos() {
         });
         
         if (!existing) {
+          // Verify the album exists before creating video
+          const albumExists = await mariadb.album.findUnique({
+            where: { id: video.albumId }
+          });
+          
+          if (!albumExists) {
+            console.log(`  ⚠️  Skipping video ${video.filename} - album ${video.albumId} not found`);
+            continue;
+          }
+          
           await mariadb.video.create({
             data: {
               id: video.id,
@@ -392,6 +412,16 @@ async function migrateThumbnails() {
             });
             
             if (!existing) {
+              // Verify the photo exists before creating thumbnail
+              const photoExists = await tx.photo.findUnique({
+                where: { id: thumbnail.photoId }
+              });
+              
+              if (!photoExists) {
+                console.log(`  ⚠️  Skipping thumbnail for photo ${thumbnail.photoId} - photo not found`);
+                continue;
+              }
+              
               await tx.thumbnail.create({
                 data: {
                   id: thumbnail.id,
@@ -434,6 +464,16 @@ async function migrateVideoThumbnails() {
         });
         
         if (!existing) {
+          // Verify the video exists before creating video thumbnail
+          const videoExists = await mariadb.video.findUnique({
+            where: { id: thumbnail.videoId }
+          });
+          
+          if (!videoExists) {
+            console.log(`  ⚠️  Skipping video thumbnail for video ${thumbnail.videoId} - video not found`);
+            continue;
+          }
+          
           await mariadb.videoThumbnail.create({
             data: {
               id: thumbnail.id,
@@ -508,6 +548,28 @@ async function migratePeopleAndFaces() {
             });
             
             if (!existing) {
+              // Verify the photo exists before creating face
+              const photoExists = await tx.photo.findUnique({
+                where: { id: face.photoId }
+              });
+              
+              if (!photoExists) {
+                console.log(`  ⚠️  Skipping face for photo ${face.photoId} - photo not found`);
+                continue;
+              }
+              
+              // If personId is specified, verify the person exists
+              if (face.personId) {
+                const personExists = await tx.person.findUnique({
+                  where: { id: face.personId }
+                });
+                
+                if (!personExists) {
+                  console.log(`  ⚠️  Face references non-existent person ${face.personId}, setting to null`);
+                  face.personId = null;
+                }
+              }
+              
               await tx.face.create({
                 data: {
                   id: face.id,
