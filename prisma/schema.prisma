@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -123,10 +123,10 @@ model SyncJob {
   completedAlbums Int       @default(0)
   startedAt       DateTime?
   completedAt     DateTime?
-  errors          String?   @db.MediumText // JSON string for error details
+  errors          String?   @db.Text // JSON string for error details
   filesProcessed  Int       @default(0)
   filesUploaded   Int       @default(0)
-  logs            String?   @db.MediumText // JSON array of detailed log entries
+  logs            String?   @db.Text // JSON array of detailed log entries
   createdAt       DateTime  @default(now())
 
   @@map("sync_jobs")
@@ -140,8 +140,8 @@ model BlurhashJob {
   processedPhotos Int       @default(0)
   startedAt       DateTime?
   completedAt     DateTime?
-  errors          String?   @db.MediumText // JSON string for error details
-  logs            String?   @db.MediumText // JSON array of detailed log entries
+  errors          String?   @db.Text // JSON string for error details
+  logs            String?   @db.Text // JSON array of detailed log entries
   createdAt       DateTime  @default(now())
 
   @@map("blurhash_jobs")
@@ -156,8 +156,8 @@ model ThumbnailJob {
   thumbnailsCreated Int       @default(0)
   startedAt         DateTime?
   completedAt       DateTime?
-  errors            String?   @db.MediumText // JSON string for error details
-  logs              String?   @db.MediumText // JSON array of detailed log entries
+  errors            String?   @db.Text // JSON string for error details
+  logs              String?   @db.Text // JSON array of detailed log entries
   createdAt         DateTime  @default(now())
 
   @@map("thumbnail_jobs")
@@ -205,10 +205,9 @@ model Face {
   @@index([personId, verified]) // For finding verified faces per person
   @@index([photoId, ignored]) // For finding faces in a photo excluding ignored ones
 
-  // Partial indexes for common NULL checks (MariaDB supports these)
-  @@index([personId], name: "idx_face_unassigned", where: "personId IS NULL")
-  @@index([embedding], name: "idx_face_has_embedding", where: "embedding IS NOT NULL")
-  @@index([ignored], name: "idx_face_not_ignored", where: "ignored = false")
+  @@index([personId], name: "idx_face_unassigned")
+  @@index([embedding], name: "idx_face_has_embedding")
+  @@index([ignored], name: "idx_face_not_ignored")
 
   @@map("faces")
 }
@@ -224,8 +223,8 @@ model FaceRecognitionJob {
   startedAt         DateTime?
   completedAt       DateTime?
   pausedAt          DateTime?
-  errors            String?   @db.MediumText // JSON string for error details
-  logs              String?   @db.MediumText // JSON array of detailed log entries
+  errors            String?   @db.Text // JSON string for error details
+  logs              String?   @db.Text // JSON array of detailed log entries
   createdAt         DateTime  @default(now())
 
   @@map("face_recognition_jobs")

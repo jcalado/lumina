@@ -47,8 +47,8 @@ interface DatabaseConfig {
  * Constructs a MariaDB/MySQL connection URL from environment variables
  */
 export function buildDatabaseUrl(): string {
-  // First, check if DATABASE_URL is already set and is a MySQL URL
-  if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('mysql://')) {
+  // First, check if DATABASE_URL is already set and is a valid DB URL
+  if (process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('mysql://') || process.env.DATABASE_URL.startsWith('postgresql://'))) {
     return process.env.DATABASE_URL;
   }
 
@@ -58,9 +58,10 @@ export function buildDatabaseUrl(): string {
   if (hasDbVariables) {
     console.log('🔧 Building DATABASE_URL from DB_* environment variables...');
     
+    const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') || process.env.DB_TYPE === 'postgres';
     const config: DatabaseConfig = {
       host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || '3306',
+      port: process.env.DB_PORT || (isPostgres ? '5432' : '3306'),
       database: process.env.DB_DATABASE || 'lumina_production',
       username: process.env.DB_USERNAME!,
       password: process.env.DB_PASSWORD!,
@@ -69,24 +70,27 @@ export function buildDatabaseUrl(): string {
     };
 
     // Construct the URL
-    let url = `mysql://${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@${config.host}:${config.port}/${config.database}`;
+    const protocol = isPostgres ? 'postgresql' : 'mysql';
+    let url = `${protocol}://${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@${config.host}:${config.port}/${config.database}`;
 
-    // Add query parameters for charset and collation
-    const params = new URLSearchParams();
-    if (config.charset) {
-      params.append('charset', config.charset);
-    }
-    if (config.collation) {
-      params.append('collation', config.collation);
-    }
+    // Add query parameters for charset and collation (for MySQL)
+    if (!isPostgres) {
+        const params = new URLSearchParams();
+        if (config.charset) {
+          params.append('charset', config.charset);
+        }
+        if (config.collation) {
+          params.append('collation', config.collation);
+        }
 
-    if (params.toString()) {
-      url += `?${params.toString()}`;
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
     }
 
     // Set the constructed URL as environment variable
     process.env.DATABASE_URL = url;
-    console.log(`✅ Constructed DATABASE_URL: mysql://${config.username}:***@${config.host}:${config.port}/${config.database}`);
+    console.log(`✅ Constructed DATABASE_URL: ${protocol}://${config.username}:***@${config.host}:${config.port}/${config.database}`);
     
     return url;
   }
@@ -103,9 +107,10 @@ export function buildDatabaseUrl(): string {
  * Gets the database configuration for display purposes (without password)
  */
 export function getDatabaseConfig(): Omit<DatabaseConfig, 'password'> & { hasPassword: boolean } {
+  const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') || process.env.DB_TYPE === 'postgres';
   return {
     host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || '3306',
+    port: process.env.DB_PORT || (isPostgres ? '5432' : '3306'),
     database: process.env.DB_DATABASE || 'lumina_production',
     username: process.env.DB_USERNAME || 'lumina_user',
     charset: process.env.DB_CHARSET || 'utf8mb4',
@@ -121,10 +126,10 @@ export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-  const hasMysqlUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('mysql://');
+  const hasDbUrl = process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('mysql://') || process.env.DATABASE_URL.startsWith('postgresql://'));
 
-  if (!hasMysqlUrl && !hasDbVariables) {
-    errors.push('Either DATABASE_URL (mysql://) or DB_* variables (DB_HOST, DB_USERNAME, DB_PASSWORD) must be set');
+  if (!hasDbUrl && !hasDbVariables) {
+    errors.push('Either DATABASE_URL (mysql:// or postgresql://) or DB_* variables (DB_HOST, DB_USERNAME, DB_PASSWORD) must be set');
   }
 
   if (process.env.DB_PORT && isNaN(parseInt(process.env.DB_PORT))) {
