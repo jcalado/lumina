@@ -12,31 +12,45 @@ if [ ! -f ".env.production" ]; then
     exit 1
 fi
 
-# Option 1: Install dotenv-cli and use production commands
-if command -v npm &> /dev/null; then
-    echo "📦 Installing dotenv-cli..."
-    npm install -g dotenv-cli
-    
-    echo "✅ Setup complete! Now you can use:"
-    echo "   npx dotenv -e .env.production -- npx prisma db push"
-    echo "   npx dotenv -e .env.production -- npx prisma generate"
-    echo "   npx dotenv -e .env.production -- npx prisma studio"
-    
-    echo ""
-    echo "🚀 Running Prisma DB push with production config..."
-    npx dotenv -e .env.production -- npx prisma db push
-    
+# Backup existing .env if it exists
+if [ -f ".env" ]; then
+    echo "� Backing up existing .env to .env.backup"
+    cp .env .env.backup
+fi
+
+# Copy .env.production to .env (Prisma always loads .env)
+echo "📋 Copying .env.production to .env for Prisma compatibility..."
+cp .env.production .env
+
+echo "✅ Setup complete!"
+echo ""
+echo "🔍 Verifying DATABASE_URL..."
+if grep -q "^DATABASE_URL.*mysql://" .env; then
+    echo "✅ DATABASE_URL contains MySQL connection string"
+elif grep -q "^DB_HOST=" .env; then
+    echo "✅ Found DB_* variables - they will be auto-constructed into DATABASE_URL"
 else
-    # Option 2: Copy .env.production to .env as fallback
-    echo "📋 Copying .env.production to .env..."
-    cp .env.production .env
-    
-    echo "✅ Setup complete! Now you can run:"
-    echo "   npx prisma db push"
-    echo "   npx prisma generate" 
-    echo "   npx prisma studio"
-    
+    echo "❌ No valid database configuration found in .env"
+    exit 1
+fi
+
+echo ""
+echo "🚀 Running Prisma DB push..."
+npx prisma db push
+
+if [ $? -eq 0 ]; then
     echo ""
-    echo "🚀 Running Prisma DB push..."
-    npx prisma db push
+    echo "✅ Database schema successfully applied!"
+    echo ""
+    echo "📋 Available commands:"
+    echo "   npx prisma generate     - Generate Prisma client"
+    echo "   npx prisma studio       - Open Prisma Studio"
+    echo "   npm run db:seed         - Seed the database"
+    echo ""
+    echo "💡 Note: .env now contains your production config"
+    echo "   Original .env backed up as .env.backup"
+else
+    echo ""
+    echo "❌ Failed to apply database schema"
+    echo "   Check your database connection and credentials"
 fi

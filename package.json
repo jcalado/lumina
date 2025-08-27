@@ -21,6 +21,7 @@
     "db:status:prod": "dotenv -e .env.production -- tsx scripts/db-status.ts",
     "setup:production": "bash scripts/setup-production.sh",
     "setup:prisma-prod": "bash scripts/setup-prisma-production.sh",
+    "debug:env": "bash scripts/debug-env.sh",
     "worker:thumbnails": "tsx scripts/thumbnail-worker.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
     "worker:video-thumbnails": "tsx scripts/video-thumbnail-worker.ts"
