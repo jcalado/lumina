@@ -13,8 +13,10 @@ import { promises as fsPromises } from 'fs';
 import os from 'os';
 import path from 'path';
 import {
-  execFileSync
+  execFileSync,
+  spawn
 } from 'child_process';
+import { promisify } from 'util';
 
 /**
  * Face detection result returned from the Python helper, mapped to our types.
@@ -72,9 +74,44 @@ export async function detectFacesInPhotoBatch(
 
     let out: string;
     try {
-      out = execFileSync('python', [scriptPath, tmpDir], {
-        encoding: 'utf8',
-        maxBuffer: 50 * 1024 * 1024 // Increased buffer for batch processing
+      // Use async spawn instead of sync execFileSync to prevent blocking
+      out = await new Promise<string>((resolve, reject) => {
+        const child = spawn('python', [scriptPath, tmpDir], {
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        
+        let stdout = '';
+        let stderr = '';
+        
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+        
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve(stdout);
+          } else {
+            reject(new Error(`Python script failed with code ${code}: ${stderr}`));
+          }
+        });
+        
+        child.on('error', (error) => {
+          reject(error);
+        });
+        
+        // Set timeout to prevent hanging
+        const timeout = setTimeout(() => {
+          child.kill('SIGTERM');
+          reject(new Error('Face detection timeout'));
+        }, 60000); // 60 second timeout
+        
+        child.on('close', () => {
+          clearTimeout(timeout);
+        });
       });
     } catch (subprocessError) {
       const error = subprocessError instanceof Error ? subprocessError.message : String(subprocessError);

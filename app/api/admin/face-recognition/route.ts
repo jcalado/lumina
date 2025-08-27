@@ -79,9 +79,14 @@ function performClustering(faces: ProcessingFace[], similarityThreshold: number)
     }
   }
   
-  // Find similar faces and union them
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
+  // Find similar faces and union them (with reduced comparisons for performance)
+  const maxComparisons = Math.min(n * n, 50000); // Limit comparisons to prevent blocking
+  let comparisons = 0;
+  
+  for (let i = 0; i < n && comparisons < maxComparisons; i++) {
+    for (let j = i + 1; j < n && comparisons < maxComparisons; j++) {
+      comparisons++;
+      
       // Dot product of normalized vectors gives cosine similarity
       let similarity = 0;
       const embA = normalizedFaces[i].normalizedEmbedding;
@@ -172,10 +177,18 @@ async function intermediateClusteringAndSave(
             embedding: JSON.stringify(face.embedding)
           }
         });
+        
+        // Yield control after every few face saves to prevent blocking
+        if (cluster.faces.indexOf(face) % 10 === 0) {
+          await new Promise(resolve => setImmediate(resolve));
+        }
       }
       
       // Update matched count (faces are already counted in facesDetected)
       jobState.facesMatched += cluster.faces.length;
+      
+      // Yield control after each cluster to prevent blocking
+      await new Promise(resolve => setImmediate(resolve));
       
     } catch (error) {
       console.error(`Error saving cluster ${i}:`, error);
@@ -649,6 +662,9 @@ async function updateJobInDatabase(jobId: string, jobState: FaceRecognitionJobSt
   if (jobState.logs.length > 0) {
     console.log('Latest log:', jobState.logs[jobState.logs.length - 1]);
   }
+  
+  // Yield control to allow other requests to be processed
+  await new Promise(resolve => setImmediate(resolve));
 }
 
 // Process photos for face detection only (no person matching)
@@ -773,6 +789,11 @@ async function processJob(jobId: string) {
   try {
     const settings = await getSettings();
     
+    // Dynamic batch sizing based on load
+    let adaptiveBatchSize = Math.max(1, Math.floor(settings.batchSize / 2)); // Start with smaller batches
+    const MIN_BATCH_SIZE = 1;
+    const MAX_BATCH_SIZE = settings.batchSize;
+    
     // Get photos based on processing mode
     // - new_only: Only process photos that haven't been processed yet (faceProcessedAt IS NULL)
     // - reprocess_keep_people: Delete all faces but keep people, then reprocess all photos (faces will be re-matched to existing people when possible)
@@ -872,7 +893,7 @@ async function processJob(jobId: string) {
       const allDetectedFaces: ProcessingFace[] = [];
 
       // Process photos in batches but don't create persons yet
-      for (let i = 0; i < photoIds.length; i += settings.batchSize) {
+      for (let i = 0; i < photoIds.length; i += adaptiveBatchSize) {
         // Check if job was cancelled or paused
         const currentState = activeJobs.get(jobId);
         if (!currentState || currentState.status !== 'RUNNING') {
@@ -880,11 +901,14 @@ async function processJob(jobId: string) {
           break;
         }
 
-        const batch = photoIds.slice(i, i + settings.batchSize);
+        const batch = photoIds.slice(i, i + adaptiveBatchSize);
         jobState.currentBatch = batch;
+        
+        // Track batch processing time for adaptive sizing
+        const batchStartTime = Date.now();
 
         try {
-          jobState.logs.push(`Processing detection batch ${Math.floor(i / settings.batchSize) + 1} with ${batch.length} photos`);
+          jobState.logs.push(`Processing detection batch ${Math.floor(i / adaptiveBatchSize) + 1} with ${batch.length} photos (adaptive batch size: ${adaptiveBatchSize})`);
           
           // Detect faces only (no person matching yet)
           const detectionResults = await processPhotoBatchDetectionOnly(
@@ -924,6 +948,9 @@ async function processJob(jobId: string) {
               where: { id: photoResult.photoId },
               data: { faceProcessedAt: new Date() }
             });
+            
+            // Yield control after each photo to prevent blocking
+            await new Promise(resolve => setImmediate(resolve));
           }
 
           jobState.processedPhotos += batch.length;
@@ -931,9 +958,18 @@ async function processJob(jobId: string) {
           // Log detection results for this batch
           const batchFaceCount = detectionResults.reduce((total, result) => total + result.faces.length, 0);
           jobState.logs.push(`Batch detected ${batchFaceCount} faces in ${batch.length} photos`);
+          
+          // Adaptive batch sizing based on processing time
+          const batchProcessingTime = Date.now() - batchStartTime;
+          if (batchProcessingTime > 5000) { // If batch took more than 5 seconds, reduce size
+            adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.8));
+            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${batchProcessingTime}ms)`);
+          } else if (batchProcessingTime < 2000 && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast, increase size
+            adaptiveBatchSize = Math.min(MAX_BATCH_SIZE, adaptiveBatchSize + 1);
+          }
 
           // Checkpoint: Every CHECKPOINT_INTERVAL photos, do intermediate clustering to manage memory
-          if ((i + settings.batchSize) % CHECKPOINT_INTERVAL === 0 || i + settings.batchSize >= photoIds.length) {
+          if ((i + adaptiveBatchSize) % CHECKPOINT_INTERVAL === 0 || i + adaptiveBatchSize >= photoIds.length) {
             if (allDetectedFaces.length > 0) {
               jobState.logs.push(`Checkpoint reached. Clustering ${allDetectedFaces.length} faces...`);
               await intermediateClusteringAndSave(allDetectedFaces, settings.similarityThreshold, jobState);
@@ -944,12 +980,19 @@ async function processJob(jobId: string) {
           // Update progress
           jobState.progress = Math.round(((i + batch.length) / photoIds.length) * 80); // Reserve 20% for consolidation
           await updateJobInDatabase(jobId, jobState);
+          
+          // Add delay between batches to reduce system load (longer delay for larger batches)
+          const delayMs = Math.min(1000, batch.length * 100); // 100ms per photo, max 1 second
+          await new Promise(resolve => setTimeout(resolve, delayMs));
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           jobState.errors.push(`Batch processing error: ${errorMessage}`);
-          jobState.logs.push(`Error in batch ${Math.floor(i / settings.batchSize) + 1}: ${errorMessage}`);
+          jobState.logs.push(`Error in batch ${Math.floor(i / adaptiveBatchSize) + 1}: ${errorMessage}`);
           console.error(`Error processing batch for job ${jobId}:`, error);
+          
+          // Reduce batch size on error
+          adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.5));
         }
       }
 
@@ -976,11 +1019,11 @@ async function processJob(jobId: string) {
 
     } else {
       // Use existing logic for smaller jobs
-      jobState.logs.push(`Standard job processing ${photoIds.length} photos in batches of ${settings.batchSize}`);
+      jobState.logs.push(`Standard job processing ${photoIds.length} photos in adaptive batches (starting with ${adaptiveBatchSize})`);
       await updateJobInDatabase(jobId, jobState);
 
       // Process photos in batches
-      for (let i = 0; i < photoIds.length; i += settings.batchSize) {
+      for (let i = 0; i < photoIds.length; i += adaptiveBatchSize) {
         // Check if job was cancelled or paused
         const currentState = activeJobs.get(jobId);
         if (!currentState || currentState.status !== 'RUNNING') {
@@ -988,11 +1031,14 @@ async function processJob(jobId: string) {
           break;
         }
 
-        const batch = photoIds.slice(i, i + settings.batchSize);
+        const batch = photoIds.slice(i, i + adaptiveBatchSize);
         jobState.currentBatch = batch;
+        
+        // Track batch processing time
+        const batchStartTime = Date.now();
 
         try {
-          jobState.logs.push(`Processing batch ${Math.floor(i / settings.batchSize) + 1} with ${batch.length} photos`);
+          jobState.logs.push(`Processing batch ${Math.floor(i / adaptiveBatchSize) + 1} with ${batch.length} photos (batch size: ${adaptiveBatchSize})`);
           
           const result = await processPhotoBatch(
             batch,
@@ -1034,13 +1080,15 @@ async function processJob(jobId: string) {
               await prisma.$executeRaw`
                 UPDATE photos SET faceProcessedAt = ${new Date().toISOString()} WHERE id = ${photoId}
               `;
+              // Yield control after each update
+              await new Promise(resolve => setImmediate(resolve));
             } catch (error) {
               console.error(`Error marking photo ${photoId} as processed:`, error);
             }
           }
 
           jobState.logs.push(
-            `Batch ${Math.floor(i / settings.batchSize) + 1} completed: ${result.processed}/${batch.length} photos processed`
+            `Batch ${Math.floor(i / adaptiveBatchSize) + 1} completed: ${result.processed}/${batch.length} photos processed`
           );
           
           jobState.logs.push(
@@ -1050,16 +1098,32 @@ async function processJob(jobId: string) {
           if (result.errors.length > 0) {
             jobState.logs.push(`Batch had ${result.errors.length} errors`);
           }
+          
+          // Adaptive batch sizing
+          const batchProcessingTime = Date.now() - batchStartTime;
+          if (batchProcessingTime > 8000) { // If batch took more than 8 seconds, reduce size
+            adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.7));
+            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${batchProcessingTime}ms)`);
+          } else if (batchProcessingTime < 3000 && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast, increase size
+            adaptiveBatchSize = Math.min(MAX_BATCH_SIZE, adaptiveBatchSize + 1);
+          }
 
           // Update progress
           jobState.progress = Math.round(((i + batch.length) / photoIds.length) * 100);
           await updateJobInDatabase(jobId, jobState);
+          
+          // Add delay between batches to reduce system load
+          const delayMs = Math.min(500, batch.length * 50); // 50ms per photo, max 500ms
+          await new Promise(resolve => setTimeout(resolve, delayMs));
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           jobState.errors.push(`Batch processing error: ${errorMessage}`);
-          jobState.logs.push(`Error in batch ${Math.floor(i / settings.batchSize) + 1}: ${errorMessage}`);
+          jobState.logs.push(`Error in batch ${Math.floor(i / adaptiveBatchSize) + 1}: ${errorMessage}`);
           console.error(`Error processing batch for job ${jobId}:`, error);
+          
+          // Reduce batch size on error
+          adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.5));
         }
       }
 
