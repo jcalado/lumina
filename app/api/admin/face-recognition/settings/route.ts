@@ -19,7 +19,7 @@ export async function GET() {
       },
     });
 
-    const settingsMap = settings.reduce((acc: Record<string, string>, setting) => {
+    const settingsMap = settings.reduce((acc: Record<string, string>, setting: { key: string; value: string }) => {
       acc[setting.key] = setting.value;
       return acc;
     }, {} as Record<string, string>);
