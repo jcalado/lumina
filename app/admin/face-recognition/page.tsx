@@ -17,6 +17,13 @@ import {
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -147,6 +154,10 @@ export default function FaceRecognitionAdminPage() {
   } | null>(null);
   const [peopleSearch, setPeopleSearch] = useState('');
   const [peopleSort, setPeopleSort] = useState<'default' | 'alpha' | 'face_count_desc' | 'face_count_asc' | 'created_desc' | 'created_asc'>('default');
+  const [peopleFilter, setPeopleFilter] = useState<'all' | 'pending' | 'unnamed' | 'single_face'>('all');
+  const [showPending, setShowPending] = useState(false);
+  const [showUnnamed, setShowUnnamed] = useState(false);
+  const [showSingleFace, setShowSingleFace] = useState(false);
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
@@ -197,7 +208,7 @@ export default function FaceRecognitionAdminPage() {
     loadPeople();
   }, [page, limit]);
 
-  // Debounced reload when peopleSearch or peopleSort change
+  // Debounced reload when peopleSearch, peopleSort, or filters change
   useEffect(() => {
     if (peopleSearchDebounce.current) window.clearTimeout(peopleSearchDebounce.current);
     peopleSearchDebounce.current = window.setTimeout(() => {
@@ -207,7 +218,7 @@ export default function FaceRecognitionAdminPage() {
     return () => {
       if (peopleSearchDebounce.current) window.clearTimeout(peopleSearchDebounce.current);
     };
-  }, [peopleSearch, peopleSort]);
+  }, [peopleSearch, peopleSort, showPending, showUnnamed, showSingleFace]);
 
   // Poll status when job is running
   useEffect(() => {
@@ -234,6 +245,12 @@ export default function FaceRecognitionAdminPage() {
   params.set('limit', String(limit));
   if (peopleSearch.trim()) params.set('search', peopleSearch.trim());
   if (peopleSort !== 'default') params.set('sort', peopleSort);
+  
+  // Add filter parameters
+  if (showPending) params.set('confirmed', 'false');
+  if (showUnnamed) params.set('unnamed', 'true');
+  if (showSingleFace) params.set('single_face', 'true');
+  
   const response = await fetch(`/api/admin/people?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
@@ -1151,9 +1168,65 @@ export default function FaceRecognitionAdminPage() {
                 ) : (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <p className="text-sm text-muted-foreground">Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}</p>
                         <Input placeholder="Filter people by name..." value={peopleSearch} onChange={(e) => { setPeopleSearch(e.target.value); }} className="max-w-xs" />
+                        
+                        {/* Filter Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="flex items-center gap-2">
+                              <Hash className="h-4 w-4" />
+                              Filters
+                              {(showPending || showUnnamed || showSingleFace) && (
+                                <Badge variant="secondary" className="ml-1 h-4 w-4 p-0 flex items-center justify-center text-xs">
+                                  {[showPending, showUnnamed, showSingleFace].filter(Boolean).length}
+                                </Badge>
+                              )}
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuLabel>Filter People</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => setShowPending(!showPending)}
+                              className={showPending ? 'bg-accent' : ''}
+                            >
+                              <CheckCircle className={`h-4 w-4 mr-2 ${showPending ? 'text-primary' : 'text-muted-foreground'}`} />
+                              Show only pending
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setShowUnnamed(!showUnnamed)}
+                              className={showUnnamed ? 'bg-accent' : ''}
+                            >
+                              <CheckCircle className={`h-4 w-4 mr-2 ${showUnnamed ? 'text-primary' : 'text-muted-foreground'}`} />
+                              Show only unnamed
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setShowSingleFace(!showSingleFace)}
+                              className={showSingleFace ? 'bg-accent' : ''}
+                            >
+                              <CheckCircle className={`h-4 w-4 mr-2 ${showSingleFace ? 'text-primary' : 'text-muted-foreground'}`} />
+                              Show only 1 face
+                            </DropdownMenuItem>
+                            {(showPending || showUnnamed || showSingleFace) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => {
+                                    setShowPending(false);
+                                    setShowUnnamed(false);
+                                    setShowSingleFace(false);
+                                  }}
+                                >
+                                  <X className="h-4 w-4 mr-2" />
+                                  Clear all filters
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         
                         {/* Updated Sort Dropdown */}
                         <DropdownMenu>
@@ -1228,6 +1301,25 @@ export default function FaceRecognitionAdminPage() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
                           <Button onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }} variant="outline" size="sm" disabled={peopleLoading || ((pagination?.page || page) <= 1)}>Prev</Button>
+                          
+                          {/* Page Selector */}
+                          <Select 
+                            value={String(pagination?.page ?? page)} 
+                            onValueChange={(value) => setPage(parseInt(value))}
+                            disabled={peopleLoading}
+                          >
+                            <SelectTrigger className="w-20 h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: pagination?.totalPages ?? 1 }, (_, i) => i + 1).map((pageNum) => (
+                                <SelectItem key={pageNum} value={String(pageNum)}>
+                                  {pageNum}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
                           <Button onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }} variant="outline" size="sm" disabled={peopleLoading || !(pagination?.hasMore ?? true)}>Next</Button>
                         </div>
                         <Button onClick={() => loadPeople()} variant="outline" size="sm" className="flex items-center gap-2"><Eye className="h-4 w-4" /> Refresh</Button>

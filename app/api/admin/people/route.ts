@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '100');
     const search = searchParams.get('search') || '';
     const confirmed = searchParams.get('confirmed');
+    const unnamed = searchParams.get('unnamed') === 'true';
+    const singleFace = searchParams.get('single_face') === 'true';
     const unassigned = searchParams.get('unassigned') === 'true';
     
     const offset = (page - 1) * limit;
@@ -76,18 +78,53 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const whereClause: any = {};
+    let baseWhereClause: any = {};
     
     if (search) {
       // the runtime Prisma supports it.
       // TODO: Once Prisma client/runtime supports `mode: 'insensitive'` on string filters, update this code to enable case-insensitive search.
-      whereClause.name = {
+      baseWhereClause.name = {
         contains: search,
       };
     }
     
     if (confirmed !== null) {
-      whereClause.confirmed = confirmed === 'true';
+      baseWhereClause.confirmed = confirmed === 'true';
+    }
+    
+    // Filter for unnamed people (people with empty or null names)
+    if (unnamed) {
+      baseWhereClause.OR = [
+        { name: { equals: '' } },
+        { name: { equals: null } }
+      ];
+    }
+    
+    // For single face filter, we need to handle it differently
+    let whereClause = baseWhereClause;
+    if (singleFace) {
+      // First get people with only 1 face
+      const singleFacePeople = await prisma.person.findMany({
+        where: baseWhereClause,
+        include: {
+          _count: {
+            select: {
+              faces: true
+            }
+          }
+        }
+      });
+      
+      const singleFacePeopleIds = singleFacePeople
+        .filter(person => person._count.faces === 1)
+        .map(person => person.id);
+      
+      whereClause = {
+        ...baseWhereClause,
+        id: {
+          in: singleFacePeopleIds
+        }
+      };
     }
 
     const sort = searchParams.get('sort') || '';
