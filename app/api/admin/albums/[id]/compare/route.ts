@@ -140,7 +140,7 @@ export async function POST(
       comparison.missing.dbMissingFromS3 = comparison.databaseFiles.filter(f => !s3Set.has(f))
 
       // 5. Add file size comparison for files that exist in multiple locations
-      const detailedComparison = []
+      const detailedComparison: any[] = []
       for (const filename of localSet) {
         if (s3Set.has(filename) || dbSet.has(filename)) {
           const fileInfo: any = { filename }
