@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { S3Service } from '@/lib/s3';
+import { getImageBuffer } from '@/lib/face-detection';
 import sharp from 'sharp';
 
 interface Params {
@@ -18,7 +18,11 @@ export async function GET(
       where: { id: faceId },
       include: {
         photo: {
-          select: { s3Key: true, filename: true },
+          select: { 
+            s3Key: true, 
+            filename: true,
+            originalPath: true 
+          },
         },
       },
     });
@@ -27,12 +31,22 @@ export async function GET(
       return new NextResponse('Face not found', { status: 404 });
     }
 
-    if (!face.photo?.s3Key) {
-      return new NextResponse('Photo S3 key not found for face', { status: 404 });
+    if (!face.photo?.originalPath && !face.photo?.s3Key) {
+      return new NextResponse('Photo not found - no local path or S3 key', { status: 404 });
     }
 
-    const s3Service = new S3Service();
-    const imageBuffer = await s3Service.getObject(face.photo.s3Key);
+    // Use the existing getImageBuffer function which handles local/S3 fallback
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = await getImageBuffer(
+        face.photo.originalPath || '', 
+        face.photo.s3Key || '', 
+        face.photo.filename || 'unknown'
+      );
+    } catch (error) {
+      console.error('Failed to load image for face:', error);
+      return new NextResponse('Photo not available', { status: 404 });
+    }
 
     const boundingBox = JSON.parse(face.boundingBox);
 
