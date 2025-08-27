@@ -21,7 +21,7 @@ model Album {
   syncedToS3            Boolean  @default(false) // All photos uploaded to S3
   localFilesSafeDelete  Boolean  @default(false) // Safe to delete local files
   lastSyncAt            DateTime? // Last successful sync
-  syncFingerprint       String?  // JSON string of album fingerprint
+  syncFingerprint       String?  @db.Text // JSON string of album fingerprint
   lastSyncCheck         DateTime? // Last time sync check was performed
   syncStatus            SyncStatus @default(PENDING) // Current sync status
   createdAt             DateTime @default(now())
