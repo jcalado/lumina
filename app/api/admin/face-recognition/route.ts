@@ -368,7 +368,7 @@ async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceR
   SELECT id, embedding, boundingBox, confidence, photoId 
   FROM faces 
   WHERE personId IS NULL AND embedding IS NOT NULL
-    ORDER BY confidence DESC
+  ORDER BY confidence DESC
   `;
   
   console.log(`Found ${unassignedFaces.length} unassigned faces to group`);
