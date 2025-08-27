@@ -77,7 +77,7 @@ async function getS3StorageUsage(): Promise<{ totalSize: number; objectCount: nu
       }
     })
 
-    const totalSize = photos.reduce((sum: number, photo) => sum + (photo.fileSize || 0), 0)
+    const totalSize = photos.reduce((sum: number, photo: { fileSize: number | null }) => sum + (photo.fileSize || 0), 0)
     const objectCount = photos.length
 
     return { totalSize, objectCount }

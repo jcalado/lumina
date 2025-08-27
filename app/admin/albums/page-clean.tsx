@@ -485,7 +485,7 @@ export default function AdminAlbumsPage() {
     )
   }
 
-  const totalPhotos = albums.reduce((sum: number, album) => sum + (album._count?.photos || 0), 0)
+  const totalPhotos = albums.reduce((sum: number, album: Album) => sum + (album._count?.photos || 0), 0)
   const enabledAlbums = albums.filter(album => album.enabled).length
   const syncedAlbums = albums.filter(album => album.syncedToS3).length
 
