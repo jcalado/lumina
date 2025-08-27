@@ -101,7 +101,7 @@ export function FileUploadModal({
     setUploadType('files')
     
     // Calculate total size first
-    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0)
+    const totalSize = fileList.reduce((sum: number, file) => sum + file.size, 0)
     const maxTotalSize = 2 * 1024 * 1024 * 1024 // 2GB
     
     if (totalSize > maxTotalSize) {
@@ -357,7 +357,7 @@ export function FileUploadModal({
               </div>
               
               <div className="text-sm text-gray-600 mb-2">
-                Total size: {formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}
+                Total size: {formatFileSize(files.reduce((sum: number, file) => sum + file.size, 0))}
               </div>
               
               <div className="max-h-48 overflow-y-auto space-y-2">

@@ -1,4 +1,4 @@
-import createNextIntlPlugin from 'next-intl/plugin';
+const createNextIntlPlugin = require('next-intl/plugin');
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
@@ -10,12 +10,6 @@ const nextConfig = {
   // Increase request size limits for file uploads
   serverRuntimeConfig: {
     maxRequestSize: '2gb',
-  },
-  // Configure body parser for larger uploads
-  api: {
-    bodyParser: {
-      sizeLimit: '2gb',
-    },
   },
   images: {
     remotePatterns: [
@@ -35,4 +29,4 @@ const nextConfig = {
   },
 };
 
-export default withNextIntl(nextConfig);
+module.exports = withNextIntl(nextConfig);
