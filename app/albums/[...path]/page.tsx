@@ -162,7 +162,7 @@ function Breadcrumb({ albumPath }: BreadcrumbProps) {
       }
 
       // Build all path combinations for breadcrumbs
-      const paths = [];
+      const paths: string[] = [];
       for (let i = 0; i < pathSegments.length; i++) {
         const currentPath = pathSegments.slice(0, i + 1).join('/');
         paths.push(currentPath);
