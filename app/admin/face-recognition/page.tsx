@@ -972,11 +972,170 @@ export default function FaceRecognitionAdminPage() {
                     <p className="text-muted-foreground">Loading people...</p>
                   </div>
                 ) : people.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
-                    <p className="text-muted-foreground mb-4">Start processing photos to detect and group faces into people</p>
-                    <Button onClick={startProcessing} className="flex items-center gap-2"><Play className="h-4 w-4" /> Start Face Detection</Button>
+                  <div className="space-y-8">
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
+                      <p className="text-muted-foreground mb-4">Start processing photos to detect and group faces into people, or process unassigned faces below</p>
+                      <Button onClick={startProcessing} className="flex items-center gap-2"><Play className="h-4 w-4" /> Start Face Detection</Button>
+                    </div>
+
+                    {/* Unassigned Faces Section - Always show when no people exist */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium flex items-center gap-2"><Grid3X3 className="h-5 w-5" /> Unassigned Faces</h3>
+                        <div className="flex items-center gap-2">
+                          {/* Process Unassigned Faces with Settings */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" disabled={processingUnassigned || unassignedFaces.length === 0}>
+                                {processingUnassigned ? (
+                                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <Cpu className="h-4 w-4 mr-2" />
+                                )}
+                                Auto-Process Faces
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="max-w-lg">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Process Unassigned Faces</AlertDialogTitle>
+                                <AlertDialogDescription asChild>
+                                  <div className="space-y-4">
+                                    <p>Automatically process unassigned faces based on similarity threshold. This will group similar faces together.</p>
+                                    
+                                    <div className="space-y-3">
+                                      <div>
+                                        <Label htmlFor="similarity-threshold">Similarity Threshold: {Math.round(similarityThreshold * 100)}%</Label>
+                                        <Slider
+                                          id="similarity-threshold"
+                                          min={0.3}
+                                          max={0.95}
+                                          step={0.05}
+                                          value={[similarityThreshold]}
+                                          onValueChange={(value) => setSimilarityThreshold(value[0])}
+                                          className="mt-2"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">Higher values require more similarity</p>
+                                      </div>
+                                      
+                                      <div>
+                                        <Label>Processing Mode</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="create_new"
+                                              checked={processMode === 'create_new'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Create new people only</span>
+                                          </label>
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="assign_existing"
+                                              checked={processMode === 'assign_existing'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Assign to existing people only</span>
+                                          </label>
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="both"
+                                              checked={processMode === 'both'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Both (recommended)</span>
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={processUnassignedFaces}>
+                                  Start Processing
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          
+                          {/* Delete All Unassigned Faces */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm" disabled={deletingUnassignedFaces || unassignedFaces.length === 0}>
+                                {deletingUnassignedFaces ? (
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Delete All Unassigned
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete All Unassigned Faces?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete all {unassignedFaces.length} unassigned faces. 
+                                  You may want to process them first to create people.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={deleteAllUnassignedFaces} className="bg-destructive hover:bg-destructive/90">
+                                  Delete All Unassigned Faces
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+
+                      <Card>
+                        <CardContent className="p-4">
+                          {unassignedLoading ? (
+                            <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div><p className="text-muted-foreground">Loading unassigned faces...</p></div>
+                          ) : unassignedFaces.length === 0 ? (
+                            <div className="text-center py-8"><CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" /><h4 className="font-medium mb-2">All Faces Assigned</h4><p className="text-muted-foreground">All detected faces have been assigned to people</p></div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div>
+                                <p className="text-sm text-muted-foreground mb-3">Click faces to select them for grouping into a person. Selected: {selectedFaces.size}</p>
+                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                  {unassignedFaces.map((face) => (
+                                    <div key={face.id} className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${selectedFaces.has(face.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`} onClick={() => toggleFaceSelection(face.id)}>
+                                      <div className="aspect-square relative">
+                                        {face.photo.thumbnails.length > 0 ? (
+                                          <img src={`/api/photos/${face.photo.id}/thumbnails/${face.photo.thumbnails[0].id}/serve`} alt="Face" className="w-full h-full object-cover" />
+                                        ) : (
+                                          <div className="w-full h-full bg-gray-200 flex items-center justify-center"><Users className="h-8 w-8 text-gray-400" /></div>
+                                        )}
+                                        <div className="absolute bottom-1 right-1 flex gap-1"><Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); ignoreFace(face.id); }}>Ignore</Button></div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-between">
+                                  <p className="text-sm text-muted-foreground">Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1} · {unassignedPagination?.total ?? unassignedFaces.length} faces</p>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="sm" disabled={unassignedLoading || ((unassignedPagination?.page ?? unassignedPage) <= 1)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; if (current > 1) setUnassignedPage(current - 1); }}>Prev</Button>
+                                    <Button variant="outline" size="sm" disabled={unassignedLoading || !(unassignedPagination?.hasMore ?? false)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; setUnassignedPage(current + 1); }}>Next</Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
