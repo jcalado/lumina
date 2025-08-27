@@ -536,7 +536,7 @@ async function migratePeopleAndFaces() {
   console.log(`Found ${sqliteFaces.length} faces in SQLite`);
   
   if (!isDryRun && sqliteFaces.length > 0) {
-    const batchSize = 100;
+    const batchSize = 500;
     for (let i = 0; i < sqliteFaces.length; i += batchSize) {
       const batch = sqliteFaces.slice(i, i + batchSize);
       
