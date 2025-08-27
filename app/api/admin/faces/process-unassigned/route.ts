@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       // Assign all faces in cluster to this person
       await prisma.face.updateMany({
         where: {
-          id: { in: cluster.faces.map(f => f.id) }
+          id: { in: cluster.faces.map((f: typeof unassignedFaces[0]) => f.id) }
         },
         data: {
           personId: person.id
