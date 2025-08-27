@@ -28,7 +28,8 @@
     "worker:thumbnails": "tsx scripts/thumbnail-worker.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
     "worker:video-thumbnails": "tsx scripts/video-thumbnail-worker.ts",
-    "delete-single-face-people": "node scripts/delete-single-face-people.js"
+    "delete-single-face-people": "node scripts/delete-single-face-people.js",
+    "optimize-face-queries": "node scripts/optimize-face-queries.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",

@@ -50,8 +50,15 @@ model Photo {
   thumbnails      Thumbnail[]
   faces           Face[]
 
+  // Existing indexes
   @@index([albumId])
   @@index([faceProcessedAt])
+
+  // Additional performance optimizations
+  @@index([takenAt]) // For time-based photo queries
+  @@index([albumId, takenAt]) // For album photos sorted by date
+  @@index([faceProcessedAt, albumId]) // For finding unprocessed photos by album
+
   @@map("photos")
 }
 
@@ -164,6 +171,11 @@ model Person {
   updatedAt DateTime @updatedAt
   faces     Face[]
 
+  // Performance optimizations
+  @@index([confirmed]) // For filtering confirmed/unconfirmed people
+  @@index([name]) // For name-based searches
+  @@index([confirmed, updatedAt]) // For sorting confirmed people by recent updates
+
   @@map("people")
 }
 
@@ -180,8 +192,24 @@ model Face {
   photo        Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
   person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
 
+  // Existing indexes
   @@index([photoId])
   @@index([personId])
+
+  // Performance optimizations for face queries
+  @@index([personId, confidence]) // For sorting faces by confidence within a person
+  @@index([ignored, personId]) // For finding unassigned/ignored faces efficiently
+  @@index([verified]) // For filtering verified faces
+  @@index([confidence]) // For confidence-based filtering
+  @@index([createdAt]) // For time-based queries
+  @@index([personId, verified]) // For finding verified faces per person
+  @@index([photoId, ignored]) // For finding faces in a photo excluding ignored ones
+
+  // Partial indexes for common NULL checks (MariaDB supports these)
+  @@index([personId], name: "idx_face_unassigned", where: "personId IS NULL")
+  @@index([embedding], name: "idx_face_has_embedding", where: "embedding IS NOT NULL")
+  @@index([ignored], name: "idx_face_not_ignored", where: "ignored = false")
+
   @@map("faces")
 }
 
