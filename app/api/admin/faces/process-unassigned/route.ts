@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
           
           // Simple similarity check based on confidence difference
           // In a real implementation, you'd compare face embeddings
-          const avgConfidence = person.faces.reduce((sum, f) => sum + f.confidence, 0) / person.faces.length;
+          const avgConfidence = person.faces.reduce((sum: number, f: { confidence: number }) => sum + f.confidence, 0) / person.faces.length;
           const confidenceDiff = Math.abs(face.confidence - avgConfidence);
           
           if (confidenceDiff <= (1 - similarityThreshold)) {

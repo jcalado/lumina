@@ -59,7 +59,7 @@ export async function POST(
     }
 
     // Validate total size
-    const totalSize = files.reduce((sum, file) => sum + file.size, 0)
+    const totalSize = files.reduce((sum: number, file: File) => sum + file.size, 0)
     if (totalSize > MAX_TOTAL_SIZE) {
       return NextResponse.json({ 
         error: `Total upload size too large: ${Math.round(totalSize / 1024 / 1024)}MB. Maximum: ${MAX_TOTAL_SIZE / 1024 / 1024}MB` 

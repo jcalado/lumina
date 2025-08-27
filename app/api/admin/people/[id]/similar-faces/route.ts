@@ -18,7 +18,7 @@ async function getFaceRecognitionSettings() {
     },
   });
 
-  const settingsMap = settings.reduce((acc, setting) => {
+  const settingsMap = settings.reduce((acc: Record<string, string>, setting) => {
     acc[setting.key] = setting.value;
     return acc;
   }, {} as Record<string, string>);
