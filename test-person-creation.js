@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
 
 async function testPersonCreation() {
   const prisma = new PrismaClient();
@@ -8,13 +9,13 @@ async function testPersonCreation() {
     
     // Test 1: Check table structure
     const tables = await prisma.$queryRaw`
-      SELECT name FROM sqlite_master WHERE type='table' ORDER BY name
+      SHOW TABLES
     `;
     console.log('Available tables:', tables);
     
     // Test 2: Check people table structure
     const peopleSchema = await prisma.$queryRaw`
-      PRAGMA table_info(people)
+      DESCRIBE people
     `;
     console.log('People table schema:', peopleSchema);
     
@@ -22,15 +23,21 @@ async function testPersonCreation() {
     const testName = 'Test Person ' + Date.now();
     
     try {
-      const person = await prisma.$queryRaw`
+      // MariaDB doesn't support RETURNING, so we need to do a separate query
+      const personId = crypto.randomUUID();
+      await prisma.$executeRaw`
         INSERT INTO people (id, name, confirmed, createdAt, updatedAt) 
         VALUES (
-          'test-' || cast(random() as text),
+          ${personId},
           ${testName}, 
           0, 
-          datetime('now'), 
-          datetime('now')
-        ) RETURNING *
+          NOW(), 
+          NOW()
+        )
+      `;
+      
+      const person = await prisma.$queryRaw`
+        SELECT * FROM people WHERE id = ${personId}
       `;
       console.log('Person created:', person);
     } catch (error) {

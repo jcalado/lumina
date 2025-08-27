@@ -21,7 +21,7 @@ async function main() {
       await prisma.$executeRaw`
         INSERT INTO albums (id, path, slug, name, description, status, enabled, syncedToS3, localFilesSafeDelete, createdAt, updatedAt)
         VALUES (
-          lower(hex(randomblob(16))),
+          UUID(),
           ${albumData.path},
           ${slug},
           ${albumData.name},
@@ -30,8 +30,8 @@ async function main() {
           1,
           0,
           0,
-          datetime('now'),
-          datetime('now')
+          NOW(),
+          NOW()
         )
       `;
 
