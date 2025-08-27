@@ -114,10 +114,10 @@ model SyncJob {
   completedAlbums Int       @default(0)
   startedAt       DateTime?
   completedAt     DateTime?
-  errors          String?   @db.Text // JSON string for error details
+  errors          String?   @db.MediumText // JSON string for error details
   filesProcessed  Int       @default(0)
   filesUploaded   Int       @default(0)
-  logs            String?   @db.Text // JSON array of detailed log entries
+  logs            String?   @db.MediumText // JSON array of detailed log entries
   createdAt       DateTime  @default(now())
 
   @@map("sync_jobs")
@@ -131,8 +131,8 @@ model BlurhashJob {
   processedPhotos Int       @default(0)
   startedAt       DateTime?
   completedAt     DateTime?
-  errors          String?   @db.Text // JSON string for error details
-  logs            String?   @db.Text // JSON array of detailed log entries
+  errors          String?   @db.MediumText // JSON string for error details
+  logs            String?   @db.MediumText // JSON array of detailed log entries
   createdAt       DateTime  @default(now())
 
   @@map("blurhash_jobs")
@@ -147,8 +147,8 @@ model ThumbnailJob {
   thumbnailsCreated Int       @default(0)
   startedAt         DateTime?
   completedAt       DateTime?
-  errors            String?   @db.Text // JSON string for error details
-  logs              String?   @db.Text // JSON array of detailed log entries
+  errors            String?   @db.MediumText // JSON string for error details
+  logs              String?   @db.MediumText // JSON array of detailed log entries
   createdAt         DateTime  @default(now())
 
   @@map("thumbnail_jobs")
@@ -194,8 +194,8 @@ model FaceRecognitionJob {
   startedAt         DateTime?
   completedAt       DateTime?
   pausedAt          DateTime?
-  errors            String?   @db.Text // JSON string for error details
-  logs              String?   @db.Text // JSON array of detailed log entries
+  errors            String?   @db.MediumText // JSON string for error details
+  logs              String?   @db.MediumText // JSON array of detailed log entries
   createdAt         DateTime  @default(now())
 
   @@map("face_recognition_jobs")
