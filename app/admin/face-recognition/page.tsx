@@ -143,6 +143,7 @@ export default function FaceRecognitionAdminPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set());
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleGridLoading, setPeopleGridLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(12);
   const [pagination, setPagination] = useState<{
@@ -205,7 +206,7 @@ export default function FaceRecognitionAdminPage() {
 
   // Reload people when page or limit change
   useEffect(() => {
-    loadPeople();
+    loadPeople(undefined, true); // Mark as page change
   }, [page, limit]);
 
   // Debounced reload when peopleSearch, peopleSort, or filters change
@@ -237,9 +238,15 @@ export default function FaceRecognitionAdminPage() {
     };
   }, [status?.status]);
 
-  const loadPeople = async (overridePage?: number) => {
+  const loadPeople = async (overridePage?: number, isPageChange = false) => {
     try {
-      setPeopleLoading(true);
+      // Use different loading states for pagination vs full reload
+      if (isPageChange) {
+        setPeopleGridLoading(true);
+      } else {
+        setPeopleLoading(true);
+      }
+      
   const params = new URLSearchParams();
   params.set('page', String(overridePage ?? page));
   params.set('limit', String(limit));
@@ -264,6 +271,7 @@ export default function FaceRecognitionAdminPage() {
       console.error('Failed to load people:', error);
     } finally {
       setPeopleLoading(false);
+      setPeopleGridLoading(false);
     }
   };
 
@@ -1300,13 +1308,13 @@ export default function FaceRecognitionAdminPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
-                          <Button onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }} variant="outline" size="sm" disabled={peopleLoading || ((pagination?.page || page) <= 1)}>Prev</Button>
+                          <Button onClick={() => { if ((pagination?.page || page) > 1) { setPage((pagination?.page || page) - 1); } }} variant="outline" size="sm" disabled={peopleGridLoading || ((pagination?.page || page) <= 1)}>Prev</Button>
                           
                           {/* Page Selector */}
                           <Select 
                             value={String(pagination?.page ?? page)} 
                             onValueChange={(value) => setPage(parseInt(value))}
-                            disabled={peopleLoading}
+                            disabled={peopleGridLoading}
                           >
                             <SelectTrigger className="w-20 h-9">
                               <SelectValue />
@@ -1320,36 +1328,45 @@ export default function FaceRecognitionAdminPage() {
                             </SelectContent>
                           </Select>
                           
-                          <Button onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }} variant="outline" size="sm" disabled={peopleLoading || !(pagination?.hasMore ?? true)}>Next</Button>
+                          <Button onClick={() => { const current = pagination?.page || page; if (pagination?.hasMore ?? true) { setPage(current + 1); } }} variant="outline" size="sm" disabled={peopleGridLoading || !(pagination?.hasMore ?? true)}>Next</Button>
                         </div>
                         <Button onClick={() => loadPeople()} variant="outline" size="sm" className="flex items-center gap-2"><Eye className="h-4 w-4" /> Refresh</Button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {people.map((person) => (
-                        <Card key={person.id} className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => loadPersonDetails(person.id)}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-medium truncate">{person.name}</h4>
-                              <input type="checkbox" checked={selectedPeople.has(person.id)} onChange={(e) => { e.stopPropagation(); togglePersonSelection(person.id); }} onClick={(e) => e.stopPropagation()} />
-                            </div>
+                    <div className="relative">
+                      {peopleGridLoading && (
+                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                            <span className="text-sm text-muted-foreground">Loading page...</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {people.map((person) => (
+                          <Card key={person.id} className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => loadPersonDetails(person.id)}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-medium truncate">{person.name}</h4>
+                                <input type="checkbox" checked={selectedPeople.has(person.id)} onChange={(e) => { e.stopPropagation(); togglePersonSelection(person.id); }} onClick={(e) => e.stopPropagation()} />
+                              </div>
 
-                            <div className="flex items-start gap-3">
-                              {person.previewFace && (
-                                <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                  <img src={`/api/faces/${person.previewFace.id}/serve`} alt={`${person.name} preview`} className="w-full h-full object-cover" />
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {person.confirmed ? (
-                                    <Badge variant="default" className="text-xs"><CheckCircle className="h-3 w-3 mr-1" />OK</Badge>
-                                  ) : (
-                                    <Badge variant="secondary" className="text-xs"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
-                                  )}
-                                </div>
-                                <p className="text-sm text-muted-foreground">{person.faceCount} face{person.faceCount !== 1 ? 's' : ''}</p>
+                              <div className="flex items-start gap-3">
+                                {person.previewFace && (
+                                  <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                    <img src={`/api/faces/${person.previewFace.id}/serve`} alt={`${person.name} preview`} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {person.confirmed ? (
+                                      <Badge variant="default" className="text-xs"><CheckCircle className="h-3 w-3 mr-1" />OK</Badge>
+                                    ) : (
+                                      <Badge variant="secondary" className="text-xs"><Clock className="h-3 w-3 mr-1" />Pending</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{person.faceCount} face{person.faceCount !== 1 ? 's' : ''}</p>
                                 {person.previewFace && (<p className="text-xs text-muted-foreground mt-1">Confidence: {Math.round(person.previewFace.confidence * 100)}%</p>)}
                               </div>
                               <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); deletePerson(person.id.toString(), person.name); }} disabled={deletingPerson === person.id.toString()} className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0">
@@ -1359,6 +1376,7 @@ export default function FaceRecognitionAdminPage() {
                           </CardContent>
                         </Card>
                       ))}
+                      </div>
                     </div>
 
                     {/* Unassigned Faces Section */}
