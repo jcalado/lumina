@@ -163,6 +163,16 @@ export default function FaceRecognitionAdminPage() {
   const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
   const [processMode, setProcessMode] = useState<'create_new' | 'assign_existing' | 'both'>('both');
   
+  // New state variables for face processing modes
+  const [processingMode, setProcessingMode] = useState<'new_only' | 'reprocess_all'>('new_only');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [photoStats, setPhotoStats] = useState<{
+    total: number;
+    processed: number;
+    unprocessed: number;
+    percentage: number;
+  } | null>(null);
+  
   const [creatingPerson, setCreatingPerson] = useState(false);
   const [deletingPerson, setDeletingPerson] = useState<string | null>(null);
   const [assigneePersonId, setAssigneePersonId] = useState<string | null>(null);
@@ -179,6 +189,7 @@ export default function FaceRecognitionAdminPage() {
     loadStatus();
     loadPeople();
     loadUnassignedFaces();
+    loadPhotoStats();
   }, []);
 
   // Reload people when page or limit change
@@ -591,8 +602,9 @@ export default function FaceRecognitionAdminPage() {
         // Check if job status changed from running to completed
         if (lastJobStatus && lastJobStatus !== data.status && 
             (data.status === 'ready' || data.status === 'completed')) {
-          // Job completed, reload people data
+          // Job completed, reload people data and photo stats
           loadPeople();
+          loadPhotoStats();
         }
         
         setStatus(data);
@@ -600,6 +612,18 @@ export default function FaceRecognitionAdminPage() {
       }
     } catch (error) {
       console.error('Failed to load status:', error);
+    }
+  };
+
+  const loadPhotoStats = async () => {
+    try {
+      const response = await fetch('/api/admin/photos/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setPhotoStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to load photo stats:', error);
     }
   };
 
@@ -639,7 +663,7 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
-  const startProcessing = async () => {
+  const startProcessing = async (mode: 'new_only' | 'reprocess_all' = 'new_only') => {
     if (!settings.faceRecognitionEnabled) {
       toast({
         title: 'Error',
@@ -650,17 +674,23 @@ export default function FaceRecognitionAdminPage() {
     }
 
     try {
+      setIsProcessing(true);
       const response = await fetch('/api/admin/face-recognition', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode }),
       });
 
       if (response.ok) {
         const data = await response.json();
         toast({
           title: 'Success',
-          description: data.message || 'Face recognition processing started',
+          description: data.message || `Face recognition processing started (${mode === 'reprocess_all' ? 'reprocessing all photos' : 'processing new photos only'})`,
         });
         loadStatus();
+        loadPhotoStats();
       } else {
         const error = await response.json();
         toast({
@@ -675,6 +705,8 @@ export default function FaceRecognitionAdminPage() {
         description: 'Failed to start processing',
         variant: 'destructive',
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -877,7 +909,7 @@ export default function FaceRecognitionAdminPage() {
                   </div>
 
                   {status && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center">
@@ -892,7 +924,7 @@ export default function FaceRecognitionAdminPage() {
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center">
-                            <p className="text-2xl font-bold">0</p>
+                            <p className="text-2xl font-bold">{photoStats?.processed || 0}</p>
                             <p className="text-sm text-muted-foreground">Photos Processed</p>
                           </div>
                         </CardContent>
@@ -901,22 +933,105 @@ export default function FaceRecognitionAdminPage() {
                       <Card>
                         <CardContent className="pt-6">
                           <div className="text-center">
-                            <p className="text-2xl font-bold">0</p>
-                            <p className="text-sm text-muted-foreground">Faces Detected</p>
+                            <p className="text-2xl font-bold text-orange-600">{photoStats?.unprocessed || 0}</p>
+                            <p className="text-sm text-muted-foreground">Photos Pending</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold">{photoStats?.total || 0}</p>
+                            <p className="text-sm text-muted-foreground">Total Photos</p>
                           </div>
                         </CardContent>
                       </Card>
                     </div>
                   )}
+                  
+                  {/* Processing Progress Bar */}
+                  {photoStats && photoStats.total > 0 && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Processing Progress</span>
+                        <span className="text-sm text-muted-foreground">
+                          {photoStats.processed} / {photoStats.total} photos ({photoStats.percentage}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${photoStats.percentage}%` }}
+                        ></div>
+                      </div>
+                      {photoStats.unprocessed > 0 && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {photoStats.unprocessed} photos are ready for face processing
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-4">
-                    <Button 
-                      onClick={startProcessing}
-                      className="flex items-center gap-2"
-                    >
-                      <Play className="h-4 w-4" />
-                      Start Processing
-                    </Button>
+                    {/* Processing Mode Dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          className="flex items-center gap-2"
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                          {isProcessing ? 'Processing...' : 'Start Face Processing'}
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-64">
+                        <DropdownMenuLabel>Processing Options</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => startProcessing('new_only')} disabled={isProcessing}>
+                          <Play className="h-4 w-4 mr-2" />
+                          <div>
+                            <div className="font-medium">Process New Photos Only</div>
+                            <div className="text-xs text-muted-foreground">Process photos that haven't been analyzed yet</div>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={isProcessing}>
+                              <Cpu className="h-4 w-4 mr-2" />
+                              <div>
+                                <div className="font-medium">Reprocess All Photos</div>
+                                <div className="text-xs text-muted-foreground">Clear all face data and reprocess everything</div>
+                              </div>
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reprocess All Photos?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action will delete all existing face data and people records, then reprocess all photos from scratch. 
+                                This operation cannot be undone. Are you sure you want to continue?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => startProcessing('reprocess_all')}
+                                className="bg-destructive hover:bg-destructive/90"
+                              >
+                                Reprocess All Photos
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     
                     <Button 
                       variant="outline"
@@ -976,7 +1091,9 @@ export default function FaceRecognitionAdminPage() {
                     <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
                     <p className="text-muted-foreground mb-4">Start processing photos to detect and group faces into people</p>
-                    <Button onClick={startProcessing} className="flex items-center gap-2"><Play className="h-4 w-4" /> Start Face Detection</Button>
+                    <Button onClick={() => startProcessing('new_only')} className="flex items-center gap-2">
+                      <Play className="h-4 w-4" /> Start Face Detection
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">

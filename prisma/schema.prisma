@@ -35,21 +35,23 @@ model Album {
 }
 
 model Photo {
-  id           String      @id @default(cuid())
-  albumId      String
-  filename     String
-  originalPath String
-  s3Key        String
-  metadata     String?     @db.Text // EXIF data as JSON string
-  fileSize     Int
-  takenAt      DateTime?   // from EXIF
-  blurhash     String?     // BlurHash for loading placeholder
-  createdAt    DateTime    @default(now())
-  album        Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
-  thumbnails   Thumbnail[]
-  faces        Face[]
+  id              String      @id @default(cuid())
+  albumId         String
+  filename        String
+  originalPath    String
+  s3Key           String
+  metadata        String?     @db.Text // EXIF data as JSON string
+  fileSize        Int
+  takenAt         DateTime?   // from EXIF
+  blurhash        String?     // BlurHash for loading placeholder
+  faceProcessedAt DateTime?   // Tracks when faces were last processed for this photo
+  createdAt       DateTime    @default(now())
+  album           Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  thumbnails      Thumbnail[]
+  faces           Face[]
 
   @@index([albumId])
+  @@index([faceProcessedAt])
   @@map("photos")
 }
 

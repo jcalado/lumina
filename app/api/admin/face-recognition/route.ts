@@ -564,6 +564,7 @@ interface FaceRecognitionJobState {
   logs: string[];
   errors: string[];
   startedAt?: Date;
+  mode?: 'new_only' | 'reprocess_all'; // Processing mode
 }
 
 // In-memory job state management
@@ -772,16 +773,43 @@ async function processJob(jobId: string) {
   try {
     const settings = await getSettings();
     
-    // Get photos that haven't been processed yet using raw SQL
-    const photos = await prisma.$queryRaw<Array<{
+    // Get photos based on processing mode
+    let photos: Array<{
       id: string;
       filename: string;
       s3Key: string;
-    }>>`
-      SELECT id, filename, s3Key 
-        FROM photos 
-        LIMIT ${Math.min(jobState.totalPhotos)}
-    `;
+    }>;
+    
+    if (jobState.mode === 'reprocess_all') {
+      // If reprocessing all, delete existing faces first and reset face processing timestamps
+      jobState.logs.push('Reprocessing all photos: clearing existing face data...');
+      await prisma.face.deleteMany({});
+      await prisma.photo.updateMany({
+        data: { faceProcessedAt: null }
+      });
+      
+      photos = await prisma.$queryRaw<Array<{
+        id: string;
+        filename: string;
+        s3Key: string;
+      }>>`
+        SELECT id, filename, s3Key 
+          FROM photos 
+          LIMIT ${Math.min(jobState.totalPhotos)}
+      `;
+    } else {
+      // Default: only process photos that haven't been processed yet
+      photos = await prisma.$queryRaw<Array<{
+        id: string;
+        filename: string;
+        s3Key: string;
+      }>>`
+        SELECT id, filename, s3Key 
+          FROM photos 
+          WHERE faceProcessedAt IS NULL
+          LIMIT ${Math.min(jobState.totalPhotos)}
+      `;
+    }
 
     const photoIds = photos.map(p => p.id);
     jobState.totalPhotos = photoIds.length;
@@ -828,10 +856,15 @@ async function processJob(jobId: string) {
             settings.confidenceThreshold
           );
 
-          // Store embeddings in memory
+          // Store embeddings in memory and mark photos as processed
           for (const photoResult of detectionResults) {
             if (photoResult.error) {
               jobState.errors.push(`${photoResult.photoId}: ${photoResult.error}`);
+              // Mark photo as processed even if it failed (to avoid reprocessing)
+              await prisma.photo.update({
+                where: { id: photoResult.photoId },
+                data: { faceProcessedAt: new Date() }
+              });
               continue;
             }
             
@@ -849,6 +882,12 @@ async function processJob(jobId: string) {
                 jobState.facesDetected++;
               }
             }
+            
+            // Mark photo as processed
+            await prisma.photo.update({
+              where: { id: photoResult.photoId },
+              data: { faceProcessedAt: new Date() }
+            });
           }
 
           jobState.processedPhotos += batch.length;
@@ -952,6 +991,17 @@ async function processJob(jobId: string) {
 
           jobState.facesDetected += facesDetectedCount;
           jobState.facesMatched += facesMatchedCount;
+
+          // Mark all photos in this batch as processed
+          for (const photoId of batch) {
+            try {
+              await prisma.$executeRaw`
+                UPDATE photos SET faceProcessedAt = ${new Date().toISOString()} WHERE id = ${photoId}
+              `;
+            } catch (error) {
+              console.error(`Error marking photo ${photoId} as processed:`, error);
+            }
+          }
 
           jobState.logs.push(
             `Batch ${Math.floor(i / settings.batchSize) + 1} completed: ${result.processed}/${batch.length} photos processed`
@@ -1081,6 +1131,9 @@ export async function GET(request: NextRequest) {
 // POST: Start new job
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const { mode = 'new_only' } = body; // 'new_only' | 'reprocess_all'
+    
     const settings = await getSettings();
     
     if (!settings.enabled) {
@@ -1102,16 +1155,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Count photos to process using raw SQL
-    const photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-      SELECT COUNT(*) as count FROM photos
-    `;
+    // Count photos to process based on mode
+    let photoCountResult: { count: number }[];
+    if (mode === 'reprocess_all') {
+      photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(*) as count FROM photos
+      `;
+    } else {
+      // Default: only process photos that haven't been processed yet
+      photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+        SELECT COUNT(*) as count FROM photos WHERE faceProcessedAt IS NULL
+      `;
+    }
   let photoCountRaw = photoCountResult[0]?.count ?? 0;
   const photoCount = typeof photoCountRaw === 'bigint' ? Number(photoCountRaw) : Number(photoCountRaw);
 
     if (photoCount === 0) {
+      const errorMessage = mode === 'reprocess_all' 
+        ? 'No photos found to process' 
+        : 'No unprocessed photos found. All photos have already been processed for faces.';
       return NextResponse.json(
-        { error: 'No photos found to process' },
+        { error: errorMessage },
         { status: 400 }
       );
     }
@@ -1129,8 +1193,9 @@ export async function POST(request: NextRequest) {
       facesDetected: 0,
       facesMatched: 0,
       batchSize: settings.batchSize,
-  logs: [`Job created to process ${Math.min(photoCount)} photos`],
+      logs: [`Job created to ${mode === 'reprocess_all' ? 'reprocess all' : 'process new'} ${Math.min(photoCount)} photos`],
       errors: [],
+      mode: mode, // Store mode in job state
     };
 
     activeJobs.set(jobId, jobState);
