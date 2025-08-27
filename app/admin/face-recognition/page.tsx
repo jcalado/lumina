@@ -51,7 +51,11 @@ import {
   SortDesc,
   Calendar,
   Hash,
-  Cpu
+  Cpu,
+  Copy,
+  RefreshCw,
+  User,
+  Merge
 } from 'lucide-react';
 
 interface PhotoThumbnail {
@@ -182,6 +186,12 @@ export default function FaceRecognitionAdminPage() {
   const [assigneeSearching, setAssigneeSearching] = useState(false);
   const assigneeDebounce = useRef<number | null>(null);
   const peopleSearchDebounce = useRef<number | null>(null);
+  
+  // Duplicate detection state variables
+  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
+  const [mergingDuplicates, setMergingDuplicates] = useState<string | null>(null);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -190,6 +200,7 @@ export default function FaceRecognitionAdminPage() {
     loadPeople();
     loadUnassignedFaces();
     loadPhotoStats();
+    loadDuplicates();
   }, []);
 
   // Reload people when page or limit change
@@ -851,6 +862,76 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
+  // Duplicate detection functions
+  const loadDuplicates = async () => {
+    try {
+      setDuplicatesLoading(true);
+      const response = await fetch('/api/admin/people/duplicates');
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDuplicates(data.duplicates || []);
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to load duplicate people',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load duplicate people',
+        variant: 'destructive',
+      });
+    } finally {
+      setDuplicatesLoading(false);
+    }
+  };
+
+  const mergeDuplicates = async (duplicateGroupId: string, keepPersonId: string, mergePersonIds: string[]) => {
+    try {
+      setMergingDuplicates(duplicateGroupId);
+      const response = await fetch('/api/admin/people/duplicates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          keepPersonId,
+          mergePersonIds,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Success',
+          description: data.message,
+        });
+        
+        // Reload people and duplicates
+        loadPeople();
+        loadDuplicates();
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Error',
+          description: error.error || 'Failed to merge people',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to merge people',
+        variant: 'destructive',
+      });
+    } finally {
+      setMergingDuplicates(null);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
@@ -1420,6 +1501,146 @@ export default function FaceRecognitionAdminPage() {
                         </CardContent>
                       </Card>
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Duplicate People Resolution - only show when not viewing a specific person */}
+          {!selectedPerson && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Copy className="h-5 w-5" />
+                  Duplicate People Resolution
+                  <Button
+                    onClick={loadDuplicates}
+                    variant="outline"
+                    size="sm"
+                    disabled={duplicatesLoading}
+                    className="ml-auto"
+                  >
+                    {duplicatesLoading ? (
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Scan for Duplicates
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {duplicatesLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Scanning for duplicate people...</p>
+                  </div>
+                ) : duplicates.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                    <h4 className="font-medium mb-2">No Duplicates Found</h4>
+                    <p className="text-muted-foreground">All people appear to be unique based on name and face similarity</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Found {duplicates.length} potential duplicate groups. Review and merge similar people to improve organization.
+                    </div>
+                    
+                    {duplicates.map((group) => (
+                      <div key={group.id} className="border rounded-lg p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={
+                              group.confidence === 'high' ? 'default' : 
+                              group.confidence === 'medium' ? 'secondary' : 'outline'
+                            }>
+                              {group.confidence} confidence
+                            </Badge>
+                            <Badge variant="outline">
+                              {group.similarityType === 'both' ? 'Name + Face' : 
+                               group.similarityType === 'face' ? 'Face similarity' : 'Name similarity'}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">
+                              Score: {(group.similarityScore * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {group.people.map((person: any, index: number) => (
+                            <div key={person.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                              {person.previewFace ? (
+                                <img
+                                  src={`/api/photos/${person.previewFace.id}/thumbnail`}
+                                  alt={person.name}
+                                  className="w-12 h-12 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                                  <User className="h-6 w-6 text-muted-foreground" />
+                                </div>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-medium">{person.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {person.faceCount} faces • Created {new Date(person.createdAt).toLocaleDateString()}
+                                </p>
+                                {person.confirmed && (
+                                  <Badge variant="outline" className="text-xs">Confirmed</Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="default" 
+                                size="sm"
+                                disabled={mergingDuplicates === group.id}
+                              >
+                                {mergingDuplicates === group.id ? (
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <Merge className="h-4 w-4 mr-2" />
+                                )}
+                                Merge People
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              <DropdownMenuLabel>Keep which person?</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {group.people.map((person: any) => (
+                                <DropdownMenuItem
+                                  key={person.id}
+                                  onClick={() => {
+                                    const otherIds = group.people
+                                      .filter((p: any) => p.id !== person.id)
+                                      .map((p: any) => p.id);
+                                    mergeDuplicates(group.id, person.id, otherIds);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <User className="h-4 w-4" />
+                                    <span>{person.name}</span>
+                                    <span className="text-muted-foreground">({person.faceCount} faces)</span>
+                                  </div>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          
+                          <Button variant="outline" size="sm">
+                            <X className="h-4 w-4 mr-2" />
+                            Not Duplicates
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
