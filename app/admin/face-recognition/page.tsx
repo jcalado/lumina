@@ -663,7 +663,7 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
-  const startProcessing = async (mode: 'new_only' | 'reprocess_all' = 'new_only') => {
+  const startProcessing = async (mode: 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all' = 'new_only') => {
     if (!settings.faceRecognitionEnabled) {
       toast({
         title: 'Error',
@@ -685,9 +685,23 @@ export default function FaceRecognitionAdminPage() {
 
       if (response.ok) {
         const data = await response.json();
+        
+        let modeDescription: string;
+        switch (mode) {
+          case 'reprocess_keep_people':
+            modeDescription = 'reprocessing all photos (keeping existing people)';
+            break;
+          case 'reprocess_clear_all':
+            modeDescription = 'reprocessing all photos (removing all people and faces)';
+            break;
+          default:
+            modeDescription = 'processing new photos only';
+            break;
+        }
+        
         toast({
           title: 'Success',
-          description: data.message || `Face recognition processing started (${mode === 'reprocess_all' ? 'reprocessing all photos' : 'processing new photos only'})`,
+          description: data.message || `Face recognition processing started (${modeDescription})`,
         });
         loadStatus();
         loadPhotoStats();
@@ -990,7 +1004,7 @@ export default function FaceRecognitionAdminPage() {
                           <ChevronDown className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-64">
+                      <DropdownMenuContent align="start" className="w-80">
                         <DropdownMenuLabel>Processing Options</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => startProcessing('new_only')} disabled={isProcessing}>
@@ -1006,26 +1020,65 @@ export default function FaceRecognitionAdminPage() {
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={isProcessing}>
                               <Cpu className="h-4 w-4 mr-2" />
                               <div>
-                                <div className="font-medium">Reprocess All Photos</div>
-                                <div className="text-xs text-muted-foreground">Clear all face data and reprocess everything</div>
+                                <div className="font-medium">Reprocess All Photos (Keep People)</div>
+                                <div className="text-xs text-muted-foreground">Re-detect faces but keep existing people for re-matching</div>
                               </div>
                             </DropdownMenuItem>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Reprocess All Photos?</AlertDialogTitle>
+                              <AlertDialogTitle>Reprocess All Photos (Keep People)?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This action will delete all existing face data and people records, then reprocess all photos from scratch. 
+                                This action will:
+                                <br />• Delete all detected faces
+                                <br />• Keep existing people (they may be re-matched to new faces)
+                                <br />• Reprocess all photos to detect faces again
+                                <br /><br />
+                                Existing people will remain but may end up with different faces assigned to them.
+                                Are you sure you want to continue?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => startProcessing('reprocess_keep_people')}
+                                className="bg-orange-600 hover:bg-orange-700"
+                              >
+                                Reprocess (Keep People)
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={isProcessing}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              <div>
+                                <div className="font-medium">Reprocess All Photos (Remove All)</div>
+                                <div className="text-xs text-muted-foreground">Clear all faces and people, then reprocess everything</div>
+                              </div>
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reprocess All Photos (Remove All)?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action will permanently delete ALL existing data:
+                                <br />• All detected faces
+                                <br />• All people and their groupings
+                                <br />• All face recognition assignments
+                                <br /><br />
+                                Then it will reprocess all photos from scratch to detect and group faces again.
                                 This operation cannot be undone. Are you sure you want to continue?
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction 
-                                onClick={() => startProcessing('reprocess_all')}
+                                onClick={() => startProcessing('reprocess_clear_all')}
                                 className="bg-destructive hover:bg-destructive/90"
                               >
-                                Reprocess All Photos
+                                Reprocess (Remove All)
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>

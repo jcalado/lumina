@@ -564,7 +564,7 @@ interface FaceRecognitionJobState {
   logs: string[];
   errors: string[];
   startedAt?: Date;
-  mode?: 'new_only' | 'reprocess_all'; // Processing mode
+  mode?: 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'; // Updated processing modes
 }
 
 // In-memory job state management
@@ -774,19 +774,55 @@ async function processJob(jobId: string) {
     const settings = await getSettings();
     
     // Get photos based on processing mode
+    // - new_only: Only process photos that haven't been processed yet (faceProcessedAt IS NULL)
+    // - reprocess_keep_people: Delete all faces but keep people, then reprocess all photos (faces will be re-matched to existing people when possible)
+    // - reprocess_clear_all: Delete all faces AND people, then reprocess all photos from scratch
     let photos: Array<{
       id: string;
       filename: string;
       s3Key: string;
     }>;
     
-    if (jobState.mode === 'reprocess_all') {
-      // If reprocessing all, delete existing faces first and reset face processing timestamps
-      jobState.logs.push('Reprocessing all photos: clearing existing face data...');
-      await prisma.face.deleteMany({});
-      await prisma.photo.updateMany({
+    if (jobState.mode === 'reprocess_clear_all') {
+      // Complete reprocessing: delete all faces and persons, reset timestamps
+      jobState.logs.push('Reprocessing all photos (removing all persons and faces): clearing existing data...');
+      
+      // Delete all faces first (this will unassign them from persons)
+      const deletedFacesResult = await prisma.face.deleteMany({});
+      jobState.logs.push(`Deleted ${deletedFacesResult.count} existing faces`);
+      
+      // Delete all persons (they should have no faces now)
+      const deletedPersonsResult = await prisma.person.deleteMany({});
+      jobState.logs.push(`Deleted ${deletedPersonsResult.count} existing persons`);
+      
+      // Reset face processing timestamps for all photos
+      const resetPhotosResult = await prisma.photo.updateMany({
         data: { faceProcessedAt: null }
       });
+      jobState.logs.push(`Reset processing timestamp for ${resetPhotosResult.count} photos`);
+      
+      photos = await prisma.$queryRaw<Array<{
+        id: string;
+        filename: string;
+        s3Key: string;
+      }>>`
+        SELECT id, filename, s3Key 
+          FROM photos 
+          LIMIT ${Math.min(jobState.totalPhotos)}
+      `;
+    } else if (jobState.mode === 'reprocess_keep_people') {
+      // Reprocess all photos but keep existing persons - only delete faces and reset timestamps
+      jobState.logs.push('Reprocessing all photos (keeping persons): clearing existing faces...');
+      
+      // Delete all faces (this will unassign them from persons, but keep persons)
+      const deletedFacesResult = await prisma.face.deleteMany({});
+      jobState.logs.push(`Deleted ${deletedFacesResult.count} existing faces (persons kept for potential re-matching)`);
+      
+      // Reset face processing timestamps for all photos
+      const resetPhotosResult = await prisma.photo.updateMany({
+        data: { faceProcessedAt: null }
+      });
+      jobState.logs.push(`Reset processing timestamp for ${resetPhotosResult.count} photos`);
       
       photos = await prisma.$queryRaw<Array<{
         id: string;
@@ -1132,7 +1168,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { mode = 'new_only' } = body; // 'new_only' | 'reprocess_all'
+    const { mode = 'new_only' } = body; // 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'
     
     const settings = await getSettings();
     
@@ -1157,7 +1193,8 @@ export async function POST(request: NextRequest) {
 
     // Count photos to process based on mode
     let photoCountResult: { count: number }[];
-    if (mode === 'reprocess_all') {
+    if (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all') {
+      // Reprocess modes: count all photos
       photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
         SELECT COUNT(*) as count FROM photos
       `;
@@ -1171,7 +1208,7 @@ export async function POST(request: NextRequest) {
   const photoCount = typeof photoCountRaw === 'bigint' ? Number(photoCountRaw) : Number(photoCountRaw);
 
     if (photoCount === 0) {
-      const errorMessage = mode === 'reprocess_all' 
+      const errorMessage = (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all')
         ? 'No photos found to process' 
         : 'No unprocessed photos found. All photos have already been processed for faces.';
       return NextResponse.json(
@@ -1183,6 +1220,20 @@ export async function POST(request: NextRequest) {
     // Create job ID
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Generate appropriate job description based on mode
+    let jobDescription: string;
+    switch (mode) {
+      case 'reprocess_keep_people':
+        jobDescription = `reprocess all ${photoCount} photos (keeping existing persons)`;
+        break;
+      case 'reprocess_clear_all':
+        jobDescription = `reprocess all ${photoCount} photos (removing all persons and faces)`;
+        break;
+      default:
+        jobDescription = `process ${photoCount} new photos`;
+        break;
+    }
+
     // Initialize job state
     const jobState: FaceRecognitionJobState = {
       id: jobId,
@@ -1193,7 +1244,7 @@ export async function POST(request: NextRequest) {
       facesDetected: 0,
       facesMatched: 0,
       batchSize: settings.batchSize,
-      logs: [`Job created to ${mode === 'reprocess_all' ? 'reprocess all' : 'process new'} ${Math.min(photoCount)} photos`],
+      logs: [`Job created to ${jobDescription}`],
       errors: [],
       mode: mode, // Store mode in job state
     };
@@ -1206,6 +1257,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       jobId: jobId, 
       totalPhotos: jobState.totalPhotos,
+      mode: mode,
       message: 'Face recognition job started successfully'
     });
   } catch (error) {
