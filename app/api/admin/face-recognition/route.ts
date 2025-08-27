@@ -959,12 +959,16 @@ async function processJob(jobId: string) {
           const batchFaceCount = detectionResults.reduce((total, result) => total + result.faces.length, 0);
           jobState.logs.push(`Batch detected ${batchFaceCount} faces in ${batch.length} photos`);
           
-          // Adaptive batch sizing based on processing time
+          // Adaptive batch sizing based on processing time per photo
           const batchProcessingTime = Date.now() - batchStartTime;
-          if (batchProcessingTime > 5000) { // If batch took more than 5 seconds, reduce size
+          const timePerPhoto = batchProcessingTime / batch.length;
+          const TARGET_TIME_PER_PHOTO = 5000; // 5 seconds per photo is acceptable
+          const FAST_TIME_PER_PHOTO = 2000; // Less than 2 seconds per photo is fast
+          
+          if (timePerPhoto > TARGET_TIME_PER_PHOTO) { // If each photo took more than 5 seconds, reduce batch size
             adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.8));
-            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${batchProcessingTime}ms)`);
-          } else if (batchProcessingTime < 2000 && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast, increase size
+            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${timePerPhoto.toFixed(0)}ms per photo, ${batchProcessingTime}ms total)`);
+          } else if (timePerPhoto < FAST_TIME_PER_PHOTO && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast per photo, increase size
             adaptiveBatchSize = Math.min(MAX_BATCH_SIZE, adaptiveBatchSize + 1);
           }
 
@@ -1099,12 +1103,16 @@ async function processJob(jobId: string) {
             jobState.logs.push(`Batch had ${result.errors.length} errors`);
           }
           
-          // Adaptive batch sizing
+          // Adaptive batch sizing based on processing time per photo
           const batchProcessingTime = Date.now() - batchStartTime;
-          if (batchProcessingTime > 8000) { // If batch took more than 8 seconds, reduce size
+          const timePerPhoto = batchProcessingTime / batch.length;
+          const TARGET_TIME_PER_PHOTO = 8000; // 8 seconds per photo is acceptable for smaller jobs
+          const FAST_TIME_PER_PHOTO = 3000; // Less than 3 seconds per photo is fast
+          
+          if (timePerPhoto > TARGET_TIME_PER_PHOTO) { // If each photo took more than 8 seconds, reduce batch size
             adaptiveBatchSize = Math.max(MIN_BATCH_SIZE, Math.floor(adaptiveBatchSize * 0.7));
-            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${batchProcessingTime}ms)`);
-          } else if (batchProcessingTime < 3000 && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast, increase size
+            jobState.logs.push(`Reducing batch size to ${adaptiveBatchSize} due to slow processing (${timePerPhoto.toFixed(0)}ms per photo, ${batchProcessingTime}ms total)`);
+          } else if (timePerPhoto < FAST_TIME_PER_PHOTO && adaptiveBatchSize < MAX_BATCH_SIZE) { // If fast per photo, increase size
             adaptiveBatchSize = Math.min(MAX_BATCH_SIZE, adaptiveBatchSize + 1);
           }
 
