@@ -14,21 +14,21 @@ export async function GET() {
           a.slug,
           a.name,
           a.description,
-          a.createdAt,
-          a.updatedAt,
-          (SELECT COUNT(*) FROM photos WHERE albumId = a.id) as photoCount,
+          a."createdAt",
+          a."updatedAt",
+          (SELECT COUNT(*) FROM photos WHERE "albumId" = a.id) as photoCount,
           (SELECT COUNT(*) FROM photos p2 
-           INNER JOIN albums a2 ON p2.albumId = a2.id 
+           INNER JOIN albums a2 ON p2."albumId" = a2.id 
            WHERE a2.path LIKE a.path || '/%' 
              AND a2.status = 'PUBLIC' 
-             AND a2.enabled = 1) as subAlbumPhotosCount,
+             AND a2.enabled = true) as subAlbumPhotosCount,
           (SELECT COUNT(*) FROM albums a3 
            WHERE a3.path LIKE a.path || '/%' 
              AND a3.status = 'PUBLIC' 
-             AND a3.enabled = 1) as subAlbumsCount
+             AND a3.enabled = true) as subAlbumsCount
         FROM albums a
         WHERE a.status = 'PUBLIC' 
-          AND a.enabled = 1 
+          AND a.enabled = true 
           AND a.path NOT LIKE '%/%'
       ),
       AlbumThumbnails AS (
@@ -37,13 +37,13 @@ export async function GET() {
           p.id as mediaId,
           p.filename,
           'photo' as mediaType,
-          p.takenAt,
-          ROW_NUMBER() OVER (PARTITION BY parent.id ORDER BY p.takenAt ASC) as rn
+          p."takenAt",
+          ROW_NUMBER() OVER (PARTITION BY parent.id ORDER BY p."takenAt" ASC) as rn
         FROM AlbumStats parent
         LEFT JOIN albums sub ON sub.path LIKE parent.path || '/%' 
           AND sub.status = 'PUBLIC' 
-          AND sub.enabled = 1
-        LEFT JOIN photos p ON (p.albumId = parent.id OR p.albumId = sub.id)
+          AND sub.enabled = true
+        LEFT JOIN photos p ON (p."albumId" = parent.id OR p."albumId" = sub.id)
         WHERE p.id IS NOT NULL
         
         UNION ALL
@@ -53,13 +53,13 @@ export async function GET() {
           v.id as mediaId,
           v.filename,
           'video' as mediaType,
-          v.takenAt,
-          ROW_NUMBER() OVER (PARTITION BY parent.id ORDER BY v.takenAt ASC) as rn
+          v."takenAt",
+          ROW_NUMBER() OVER (PARTITION BY parent.id ORDER BY v."takenAt" ASC) as rn
         FROM AlbumStats parent
         LEFT JOIN albums sub ON sub.path LIKE parent.path || '/%' 
           AND sub.status = 'PUBLIC' 
-          AND sub.enabled = 1
-        LEFT JOIN videos v ON (v.albumId = parent.id OR v.albumId = sub.id)
+          AND sub.enabled = true
+        LEFT JOIN videos v ON (v."albumId" = parent.id OR v."albumId" = sub.id)
         WHERE v.id IS NOT NULL
       ),
       RankedThumbnails AS (
@@ -68,7 +68,7 @@ export async function GET() {
           mediaId,
           filename,
           mediaType,
-          ROW_NUMBER() OVER (PARTITION BY parentAlbumId ORDER BY takenAt ASC) as final_rn
+          ROW_NUMBER() OVER (PARTITION BY parentAlbumId ORDER BY "takenAt" ASC) as final_rn
         FROM AlbumThumbnails
       )
       SELECT 
@@ -78,7 +78,7 @@ export async function GET() {
       LEFT JOIN (
         SELECT 
           parentAlbumId,
-          GROUP_CONCAT(mediaId || '|||' || filename || '|||' || mediaType, ';;;') as thumbnails
+          STRING_AGG(mediaId || '|||' || filename || '|||' || mediaType, ';;;') as thumbnails
         FROM RankedThumbnails 
         WHERE final_rn <= 5
         GROUP BY parentAlbumId
