@@ -6,6 +6,27 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { FaceRecognitionSettings } from '@/components/Admin/FaceRecognitionSettings';
 import { PersonDetail } from '@/components/Admin/PersonDetail'; // Import the new component
@@ -24,7 +45,13 @@ import {
   UserPlus,
   Grid3X3,
   Trash2,
-  X // Import X icon
+  X, // Import X icon
+  ChevronDown,
+  SortAsc,
+  SortDesc,
+  Calendar,
+  Hash,
+  Cpu
 } from 'lucide-react';
 
 interface PhotoThumbnail {
@@ -119,7 +146,7 @@ export default function FaceRecognitionAdminPage() {
     hasMore: boolean;
   } | null>(null);
   const [peopleSearch, setPeopleSearch] = useState('');
-  const [peopleSort, setPeopleSort] = useState<'default' | 'alpha'>('default');
+  const [peopleSort, setPeopleSort] = useState<'default' | 'alpha' | 'face_count_desc' | 'face_count_asc' | 'created_desc' | 'created_asc'>('default');
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
@@ -128,6 +155,13 @@ export default function FaceRecognitionAdminPage() {
   const [unassignedPagination, setUnassignedPagination] = useState<any | null>(null);
   const [selectedFaces, setSelectedFaces] = useState<Set<string>>(new Set());
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null); // New state for selected person
+  
+  // New state variables for bulk operations
+  const [deletingAllPeople, setDeletingAllPeople] = useState(false);
+  const [deletingUnassignedFaces, setDeletingUnassignedFaces] = useState(false);
+  const [processingUnassigned, setProcessingUnassigned] = useState(false);
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
+  const [processMode, setProcessMode] = useState<'create_new' | 'assign_existing' | 'both'>('both');
   
   const [creatingPerson, setCreatingPerson] = useState(false);
   const [deletingPerson, setDeletingPerson] = useState<string | null>(null);
@@ -188,7 +222,7 @@ export default function FaceRecognitionAdminPage() {
   params.set('page', String(overridePage ?? page));
   params.set('limit', String(limit));
   if (peopleSearch.trim()) params.set('search', peopleSearch.trim());
-  if (peopleSort === 'alpha') params.set('sort', 'alpha');
+  if (peopleSort !== 'default') params.set('sort', peopleSort);
   const response = await fetch(`/api/admin/people?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
@@ -652,6 +686,125 @@ export default function FaceRecognitionAdminPage() {
     loadUnassignedFaces(); // Also refresh unassigned faces as they might change
   };
 
+  // New handler functions for bulk operations
+  const deleteAllPeople = async () => {
+    try {
+      setDeletingAllPeople(true);
+      const response = await fetch('/api/admin/people/delete-all', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Success',
+          description: data.message,
+        });
+        
+        // Reload data
+        loadPeople();
+        loadUnassignedFaces();
+        setSelectedPerson(null);
+        setSelectedPeople(new Set());
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Error',
+          description: error.error || 'Failed to delete all people',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete all people',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingAllPeople(false);
+    }
+  };
+
+  const deleteAllUnassignedFaces = async () => {
+    try {
+      setDeletingUnassignedFaces(true);
+      const response = await fetch('/api/admin/faces/delete-unassigned', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Success',
+          description: data.message,
+        });
+        
+        // Reload unassigned faces
+        loadUnassignedFaces();
+        setSelectedFaces(new Set());
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Error',
+          description: error.error || 'Failed to delete unassigned faces',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete unassigned faces',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingUnassignedFaces(false);
+    }
+  };
+
+  const processUnassignedFaces = async () => {
+    try {
+      setProcessingUnassigned(true);
+      const response = await fetch('/api/admin/faces/process-unassigned', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          similarityThreshold,
+          mode: processMode,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Success',
+          description: data.message,
+        });
+        
+        // Reload data
+        loadPeople();
+        loadUnassignedFaces();
+        setSelectedFaces(new Set());
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Error',
+          description: error.error || 'Failed to process unassigned faces',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to process unassigned faces',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingUnassigned(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
@@ -831,8 +984,76 @@ export default function FaceRecognitionAdminPage() {
                       <div className="flex items-center gap-3">
                         <p className="text-sm text-muted-foreground">Found {pagination?.total ?? people.length} people · Page {pagination?.page ?? page} of {pagination?.totalPages ?? 1}</p>
                         <Input placeholder="Filter people by name..." value={peopleSearch} onChange={(e) => { setPeopleSearch(e.target.value); }} className="max-w-xs" />
-                        <Button variant={peopleSort === 'alpha' ? 'default' : 'outline'} size="sm" onClick={() => { setPeopleSort(prev => prev === 'alpha' ? 'default' : 'alpha'); }}>A–Z</Button>
+                        
+                        {/* Updated Sort Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="flex items-center gap-2">
+                              <SortAsc className="h-4 w-4" />
+                              Sort
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            <DropdownMenuLabel>Sort People By</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setPeopleSort('default')} className={peopleSort === 'default' ? 'bg-accent' : ''}>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Default (Confirmed first)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPeopleSort('alpha')} className={peopleSort === 'alpha' ? 'bg-accent' : ''}>
+                              <SortAsc className="h-4 w-4 mr-2" />
+                              Name (A-Z)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPeopleSort('face_count_desc')} className={peopleSort === 'face_count_desc' ? 'bg-accent' : ''}>
+                              <SortDesc className="h-4 w-4 mr-2" />
+                              Most Faces First
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPeopleSort('face_count_asc')} className={peopleSort === 'face_count_asc' ? 'bg-accent' : ''}>
+                              <SortAsc className="h-4 w-4 mr-2" />
+                              Fewest Faces First
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPeopleSort('created_desc')} className={peopleSort === 'created_desc' ? 'bg-accent' : ''}>
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Newest First
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPeopleSort('created_asc')} className={peopleSort === 'created_asc' ? 'bg-accent' : ''}>
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Oldest First
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        
                         <Button onClick={mergeSelectedPeople} variant="destructive" size="sm" disabled={selectedPeople.size < 2} className="ml-2">Merge Selected ({selectedPeople.size})</Button>
+                        
+                        {/* New Bulk Operations */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" disabled={deletingAllPeople}>
+                              {deletingAllPeople ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-2" />
+                              )}
+                              Delete All People
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete all people records and unassign all their faces. 
+                                The faces will become unassigned and can be reassigned later.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={deleteAllPeople} className="bg-destructive hover:bg-destructive/90">
+                                Delete All People
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2">
@@ -882,6 +1103,118 @@ export default function FaceRecognitionAdminPage() {
                     <div className="mt-8">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium flex items-center gap-2"><Grid3X3 className="h-5 w-5" /> Unassigned Faces</h3>
+                        <div className="flex items-center gap-2">
+                          {/* Process Unassigned Faces with Settings */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" disabled={processingUnassigned || unassignedFaces.length === 0}>
+                                {processingUnassigned ? (
+                                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <Cpu className="h-4 w-4 mr-2" />
+                                )}
+                                Auto-Process Faces
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="max-w-lg">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Process Unassigned Faces</AlertDialogTitle>
+                                <AlertDialogDescription asChild>
+                                  <div className="space-y-4">
+                                    <p>Automatically process unassigned faces based on similarity threshold. This will group similar faces together.</p>
+                                    
+                                    <div className="space-y-3">
+                                      <div>
+                                        <Label htmlFor="similarity-threshold">Similarity Threshold: {Math.round(similarityThreshold * 100)}%</Label>
+                                        <Slider
+                                          id="similarity-threshold"
+                                          min={0.3}
+                                          max={0.95}
+                                          step={0.05}
+                                          value={[similarityThreshold]}
+                                          onValueChange={(value) => setSimilarityThreshold(value[0])}
+                                          className="mt-2"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">Higher values require more similarity</p>
+                                      </div>
+                                      
+                                      <div>
+                                        <Label>Processing Mode</Label>
+                                        <div className="mt-2 space-y-2">
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="create_new"
+                                              checked={processMode === 'create_new'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Create new people only</span>
+                                          </label>
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="assign_existing"
+                                              checked={processMode === 'assign_existing'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Assign to existing people only</span>
+                                          </label>
+                                          <label className="flex items-center space-x-2">
+                                            <input
+                                              type="radio"
+                                              name="processMode"
+                                              value="both"
+                                              checked={processMode === 'both'}
+                                              onChange={(e) => setProcessMode(e.target.value as any)}
+                                            />
+                                            <span className="text-sm">Both (recommended)</span>
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={processUnassignedFaces}>
+                                  Start Processing
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          
+                          {/* Delete All Unassigned Faces */}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm" disabled={deletingUnassignedFaces || unassignedFaces.length === 0}>
+                                {deletingUnassignedFaces ? (
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Delete All Unassigned
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete All Unassigned Faces?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete all {unassignedFaces.length} unassigned faces. 
+                                  You may want to process them first to create people.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={deleteAllUnassignedFaces} className="bg-destructive hover:bg-destructive/90">
+                                  Delete All Unassigned Faces
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
 
                       <Card>

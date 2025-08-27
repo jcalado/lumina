@@ -94,11 +94,28 @@ export async function GET(request: NextRequest) {
 
     // Build orderBy depending on sort param
     const orderByClause: any[] = [];
-    if (sort === 'alpha') {
-      orderByClause.push({ name: 'asc' });
-    } else {
-      orderByClause.push({ confirmed: 'desc' });
-      orderByClause.push({ updatedAt: 'desc' });
+    switch (sort) {
+      case 'alpha':
+        orderByClause.push({ name: 'asc' });
+        break;
+      case 'face_count_desc':
+        orderByClause.push({ faces: { _count: 'desc' } });
+        orderByClause.push({ name: 'asc' }); // Secondary sort by name
+        break;
+      case 'face_count_asc':
+        orderByClause.push({ faces: { _count: 'asc' } });
+        orderByClause.push({ name: 'asc' }); // Secondary sort by name
+        break;
+      case 'created_desc':
+        orderByClause.push({ createdAt: 'desc' });
+        break;
+      case 'created_asc':
+        orderByClause.push({ createdAt: 'asc' });
+        break;
+      default:
+        orderByClause.push({ confirmed: 'desc' });
+        orderByClause.push({ updatedAt: 'desc' });
+        break;
     }
 
     const [people, totalCount] = await Promise.all([
