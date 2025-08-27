@@ -129,7 +129,7 @@ export async function POST(
               batch.map(async (filename) => {
                 try {
                   // Find the photo record to get the S3 key
-                  const photo = album.photos.find(p => p.filename === filename)
+                  const photo = album.photos.find((p: { filename: string; s3Key: string }) => p.filename === filename)
                   if (!photo) {
                     throw new Error('Not found in database')
                   }

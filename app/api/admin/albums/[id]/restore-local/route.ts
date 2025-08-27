@@ -26,7 +26,7 @@ async function processBatch(
         console.log(`[RESTORE FILES] Processing file: ${filename}`)
 
         // Find the photo record to get the S3 key
-        const photo = photos.find(p => p.filename === filename)
+        const photo = photos.find((p: { filename: string; s3Key: string }) => p.filename === filename)
         if (!photo) {
           console.log(`[RESTORE FILES] Photo record not found for: ${filename}`)
           failed.push({ file: filename, error: 'Not found in database' })

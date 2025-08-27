@@ -63,7 +63,7 @@ export async function GET(
     }
 
     // Get photo dimensions for coordinate scaling
-    const largeThumbnail = photo.thumbnails.find(t => t.size === 'LARGE');
+    const largeThumbnail = photo.thumbnails.find((t: { size: string; width: number; height: number }) => t.size === 'LARGE');
     const originalDimensions = { width: 0, height: 0 };
     
     if (largeThumbnail) {

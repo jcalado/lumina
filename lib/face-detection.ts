@@ -503,7 +503,7 @@ export async function processPhotoBatch(
       for (const result of results) {
         try {
           if (result.error) {
-            const photo = validPhotos.find(p => p.photoId === result.photoId);
+            const photo = validPhotos.find((p: { photoId: string; filename: string }) => p.photoId === result.photoId);
             errors.push(`${photo?.filename || result.photoId}: ${result.error}`);
             continue;
           }
@@ -516,7 +516,7 @@ export async function processPhotoBatch(
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
-          const photo = validPhotos.find(p => p.photoId === result.photoId);
+          const photo = validPhotos.find((p: { photoId: string; filename: string }) => p.photoId === result.photoId);
           errors.push(`${photo?.filename || result.photoId}: ${msg}`);
         }
       }
