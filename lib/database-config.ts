@@ -5,6 +5,34 @@
  * for better security and maintainability in production environments.
  */
 
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+
+// Function to load environment variables in order of preference
+function loadEnvironmentVariables() {
+  const envFiles = [
+    '.env.local',
+    '.env.production', 
+    '.env'
+  ];
+
+  // If NODE_ENV is production, prioritize .env.production
+  if (process.env.NODE_ENV === 'production') {
+    envFiles.unshift('.env.production.local');
+  }
+
+  for (const envFile of envFiles) {
+    if (fs.existsSync(envFile)) {
+      console.log(`Loading environment from ${envFile}`);
+      dotenv.config({ path: envFile, override: false });
+      break;
+    }
+  }
+}
+
+// Load environment variables on module import
+loadEnvironmentVariables();
+
 interface DatabaseConfig {
   host: string;
   port: string;

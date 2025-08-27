@@ -14,6 +14,7 @@ This guide helps you migrate your Lumina Photo Gallery from SQLite to MariaDB fo
 
 ```bash
 npm install mysql2
+npm install -g dotenv-cli  # For loading .env.production files
 ```
 
 ### 2. Set Up MariaDB Database
@@ -60,6 +61,23 @@ DATABASE_URL="mysql://lumina_user:your_secure_password@localhost:3306/lumina_pro
 
 The schema has been updated to use MySQL provider. Generate the new client:
 
+**For Production Environment:**
+```bash
+# Option 1: Use dotenv-cli to load .env.production
+npx dotenv -e .env.production -- npx prisma generate
+npx dotenv -e .env.production -- npx prisma db push
+
+# Option 2: Set NODE_ENV and copy .env.production to .env
+export NODE_ENV=production
+cp .env.production .env
+npx prisma generate
+npx prisma db push
+
+# Option 3: Use environment variables directly
+DB_HOST="localhost" DB_PORT="3306" DB_DATABASE="lumina_production" DB_USERNAME="lumina_user" DB_PASSWORD="your_password" npx prisma generate
+```
+
+**For Development:**
 ```bash
 npx prisma generate
 npx prisma db push
@@ -91,11 +109,59 @@ mysql -u lumina_user -p lumina_production < scripts/mariadb-optimizations.sql
 ### 7. Test the Migration
 
 ```bash
-# Check database configuration and connection
-npm run db:status
+# Check database configuration and connection (production)
+npm run db:status:prod
 
 # Test with production database
 NODE_ENV=production npm run dev
+
+# Or use the production setup script
+./scripts/setup-production.sh
+```
+
+## Environment File Loading
+
+### Why Prisma Uses .env Instead of .env.production
+
+By default, Prisma and Node.js applications load `.env` file, not `.env.production`. This is why you see:
+
+```
+Environment variables loaded from .env
+```
+
+### Solutions
+
+**Option 1: Use dotenv-cli (Recommended)**
+```bash
+# Install dotenv-cli globally
+npm install -g dotenv-cli
+
+# Use production-specific commands
+npm run db:generate:prod
+npm run db:push:prod
+npm run db:status:prod
+```
+
+**Option 2: Copy/symlink the file**
+```bash
+# On your production server
+cp .env.production .env
+# Then run normal commands
+npx prisma generate
+```
+
+**Option 3: Set NODE_ENV and use automatic loading**
+```bash
+export NODE_ENV=production
+# The updated database-config.ts will automatically load .env.production
+npx prisma generate
+```
+
+**Option 4: Use environment variables directly**
+```bash
+DB_HOST="localhost" DB_PORT="3306" DB_DATABASE="lumina_production" \
+DB_USERNAME="lumina_user" DB_PASSWORD="your_password" \
+npx prisma generate
 ```
 
 ## MariaDB vs MySQL Differences
@@ -189,17 +255,38 @@ SHOW ENGINE INNODB STATUS;
 
 ### Common Issues
 
-1. **Connection Issues**
-   - Check MariaDB service status
-   - Verify user permissions
-   - Test network connectivity
+1. **Prisma loads .env instead of .env.production**
+   ```
+   Error: the URL must start with the protocol `mysql://`
+   ```
+   
+   **Solutions:**
+   ```bash
+   # Quick fix: Use dotenv-cli
+   npm install -g dotenv-cli
+   npx dotenv -e .env.production -- npx prisma db push
+   
+   # Alternative: Copy the file
+   cp .env.production .env
+   npx prisma db push
+   
+   # Or: Set variables directly
+   DB_HOST="localhost" DB_PORT="3306" DB_DATABASE="lumina_production" \
+   DB_USERNAME="lumina_user" DB_PASSWORD="your_password" \
+   npx prisma db push
+   ```
 
-2. **Performance Issues**
+2. **Connection Issues**
+   - Check MariaDB service status: `sudo systemctl status mariadb`
+   - Verify user permissions: `mysql -u lumina_user -p`
+   - Test network connectivity: `telnet localhost 3306`
+
+3. **Performance Issues**
    - Monitor buffer pool usage
    - Check for missing indexes
    - Analyze slow query log
 
-3. **Face Recognition Specific**
+4. **Face Recognition Specific**
    - Large embedding storage
    - Complex similarity queries
    - Concurrent job handling
