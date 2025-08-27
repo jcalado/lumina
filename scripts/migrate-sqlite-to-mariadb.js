@@ -7,10 +7,18 @@
  * to the new MariaDB production database.
  * 
  * Usage:
- *   node scripts/migrate-sqlite-to-mariadb.js [--dry-run] [--force]
+ *   node scripts/m            description: album.description,
+            status: album.status || 'PUBLIC',
+            enabled: Boolean(album.enabled ?? true),
+            syncedToS3: Boolean(album.syncedToS3 ?? false),
+            localFilesSafeDelete: Boolean(album.localFilesSafeDelete ?? false),
+            lastSyncAt: album.lastSyncAt ? new Date(album.lastSyncAt) : null,-sqlite-to-mariadb.js [--dry-run] [--force]
  * 
  * Options:
- *   --dry-run  Show what would be migrated without actually doing it
+ *   --dry-r            password: admin.password,
+            role: admin.role || 'ADMIN',
+            enabled: Boolean(admin.enabled ?? true),
+            lastLogin: admin.lastLogin ? new Date(admin.lastLogin) : null,Show what would be migrated without actually doing it
  *   --force    Skip confirmation prompts
  */
 
@@ -468,7 +476,7 @@ async function migratePeopleAndFaces() {
             data: {
               id: person.id,
               name: person.name,
-              confirmed: person.confirmed ?? false,
+              confirmed: Boolean(person.confirmed),
               createdAt: new Date(person.createdAt),
               updatedAt: new Date(person.updatedAt)
             }
@@ -508,8 +516,8 @@ async function migratePeopleAndFaces() {
                   boundingBox: face.boundingBox,
                   confidence: face.confidence,
                   embedding: face.embedding,
-                  verified: face.verified ?? false,
-                  ignored: face.ignored ?? false,
+                  verified: Boolean(face.verified ?? false),
+                  ignored: Boolean(face.ignored ?? false),
                   createdAt: new Date(face.createdAt)
                 }
               });
