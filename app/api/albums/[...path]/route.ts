@@ -208,6 +208,8 @@ export async function GET(
           path: true,
           name: true,
           description: true,
+          slug: true,
+          displayOrder: true,
           _count: {
             select: {
               photos: true,
@@ -215,6 +217,10 @@ export async function GET(
             },
           },
         },
+        orderBy: [
+          { displayOrder: 'asc' },
+          { name: 'asc' }
+        ]
       });
       
       // Filter to get only direct children and add video counts
@@ -231,6 +237,14 @@ export async function GET(
           const remainingPath = album.path.substring(expectedPrefix.length);
           return !remainingPath.includes('/'); // No deeper nesting
         }
+      });
+
+      // Ensure direct children respect displayOrder and then name
+      subAlbums.sort((a: any, b: any) => {
+        const ao = a.displayOrder ?? 0;
+        const bo = b.displayOrder ?? 0;
+        if (ao !== bo) return ao - bo;
+        return a.name.localeCompare(b.name);
       });
       
       console.log('Found direct sub-albums:', subAlbums.length);
@@ -250,21 +264,10 @@ export async function GET(
         }
       }
       
-      // Get slugs for sub-albums (workaround for TypeScript/Prisma issue)
-      for (const subAlbum of subAlbums) {
-        try {
-          const albumWithSlug = await prisma.$queryRaw`
-            SELECT slug FROM albums WHERE id = ${subAlbum.id}
-          ` as Array<{slug: string}>;
-          
-          if (albumWithSlug.length > 0) {
-            (subAlbum as any).slug = albumWithSlug[0].slug;
-          } else {
-            (subAlbum as any).slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          }
-        } catch (error) {
-          console.error('Error fetching slug for album:', subAlbum.id, error);
-          (subAlbum as any).slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      // Slug already selected above; fallback if missing
+      for (const subAlbum of subAlbums as any[]) {
+        if (!subAlbum.slug) {
+          subAlbum.slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         }
       }
       
