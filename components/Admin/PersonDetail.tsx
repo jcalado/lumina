@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,6 +74,7 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(person.name);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(person.confirmed);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
@@ -87,6 +88,18 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
     setIsEditingName(false);
     setIsConfirmed(person.confirmed);
   }, [person.id]);
+
+  useEffect(() => {
+    if (isEditingName) {
+      const t = setTimeout(() => {
+        if (nameInputRef.current) {
+          nameInputRef.current.focus();
+          nameInputRef.current.select();
+        }
+      }, 0);
+      return () => clearTimeout(t);
+    }
+  }, [isEditingName]);
 
   const fetchSimilarFaces = async () => {
     setLoadingSimilar(true);
@@ -301,6 +314,7 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
                 onChange={(e) => setNameInput(e.target.value)}
                 className="max-w-xs"
                 disabled={loading}
+                ref={nameInputRef}
               />
               <Button onClick={saveName} disabled={loading} className="flex items-center gap-2">
                 <Save className="h-4 w-4" />
