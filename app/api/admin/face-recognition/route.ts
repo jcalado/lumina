@@ -378,9 +378,9 @@ async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceR
     confidence: number;
     photoId: string;
   }>>`
-  SELECT id, embedding, boundingBox, confidence, photoId 
-  FROM faces 
-  WHERE personId IS NULL AND embedding IS NOT NULL
+  SELECT id, embedding, "boundingBox", confidence, "photoId" 
+  FROM "faces" 
+  WHERE "personId" IS NULL AND embedding IS NOT NULL
   ORDER BY confidence DESC
   `;
   
@@ -827,8 +827,8 @@ async function processJob(jobId: string) {
         filename: string;
         s3Key: string;
       }>>`
-        SELECT id, filename, s3Key 
-          FROM photos 
+        SELECT id, filename, "s3Key" 
+          FROM "photos" 
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     } else if (jobState.mode === 'reprocess_keep_people') {
@@ -850,8 +850,8 @@ async function processJob(jobId: string) {
         filename: string;
         s3Key: string;
       }>>`
-        SELECT id, filename, s3Key 
-          FROM photos 
+        SELECT id, filename, "s3Key" 
+          FROM "photos" 
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     } else {
@@ -861,9 +861,9 @@ async function processJob(jobId: string) {
         filename: string;
         s3Key: string;
       }>>`
-        SELECT id, filename, s3Key 
-          FROM photos 
-          WHERE faceProcessedAt IS NULL
+        SELECT id, filename, "s3Key" 
+          FROM "photos" 
+          WHERE "faceProcessedAt" IS NULL
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     }
@@ -1069,7 +1069,7 @@ async function processJob(jobId: string) {
           const facesDetectedCount = typeof facesDetectedRaw === 'bigint' ? Number(facesDetectedRaw) : Number(facesDetectedRaw || 0);
           
           const facesMatchedResult = await prisma.$queryRawUnsafe(
-            `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders}) AND personId IS NOT NULL`,
+            `SELECT COUNT(*) as count FROM "faces" WHERE "photoId" IN (${placeholders}) AND "personId" IS NOT NULL`,
             ...batch
           ) as { count: number }[];
           let facesMatchedRaw = facesMatchedResult[0]?.count ?? 0;
@@ -1082,7 +1082,7 @@ async function processJob(jobId: string) {
           for (const photoId of batch) {
             try {
               await prisma.$executeRaw`
-                UPDATE photos SET faceProcessedAt = ${new Date().toISOString()} WHERE id = ${photoId}
+                UPDATE "photos" SET "faceProcessedAt" = ${new Date().toISOString()} WHERE id = ${photoId}
               `;
               // Yield control after each update
               await new Promise(resolve => setImmediate(resolve));
@@ -1268,12 +1268,12 @@ export async function POST(request: NextRequest) {
     if (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all') {
       // Reprocess modes: count all photos
       photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(*) as count FROM photos
+        SELECT COUNT(*) as count FROM "photos"
       `;
     } else {
       // Default: only process photos that haven't been processed yet
       photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(*) as count FROM photos WHERE faceProcessedAt IS NULL
+        SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL
       `;
     }
   let photoCountRaw = photoCountResult[0]?.count ?? 0;

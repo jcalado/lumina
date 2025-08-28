@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     // Get total photos count
     const totalResult = await prisma.$queryRaw<{ count: number }[]>`
-      SELECT COUNT(*) as count FROM photos
+      SELECT COUNT(*) as count FROM "photos"
     `;
     const total = typeof totalResult[0]?.count === 'bigint' 
       ? Number(totalResult[0].count) 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     // Get processed photos count
     const processedResult = await prisma.$queryRaw<{ count: number }[]>`
-      SELECT COUNT(*) as count FROM photos WHERE faceProcessedAt IS NOT NULL
+      SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NOT NULL
     `;
     const processed = typeof processedResult[0]?.count === 'bigint' 
       ? Number(processedResult[0].count) 

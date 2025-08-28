@@ -11,19 +11,19 @@ export async function GET(request: NextRequest) {
     const unassignedFaces = await prisma.$queryRaw`
       SELECT 
         f.id,
-        f.boundingBox,
+        f."boundingBox",
         f.confidence,
-        p.id as photoId,
+        p.id as "photoId",
         p.filename,
-        t.id as thumbnailId,
-        t.s3Key,
+        t.id as "thumbnailId",
+        t."s3Key",
         t.width,
         t.height,
         f.ignored
-      FROM faces f
-      JOIN photos p ON f.photoId = p.id
-      LEFT JOIN thumbnails t ON p.id = t.photoId AND t.size = 'SMALL'
-      WHERE f.personId IS NULL AND f.ignored = FALSE
+      FROM "faces" f
+      JOIN "photos" p ON f."photoId" = p.id
+      LEFT JOIN "thumbnails" t ON p.id = t."photoId" AND t.size = 'SMALL'
+      WHERE f."personId" IS NULL AND f.ignored = FALSE
       ORDER BY f.confidence DESC
       LIMIT ${limit}
     `;
