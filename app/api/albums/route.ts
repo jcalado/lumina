@@ -14,6 +14,7 @@ export async function GET() {
           a.slug,
           a.name,
           a.description,
+          a."displayOrder",
           a."createdAt",
           a."updatedAt",
           (SELECT COUNT(*) FROM photos WHERE "albumId" = a.id) as photoCount,
