@@ -12,7 +12,7 @@ const updateSettingsSchema = z.object({
   })).optional(),
   accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   photosPerPage: z.string().regex(/^\d+$/).optional(),
-  batchProcessingSize: z.string().regex(/^([1-9]|1[0-2])$/).optional()
+  batchProcessingSize: z.string().regex(/^[1-9]\d*$/).optional()
 })
 
 // GET /api/admin/settings - Get all settings
