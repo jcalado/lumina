@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
     const databaseAlbumPaths = new Set(databaseAlbums.map(a => a.path))
 
     // Albums in database but not in filesystem (orphaned)
-    const orphanedAlbums = []
+    const orphanedAlbums: any[] = []
     // Albums in filesystem but not in database (new)
-    const newAlbums = []
+    const newAlbums: any[] = []
     // Albums in both (synced)
-    const syncedAlbums = []
+    const syncedAlbums: any[] = []
 
     // Analyze database albums
     for (const dbAlbum of databaseAlbums) {

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
         // Update faces to assign them to the person one by one
         let updatedFaceCount = 0;
-        const failedFaces = [];
+        const failedFaces: string[] = [];
         
         for (const faceId of faceIds) {
           const updateResult = await tx.$executeRaw`

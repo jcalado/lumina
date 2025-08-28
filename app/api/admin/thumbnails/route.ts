@@ -64,7 +64,7 @@ export async function GET() {
     await initializeRunningJobId();
     
     // Try to fetch jobs, but handle case where table doesn't exist yet
-    let jobs = [];
+    let jobs: any[] = [];
     try {
       jobs = await (prisma as any).thumbnailJob?.findMany({
         orderBy: { createdAt: 'desc' },
@@ -88,7 +88,7 @@ export async function GET() {
       }
     } catch (error) {
       console.log('ThumbnailJob table not available yet, returning empty jobs array');
-      jobs = [];
+      jobs = [] as any[];
       // Clear runningJobId if table doesn't exist
       runningJobId = null;
     }
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'start') {
       // First, check for any actual running jobs in the database
-      let actualRunningJobs = [];
+      let actualRunningJobs: any[] = [];
       try {
         actualRunningJobs = await (prisma as any).thumbnailJob?.findMany({
           where: { status: 'RUNNING' },
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'stop') {
       // Check for any actual running jobs in the database
-      let actualRunningJobs = [];
+      let actualRunningJobs: any[] = [];
       try {
         actualRunningJobs = await (prisma as any).thumbnailJob?.findMany({
           where: { status: 'RUNNING' },
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reprocess') {
       // First, check for any actual running jobs in the database
-      let actualRunningJobs = [];
+      let actualRunningJobs: any[] = [];
       try {
         actualRunningJobs = await (prisma as any).thumbnailJob?.findMany({
           where: { status: 'RUNNING' },
@@ -292,7 +292,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Try to create new job, but handle case where table doesn't exist
-      let job = null;
+      let job: any = null;
       try {
         job = await (prisma as any).thumbnailJob?.create({
           data: {

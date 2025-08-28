@@ -44,7 +44,7 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
       }
     }
     
-    const thumbnailsCreated = [];
+    const thumbnailsCreated: any[] = [];
     
     // We'll use Sharp's built-in auto-rotation which reads EXIF orientation automatically
     

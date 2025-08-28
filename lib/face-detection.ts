@@ -387,7 +387,7 @@ export async function findSimilarFaces(
             WHERE embedding IS NOT NULL AND "personId" IS NOT NULL
           `
   ;
-  let best = null;
+  let best: { personId: string; similarity: number } | null = null;
   let bestScore = 0;
   for (const face of existingFaces) {
     if (!face.embedding || !face.personId) {
@@ -419,7 +419,7 @@ export async function saveFaceDetections(
     }
   });
   for (const face of faces) {
-    let personId = null;
+    let personId: string | null = null;
     if (face.embedding.length > 0) {
       const match = await findSimilarFaces(face.embedding, similarityThreshold);
       if (match) {

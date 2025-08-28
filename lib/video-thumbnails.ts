@@ -81,7 +81,7 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
     // Write video to temporary file for ffmpeg processing
     await fs.writeFile(tempVideoPath, videoBuffer);
     
-    const thumbnailsCreated = [];
+    const thumbnailsCreated: any[] = [];
     
     try {
       // Extract frame from video at 1 second mark
