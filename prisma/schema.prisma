@@ -187,6 +187,7 @@ model Face {
   boundingBox  String  @db.Text // JSON: {x, y, width, height} coordinates for LARGE thumbnail
   confidence   Float   // Detection confidence (0.0 - 1.0)
   embedding    String? @db.Text // Face encoding for recognition (JSON array)
+  hasEmbedding Boolean @default(false) // Efficiently indexable flag for embedding existence
   verified     Boolean @default(false) // Admin verified this face belongs to this person
   ignored      Boolean @default(false) // New field: true if face should be ignored
   createdAt    DateTime @default(now())
@@ -207,7 +208,7 @@ model Face {
   @@index([photoId, ignored]) // For finding faces in a photo excluding ignored ones
 
   @@index([personId], name: "idx_face_unassigned")
-  @@index([embedding], name: "idx_face_has_embedding")
+  @@index([hasEmbedding], name: "idx_face_has_embedding") // Efficient boolean index for embedding existence
   @@index([ignored], name: "idx_face_not_ignored")
 
   @@map("faces")

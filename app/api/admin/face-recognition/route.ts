@@ -174,7 +174,8 @@ async function intermediateClusteringAndSave(
             personId: tempPersonId,
             boundingBox: JSON.stringify(face.boundingBox),
             confidence: face.confidence,
-            embedding: JSON.stringify(face.embedding)
+            embedding: JSON.stringify(face.embedding),
+            hasEmbedding: true
           }
         });
         
@@ -380,7 +381,7 @@ async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceR
   }>>`
   SELECT id, embedding, "boundingBox", confidence, "photoId" 
   FROM "faces" 
-  WHERE "personId" IS NULL AND embedding IS NOT NULL
+  WHERE "personId" IS NULL AND "hasEmbedding" = true
   ORDER BY confidence DESC
   `;
   
@@ -400,7 +401,7 @@ async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceR
   }>>`
     SELECT p.id as personId, p.name as name, p.confirmed as confirmed, f.id as faceId, f.embedding as embedding
     FROM people p
-    LEFT JOIN faces f ON f.personId = p.id AND f.embedding IS NOT NULL
+    LEFT JOIN faces f ON f.personId = p.id AND f."hasEmbedding" = true
     ORDER BY p.id
   `;
 

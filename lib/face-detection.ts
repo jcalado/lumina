@@ -384,7 +384,7 @@ export async function findSimilarFaces(
   `
             SELECT id, "personId", embedding 
             FROM "faces" 
-            WHERE embedding IS NOT NULL AND "personId" IS NOT NULL
+            WHERE "hasEmbedding" = true AND "personId" IS NOT NULL
           `
   ;
   let best: { personId: string; similarity: number } | null = null;
@@ -433,6 +433,7 @@ export async function saveFaceDetections(
         boundingBox: JSON.stringify(face.boundingBox),
         confidence: face.confidence,
         embedding: JSON.stringify(face.embedding),
+        hasEmbedding: face.embedding.length > 0
       },
     });
   }
