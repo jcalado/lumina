@@ -874,6 +874,47 @@ export default function SyncPage() {
               </div>
             </div>
             
+            {/* Current Album Progress */}
+            {currentSync.albumProgress && (() => {
+              try {
+                const albumProgressData = typeof currentSync.albumProgress === 'string' 
+                  ? JSON.parse(currentSync.albumProgress) 
+                  : currentSync.albumProgress;
+                
+                // Find the current album being processed (not completed and not error)
+                const currentAlbum = Object.entries(albumProgressData).find(([albumPath, progress]: [string, any]) => 
+                  progress.status && progress.status !== 'COMPLETED' && progress.status !== 'ERROR' && 
+                  progress.photosTotal !== undefined && progress.photosUploaded !== undefined
+                );
+                
+                if (currentAlbum) {
+                  const [albumPath, progress]: [string, any] = currentAlbum;
+                  const albumName = albumPath.split('/').pop() || albumPath;
+                  const albumProgressPercent = progress.photosTotal > 0 
+                    ? Math.round((progress.photosUploaded / progress.photosTotal) * 100) 
+                    : 0;
+                  
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Current Album: {albumName}</span>
+                        <span>{progress.photosUploaded || 0}/{progress.photosTotal} ({albumProgressPercent}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${albumProgressPercent}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                }
+              } catch (error) {
+                console.error('Error parsing album progress:', error);
+              }
+              return null;
+            })()}
+            
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Albums</p>
