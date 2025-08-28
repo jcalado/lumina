@@ -1244,7 +1244,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { mode = 'new_only', albumIds = null } = body; // 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'
+    const { mode = 'new_only', selectedAlbumIds = null } = body; // 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'
     
     const settings = await getSettings();
     
@@ -1271,9 +1271,9 @@ export async function POST(request: NextRequest) {
     let photoCountResult: { count: number }[];
     if (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all') {
       // Reprocess modes: count all photos
-      if (albumIds && albumIds.length > 0) {
+      if (selectedAlbumIds && selectedAlbumIds.length > 0) {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-          SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY(${albumIds})
+          SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY(${selectedAlbumIds})
         `;
       } else {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
@@ -1282,9 +1282,9 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Default: only process photos that haven't been processed yet
-      if (albumIds && albumIds.length > 0) {
+      if (selectedAlbumIds && selectedAlbumIds.length > 0) {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-          SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY(${albumIds})
+          SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY(${selectedAlbumIds})
         `;
       } else {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
@@ -1340,7 +1340,7 @@ export async function POST(request: NextRequest) {
     activeJobs.set(jobId, jobState);
 
     // Start processing in background
-    processJob(jobId, albumIds).catch(console.error);
+    processJob(jobId, selectedAlbumIds).catch(console.error);
 
     return NextResponse.json({ 
       jobId: jobId, 

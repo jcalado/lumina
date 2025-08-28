@@ -203,6 +203,7 @@ export default function FaceRecognitionAdminPage() {
     name: string;
     slug: string;
     path: string;
+    totalPhotos: number;
     unprocessedPhotos: number;
   }>>([]);
   const [selectedAlbumIds, setSelectedAlbumIds] = useState<Set<string>>(new Set());
@@ -1105,7 +1106,7 @@ export default function FaceRecognitionAdminPage() {
                     <div className="max-h-48 overflow-y-auto space-y-2">
                       {availableAlbums.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
-                          No albums with unprocessed photos found
+                          No albums with photos found
                         </p>
                       ) : (
                         availableAlbums.map((album) => (
@@ -1122,10 +1123,13 @@ export default function FaceRecognitionAdminPage() {
                               <div>
                                 <p className="font-medium text-sm">{album.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {album.unprocessedPhotos} unprocessed photos
+                                  {album.unprocessedPhotos} of {album.totalPhotos} photos need processing
                                 </p>
                               </div>
                             </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {album.totalPhotos} total
+                            </Badge>
                           </div>
                         ))
                       )}
