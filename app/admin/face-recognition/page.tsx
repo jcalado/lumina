@@ -1389,10 +1389,28 @@ export default function FaceRecognitionAdminPage() {
                   <div className="text-center py-8">
                     <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-medium mb-2">No People Detected Yet</h3>
-                    <p className="text-muted-foreground mb-4">Start processing photos to detect and group faces into people</p>
-                    <Button onClick={() => startProcessing('new_only')} className="flex items-center gap-2">
-                      <Play className="h-4 w-4" /> Start Face Detection
-                    </Button>
+                    <p className="text-muted-foreground mb-4">
+                      Start processing photos or group any existing unassigned faces.
+                    </p>
+                    <div className="flex items-center justify-center gap-3">
+                      <Button onClick={() => startProcessing('new_only')} className="flex items-center gap-2">
+                        <Play className="h-4 w-4" /> Start Face Detection
+                      </Button>
+                      {unassignedFaces.length > 0 && (
+                        <Button 
+                          variant="outline"
+                          onClick={processUnassignedFaces}
+                          disabled={processingUnassigned}
+                          className="flex items-center gap-2"
+                        >
+                          <Grid3X3 className="h-4 w-4" />
+                          {processingUnassigned ? 'Processing…' : `Group ${unassignedFaces.length} Unassigned`}
+                        </Button>
+                      )}
+                    </div>
+                    {unassignedFaces.length === 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">No unassigned faces found yet.</p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
