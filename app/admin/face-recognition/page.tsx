@@ -60,7 +60,8 @@ import {
   Calendar,
   Hash,
   Cpu,
-  FolderOpen
+  FolderOpen,
+  ChevronRight
 } from 'lucide-react';
 
 interface PhotoThumbnail {
@@ -126,6 +127,87 @@ interface UnassignedFace {
     }>;
   };
   ignored?: boolean; // Add ignored field
+}
+
+interface AlbumTreeNode {
+  id: string;
+  name: string;
+  slug: string;
+  path: string;
+  totalPhotos: number;
+  unprocessedPhotos: number;
+  depth: number;
+  children: AlbumTreeNode[];
+}
+
+interface AlbumTreeProps {
+  albums: AlbumTreeNode[];
+  selectedAlbumIds: Set<string>;
+  expandedAlbums: Set<string>;
+  onToggleSelection: (albumId: string) => void;
+  onToggleExpansion: (albumId: string) => void;
+}
+
+function AlbumTree({ albums, selectedAlbumIds, expandedAlbums, onToggleSelection, onToggleExpansion }: AlbumTreeProps) {
+  const renderAlbumNode = (album: AlbumTreeNode) => {
+    const hasChildren = album.children && album.children.length > 0;
+    const isExpanded = expandedAlbums.has(album.id);
+    const isSelected = selectedAlbumIds.has(album.id);
+    const indentLevel = album.depth * 16; // 16px per level
+
+    return (
+      <div key={album.id}>
+        <div
+          className="flex items-center justify-between p-2 rounded border hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+          style={{ marginLeft: `${indentLevel}px` }}
+          onClick={() => onToggleSelection(album.id)}
+        >
+          <div className="flex items-center gap-2">
+            {hasChildren && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleExpansion(album.id);
+                }}
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </button>
+            )}
+            {!hasChildren && <div className="w-5" />} {/* Spacer for alignment */}
+            <Checkbox
+              checked={isSelected}
+              onChange={() => {}} // Handled by onClick
+            />
+            <div>
+              <p className="font-medium text-sm">{album.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {album.unprocessedPhotos} of {album.totalPhotos} photos need processing
+              </p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="text-xs">
+            {album.totalPhotos} total
+          </Badge>
+        </div>
+        {hasChildren && isExpanded && (
+          <div>
+            {album.children.map(child => renderAlbumNode(child))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-1">
+      {albums.map(album => renderAlbumNode(album))}
+    </div>
+  );
 }
 
 export default function FaceRecognitionAdminPage() {
@@ -205,9 +287,12 @@ export default function FaceRecognitionAdminPage() {
     path: string;
     totalPhotos: number;
     unprocessedPhotos: number;
+    depth: number;
+    children: any[];
   }>>([]);
   const [selectedAlbumIds, setSelectedAlbumIds] = useState<Set<string>>(new Set());
   const [albumsLoading, setAlbumsLoading] = useState(false);
+  const [expandedAlbums, setExpandedAlbums] = useState<Set<string>>(new Set());
   
   const { toast } = useToast();
 
@@ -431,11 +516,39 @@ export default function FaceRecognitionAdminPage() {
   };
 
   const selectAllAlbums = () => {
-    setSelectedAlbumIds(new Set(availableAlbums.map(album => album.id)));
+    const allIds = getAllAlbumIds(availableAlbums);
+    setSelectedAlbumIds(new Set(allIds));
   };
 
   const deselectAllAlbums = () => {
     setSelectedAlbumIds(new Set());
+  };
+
+  // Tree-specific functions
+  const toggleAlbumExpansion = (albumId: string) => {
+    setExpandedAlbums(prev => {
+      const next = new Set(prev);
+      if (next.has(albumId)) {
+        next.delete(albumId);
+      } else {
+        next.add(albumId);
+      }
+      return next;
+    });
+  };
+
+  const getAllAlbumIds = (albums: any[]): string[] => {
+    const ids: string[] = [];
+    const traverse = (albumList: any[]) => {
+      albumList.forEach(album => {
+        ids.push(album.id);
+        if (album.children && album.children.length > 0) {
+          traverse(album.children);
+        }
+      });
+    };
+    traverse(albums);
+    return ids;
   };
 
   const toggleFaceSelection = (faceId: string) => {
@@ -1103,35 +1216,19 @@ export default function FaceRecognitionAdminPage() {
                         `${selectedAlbumIds.size} of ${availableAlbums.length} albums selected`
                       )}
                     </div>
-                    <div className="max-h-48 overflow-y-auto space-y-2">
+                    <div className="max-h-48 overflow-y-auto space-y-1">
                       {availableAlbums.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
                           No albums with photos found
                         </p>
                       ) : (
-                        availableAlbums.map((album) => (
-                          <div
-                            key={album.id}
-                            className="flex items-center justify-between p-2 rounded border hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-                            onClick={() => toggleAlbumSelection(album.id)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={selectedAlbumIds.has(album.id)}
-                                onChange={() => {}} // Handled by onClick
-                              />
-                              <div>
-                                <p className="font-medium text-sm">{album.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {album.unprocessedPhotos} of {album.totalPhotos} photos need processing
-                                </p>
-                              </div>
-                            </div>
-                            <Badge variant="secondary" className="text-xs">
-                              {album.totalPhotos} total
-                            </Badge>
-                          </div>
-                        ))
+                        <AlbumTree
+                          albums={availableAlbums}
+                          selectedAlbumIds={selectedAlbumIds}
+                          expandedAlbums={expandedAlbums}
+                          onToggleSelection={toggleAlbumSelection}
+                          onToggleExpansion={toggleAlbumExpansion}
+                        />
                       )}
                     </div>
                   </div>
