@@ -187,6 +187,15 @@ async function syncPhotos(jobId: string) {
           fingerprintInfo: 'Generated fingerprint for sync optimization'
         };
         
+        // Save initial processing status to database
+        await prisma.syncJob.update({
+          where: { id: jobId },
+          data: { 
+            albumProgress: JSON.stringify(albumProgress),
+            logs: JSON.stringify(logs)
+          },
+        });
+        
         addLog('info', `Album "${albumData.name}" contains ${albumData.photos.length} photos and ${albumData.videos.length} videos`);
         
         // Upsert album
@@ -217,9 +226,17 @@ async function syncPhotos(jobId: string) {
           album.id, 
           albumData.photos, 
           albumPath, 
-          (processed: number, uploaded: number) => {
+          async (processed: number, uploaded: number) => {
             albumProgress[albumPath].photosProcessed = processed;
             albumProgress[albumPath].photosUploaded = uploaded;
+            // Save progress to database during processing
+            await prisma.syncJob.update({
+              where: { id: jobId },
+              data: { 
+                albumProgress: JSON.stringify(albumProgress),
+                logs: JSON.stringify(logs)
+              },
+            });
           },
           addLog
         );
@@ -229,9 +246,17 @@ async function syncPhotos(jobId: string) {
           album.id, 
           albumData.videos, 
           albumPath, 
-          (processed: number, uploaded: number) => {
+          async (processed: number, uploaded: number) => {
             albumProgress[albumPath].videosProcessed = processed;
             albumProgress[albumPath].videosUploaded = uploaded;
+            // Save progress to database during processing
+            await prisma.syncJob.update({
+              where: { id: jobId },
+              data: { 
+                albumProgress: JSON.stringify(albumProgress),
+                logs: JSON.stringify(logs)
+              },
+            });
           },
           addLog
         );
@@ -506,7 +531,7 @@ async function syncAlbumPhotos(
   albumId: string, 
   photos: any[], 
   albumPath: string, 
-  progressCallback?: (processed: number, uploaded: number) => void,
+  progressCallback?: (processed: number, uploaded: number) => void | Promise<void>,
   logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
 ): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
   // Get existing photos for this album
@@ -608,7 +633,7 @@ async function syncAlbumPhotos(
     
     // Call progress callback if provided
     if (progressCallback) {
-      progressCallback(filesProcessed, filesUploaded);
+      await progressCallback(filesProcessed, filesUploaded);
     }
   }
   
@@ -639,7 +664,7 @@ async function syncAlbumPhotosConcurrent(
   albumId: string, 
   photos: any[], 
   albumPath: string, 
-  progressCallback?: (processed: number, uploaded: number) => void,
+  progressCallback?: (processed: number, uploaded: number) => void | Promise<void>,
   logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
 ): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
   // Get batch size from settings
@@ -796,7 +821,7 @@ async function syncAlbumPhotosConcurrent(
 
     // Update progress after new photos
     if (progressCallback) {
-      progressCallback(filesProcessed, filesUploaded);
+      await progressCallback(filesProcessed, filesUploaded);
     }
   }
 
@@ -833,7 +858,7 @@ async function syncAlbumPhotosConcurrent(
 
     // Final progress update
     if (progressCallback) {
-      progressCallback(filesProcessed, filesUploaded);
+      await progressCallback(filesProcessed, filesUploaded);
     }
   }
   
@@ -845,7 +870,7 @@ async function syncAlbumVideosConcurrent(
   albumId: string, 
   videos: any[], 
   albumPath: string, 
-  progressCallback?: (processed: number, uploaded: number) => void,
+  progressCallback?: (processed: number, uploaded: number) => void | Promise<void>,
   logger?: (level: 'info' | 'warn' | 'error', message: string, details?: any) => void
 ): Promise<{ filesProcessed: number; filesUploaded: number; issues: string[] }> {
   // Get batch size from settings
@@ -958,7 +983,7 @@ async function syncAlbumVideosConcurrent(
 
     // Update progress after new videos
     if (progressCallback) {
-      progressCallback(filesProcessed, filesUploaded);
+      await progressCallback(filesProcessed, filesUploaded);
     }
   }
 
@@ -995,7 +1020,7 @@ async function syncAlbumVideosConcurrent(
 
     // Final progress update
     if (progressCallback) {
-      progressCallback(filesProcessed, filesUploaded);
+      await progressCallback(filesProcessed, filesUploaded);
     }
   }
   
