@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
+import * as os from "os"
 
 const updateSettingsSchema = z.object({
   siteName: z.string().min(1).max(100),
@@ -41,7 +42,12 @@ export async function GET() {
       ...settingsObj
     }
 
-    return NextResponse.json({ settings: defaultSettings })
+    return NextResponse.json({ 
+      settings: defaultSettings,
+      systemInfo: {
+        maxBatchProcessingSize: os.cpus().length
+      }
+    })
   } catch (error) {
     console.error("Error fetching settings:", error)
     return NextResponse.json(

@@ -24,6 +24,10 @@ interface SiteSettings {
   batchProcessingSize: string
 }
 
+interface SystemInfo {
+  maxBatchProcessingSize: number
+}
+
 interface BlurhashJob {
   id: string
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -44,6 +48,9 @@ export default function AdminSettingsPage() {
     photosPerPage: "32",
     batchProcessingSize: "4"
   })
+  const [systemInfo, setSystemInfo] = useState<SystemInfo>({
+    maxBatchProcessingSize: 4
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -57,6 +64,7 @@ export default function AdminSettingsPage() {
       if (response.ok) {
         const data = await response.json()
         const fetchedSettings = data.settings
+        const fetchedSystemInfo = data.systemInfo
         
         // Parse footer links if they exist
         let footerLinks = []
@@ -75,6 +83,10 @@ export default function AdminSettingsPage() {
           accentColor: fetchedSettings.accentColor || "#3b82f6",
           photosPerPage: fetchedSettings.photosPerPage || "32",
           batchProcessingSize: fetchedSettings.batchProcessingSize || "4"
+        })
+
+        setSystemInfo({
+          maxBatchProcessingSize: fetchedSystemInfo?.maxBatchProcessingSize || 4
         })
       } else {
         toast({
@@ -405,7 +417,7 @@ export default function AdminSettingsPage() {
                 placeholder="4"
               />
               <p className="text-sm text-muted-foreground">
-                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources. Maximum is limited by available CPU threads.
+                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources. Maximum is limited by available CPU threads ({systemInfo.maxBatchProcessingSize} threads).
               </p>
             </div>            <div className="flex justify-end">
               <Button 
