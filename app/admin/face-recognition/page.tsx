@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -58,7 +59,8 @@ import {
   SortDesc,
   Calendar,
   Hash,
-  Cpu
+  Cpu,
+  FolderOpen
 } from 'lucide-react';
 
 interface PhotoThumbnail {
@@ -194,6 +196,18 @@ export default function FaceRecognitionAdminPage() {
   const [assigneeSearching, setAssigneeSearching] = useState(false);
   const assigneeDebounce = useRef<number | null>(null);
   const peopleSearchDebounce = useRef<number | null>(null);
+  
+  // Album selection state
+  const [availableAlbums, setAvailableAlbums] = useState<Array<{
+    id: string;
+    name: string;
+    slug: string;
+    path: string;
+    unprocessedPhotos: number;
+  }>>([]);
+  const [selectedAlbumIds, setSelectedAlbumIds] = useState<Set<string>>(new Set());
+  const [albumsLoading, setAlbumsLoading] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -202,6 +216,7 @@ export default function FaceRecognitionAdminPage() {
     loadPeople();
     loadUnassignedFaces();
     loadPhotoStats();
+    loadAlbums();
   }, []);
 
   // Reload people when page or limit change
@@ -382,6 +397,45 @@ export default function FaceRecognitionAdminPage() {
   useEffect(() => {
     loadUnassignedFaces();
   }, [unassignedPage, unassignedLimit]);
+
+  const loadAlbums = async () => {
+    try {
+      setAlbumsLoading(true);
+      const response = await fetch('/api/admin/face-recognition/albums');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableAlbums(data.albums || []);
+        // Default to selecting all albums
+        setSelectedAlbumIds(new Set(data.albums?.map((album: any) => album.id) || []));
+      } else {
+        console.error('Failed to load albums');
+      }
+    } catch (error) {
+      console.error('Failed to load albums:', error);
+    } finally {
+      setAlbumsLoading(false);
+    }
+  };
+
+  const toggleAlbumSelection = (albumId: string) => {
+    setSelectedAlbumIds(prev => {
+      const next = new Set(prev);
+      if (next.has(albumId)) {
+        next.delete(albumId);
+      } else {
+        next.add(albumId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllAlbums = () => {
+    setSelectedAlbumIds(new Set(availableAlbums.map(album => album.id)));
+  };
+
+  const deselectAllAlbums = () => {
+    setSelectedAlbumIds(new Set());
+  };
 
   const toggleFaceSelection = (faceId: string) => {
     setSelectedFaces(prev => {
@@ -705,7 +759,10 @@ export default function FaceRecognitionAdminPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ 
+          mode,
+          selectedAlbumIds: selectedAlbumIds.size > 0 ? Array.from(selectedAlbumIds) : null
+        }),
       });
 
       if (response.ok) {
@@ -1011,6 +1068,69 @@ export default function FaceRecognitionAdminPage() {
                       )}
                     </div>
                   )}
+
+                  {/* Album Selection */}
+                  <div className="p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium flex items-center gap-2">
+                        <FolderOpen className="h-4 w-4" />
+                        Album Selection
+                      </h4>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={selectAllAlbums}
+                          disabled={availableAlbums.length === 0}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={deselectAllAlbums}
+                          disabled={selectedAlbumIds.size === 0}
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground mb-3">
+                      {selectedAlbumIds.size === 0 ? (
+                        "No albums selected - all photos will be processed"
+                      ) : (
+                        `${selectedAlbumIds.size} of ${availableAlbums.length} albums selected`
+                      )}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {availableAlbums.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No albums with unprocessed photos found
+                        </p>
+                      ) : (
+                        availableAlbums.map((album) => (
+                          <div
+                            key={album.id}
+                            className="flex items-center justify-between p-2 rounded border hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+                            onClick={() => toggleAlbumSelection(album.id)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={selectedAlbumIds.has(album.id)}
+                                onChange={() => {}} // Handled by onClick
+                              />
+                              <div>
+                                <p className="font-medium text-sm">{album.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {album.unprocessedPhotos} unprocessed photos
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
 
                   <div className="flex gap-4">
                     {/* Processing Mode Dropdown */}

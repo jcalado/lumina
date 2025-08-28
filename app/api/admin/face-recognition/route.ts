@@ -783,7 +783,7 @@ async function processPhotoBatchDetectionOnly(
   return detectionResults;
 }
 
-async function processJob(jobId: string) {
+async function processJob(jobId: string, albumIds?: string[] | null) {
   const jobState = activeJobs.get(jobId);
   if (!jobState) return;
 
@@ -830,6 +830,7 @@ async function processJob(jobId: string) {
       }>>`
         SELECT id, filename, "s3Key" 
           FROM "photos" 
+          ${albumIds && albumIds.length > 0 ? `WHERE "albumId" = ANY(${albumIds})` : ''}
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     } else if (jobState.mode === 'reprocess_keep_people') {
@@ -853,6 +854,7 @@ async function processJob(jobId: string) {
       }>>`
         SELECT id, filename, "s3Key" 
           FROM "photos" 
+          ${albumIds && albumIds.length > 0 ? `WHERE "albumId" = ANY(${albumIds})` : ''}
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     } else {
@@ -865,6 +867,7 @@ async function processJob(jobId: string) {
         SELECT id, filename, "s3Key" 
           FROM "photos" 
           WHERE "faceProcessedAt" IS NULL
+          ${albumIds && albumIds.length > 0 ? `AND "albumId" = ANY(${albumIds})` : ''}
           LIMIT ${Math.min(jobState.totalPhotos)}
       `;
     }
@@ -1241,7 +1244,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { mode = 'new_only' } = body; // 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'
+    const { mode = 'new_only', albumIds = null } = body; // 'new_only' | 'reprocess_keep_people' | 'reprocess_clear_all'
     
     const settings = await getSettings();
     
@@ -1268,14 +1271,26 @@ export async function POST(request: NextRequest) {
     let photoCountResult: { count: number }[];
     if (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all') {
       // Reprocess modes: count all photos
-      photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(*) as count FROM "photos"
-      `;
+      if (albumIds && albumIds.length > 0) {
+        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+          SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY(${albumIds})
+        `;
+      } else {
+        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+          SELECT COUNT(*) as count FROM "photos"
+        `;
+      }
     } else {
       // Default: only process photos that haven't been processed yet
-      photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-        SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL
-      `;
+      if (albumIds && albumIds.length > 0) {
+        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+          SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY(${albumIds})
+        `;
+      } else {
+        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
+          SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL
+        `;
+      }
     }
   let photoCountRaw = photoCountResult[0]?.count ?? 0;
   const photoCount = typeof photoCountRaw === 'bigint' ? Number(photoCountRaw) : Number(photoCountRaw);
@@ -1325,7 +1340,7 @@ export async function POST(request: NextRequest) {
     activeJobs.set(jobId, jobState);
 
     // Start processing in background
-    processJob(jobId).catch(console.error);
+    processJob(jobId, albumIds).catch(console.error);
 
     return NextResponse.json({ 
       jobId: jobId, 
