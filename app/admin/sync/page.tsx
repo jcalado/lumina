@@ -884,21 +884,26 @@ export default function SyncPage() {
                 // Find the current album being processed (not completed and not error)
                 const currentAlbum = Object.entries(albumProgressData).find(([albumPath, progress]: [string, any]) => 
                   progress.status && progress.status !== 'COMPLETED' && progress.status !== 'ERROR' && 
-                  progress.photosTotal !== undefined && progress.photosUploaded !== undefined
+                  ((progress.photosTotal !== undefined && progress.photosUploaded !== undefined) ||
+                   (progress.videosTotal !== undefined && progress.videosUploaded !== undefined))
                 );
                 
                 if (currentAlbum) {
                   const [albumPath, progress]: [string, any] = currentAlbum;
                   const albumName = albumPath.split('/').pop() || albumPath;
-                  const albumProgressPercent = progress.photosTotal > 0 
-                    ? Math.round((progress.photosUploaded / progress.photosTotal) * 100) 
+                  
+                  // Calculate total progress including both photos and videos
+                  const totalFiles = (progress.photosTotal || 0) + (progress.videosTotal || 0);
+                  const processedFiles = (progress.photosProcessed || 0) + (progress.videosProcessed || 0);
+                  const albumProgressPercent = totalFiles > 0 
+                    ? Math.round((processedFiles / totalFiles) * 100) 
                     : 0;
                   
                   return (
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span>Current Album: {albumName}</span>
-                        <span>{progress.photosUploaded || 0}/{progress.photosTotal} ({albumProgressPercent}%)</span>
+                        <span>{processedFiles}/{totalFiles} ({albumProgressPercent}%)</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 

@@ -644,7 +644,8 @@ async function syncAlbumPhotos(
 async function processBatch<T, R>(
   items: T[],
   batchSize: number,
-  processor: (item: T) => Promise<R>
+  processor: (item: T) => Promise<R>,
+  progressCallback?: (processed: number, total: number, results: R[]) => void | Promise<void>
 ): Promise<R[]> {
   const results: R[] = [];
   
@@ -654,6 +655,11 @@ async function processBatch<T, R>(
       batch.map(item => processor(item))
     );
     results.push(...batchResults);
+    
+    // Call progress callback after each batch if provided
+    if (progressCallback) {
+      await progressCallback(results.length, items.length, results);
+    }
   }
   
   return results;
@@ -812,7 +818,13 @@ async function syncAlbumPhotosConcurrent(
     };
 
     // Process new photos in batches
-    const newPhotoResults = await processBatch(newPhotos, batchSize, processNewPhoto);
+    const newPhotoResults = await processBatch(newPhotos, batchSize, processNewPhoto, async (processed, total, results) => {
+      // Call progress callback after each batch
+      if (progressCallback) {
+        const successfulUploads = results.filter((r: any) => r.success).length;
+        await progressCallback(filesProcessed + processed, filesUploaded + successfulUploads);
+      }
+    });
     
     // Count successful uploads
     const successfulUploads = newPhotoResults.filter(result => result.success).length;
@@ -853,7 +865,12 @@ async function syncAlbumPhotosConcurrent(
     };
 
     // Process metadata updates in batches (smaller batch size for DB operations)
-    await processBatch(existingPhotosToUpdate, Math.min(batchSize * 2, 10), updateExistingPhoto);
+    await processBatch(existingPhotosToUpdate, Math.min(batchSize * 2, 10), updateExistingPhoto, async (processed, total, results) => {
+      // Call progress callback after each batch
+      if (progressCallback) {
+        await progressCallback(filesProcessed + processed, filesUploaded);
+      }
+    });
     filesProcessed += existingPhotosToUpdate.length;
 
     // Final progress update
@@ -974,7 +991,13 @@ async function syncAlbumVideosConcurrent(
     };
 
     // Process new videos in batches
-    const newVideoResults = await processBatch(newVideos, batchSize, processNewVideo);
+    const newVideoResults = await processBatch(newVideos, batchSize, processNewVideo, async (processed, total, results) => {
+      // Call progress callback after each batch
+      if (progressCallback) {
+        const successfulUploads = results.filter((r: any) => r.success).length;
+        await progressCallback(filesProcessed + processed, filesUploaded + successfulUploads);
+      }
+    });
     
     // Count successful uploads
     const successfulUploads = newVideoResults.filter(result => result.success).length;
@@ -1015,7 +1038,12 @@ async function syncAlbumVideosConcurrent(
     };
 
     // Process metadata updates in batches
-    await processBatch(existingVideosToUpdate, Math.min(batchSize * 2, 10), updateExistingVideo);
+    await processBatch(existingVideosToUpdate, Math.min(batchSize * 2, 10), updateExistingVideo, async (processed, total, results) => {
+      // Call progress callback after each batch
+      if (progressCallback) {
+        await progressCallback(filesProcessed + processed, filesUploaded);
+      }
+    });
     filesProcessed += existingVideosToUpdate.length;
 
     // Final progress update
