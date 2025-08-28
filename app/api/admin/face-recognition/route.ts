@@ -830,7 +830,7 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
       }>>(
         `SELECT id, filename, "s3Key" 
           FROM "photos" 
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::uuid[])` : ''}
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::text[])` : ''}
           LIMIT $2`,
         selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
         Math.min(jobState.totalPhotos)
@@ -856,7 +856,7 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
       }>>(
         `SELECT id, filename, "s3Key" 
           FROM "photos" 
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::uuid[])` : ''}
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::text[])` : ''}
           LIMIT $2`,
         selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
         Math.min(jobState.totalPhotos)
@@ -871,7 +871,7 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
         `SELECT id, filename, "s3Key" 
           FROM "photos" 
           WHERE "faceProcessedAt" IS NULL
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `AND "albumId" = ANY($1::uuid[])` : ''}
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `AND "albumId" = ANY($1::text[])` : ''}
           LIMIT $2`,
         selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
         Math.min(jobState.totalPhotos)
@@ -1279,7 +1279,7 @@ export async function POST(request: NextRequest) {
       // Reprocess modes: count all photos
       if (selectedAlbumIds && selectedAlbumIds.length > 0) {
         photoCountResult = await prisma.$queryRawUnsafe<{ count: number }[]>(
-          `SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY($1::uuid[])`,
+          `SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY($1::text[])`,
           selectedAlbumIds
         );
       } else {
@@ -1291,7 +1291,7 @@ export async function POST(request: NextRequest) {
       // Default: only process photos that haven't been processed yet
       if (selectedAlbumIds && selectedAlbumIds.length > 0) {
         photoCountResult = await prisma.$queryRawUnsafe<{ count: number }[]>(
-          `SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY($1::uuid[])`,
+          `SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY($1::text[])`,
           selectedAlbumIds
         );
       } else {
