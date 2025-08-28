@@ -118,16 +118,12 @@ export async function DELETE(
   try {
     const { id: personId } = await context.params;
 
-    // Get person info before deletion using raw query
-    const personInfo = await prisma.$queryRaw`
-      SELECT name, 
-             (SELECT COUNT(*) FROM faces WHERE personId = ${personId}) as faceCount 
-      FROM people 
-      WHERE id = ${personId}
-    `;
+    // Fetch person and count faces via Prisma to avoid quoting issues
+    const person = await prisma.person.findUnique({
+      where: { id: personId },
+      select: { id: true, name: true },
+    });
 
-    const person = (personInfo as any[])[0];
-    
     if (!person) {
       return NextResponse.json(
         { error: 'Person not found' },
@@ -135,17 +131,13 @@ export async function DELETE(
       );
     }
 
-    const faceCount = Number(person.faceCount) || 0;
+    const faceCount = await prisma.face.count({ where: { personId } });
 
     // Remove person association from faces (don't delete faces)
-    const updateResult = await prisma.$executeRaw`
-      UPDATE faces SET personId = NULL WHERE personId = ${personId}
-    `;
+    await prisma.face.updateMany({ where: { personId }, data: { personId: null } });
 
     // Delete the person
-    const deleteResult = await prisma.$executeRaw`
-      DELETE FROM people WHERE id = ${personId}
-    `;
+    await prisma.person.delete({ where: { id: personId } });
 
     return NextResponse.json({ 
       success: true,
