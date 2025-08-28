@@ -2,15 +2,54 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 interface ProcessRequest {
-  similarityThreshold: number;
-  mode: 'create_new' | 'assign_existing' | 'both';
+  similarityThreshold?: number;
+  mode?: 'create_new' | 'assign_existing' | 'both';
+}
+
+function parseEmbedding(json: string | null): number[] | null {
+  if (!json) return null;
+  try {
+    const arr = JSON.parse(json);
+    if (Array.isArray(arr)) return arr.map((v) => Number(v));
+  } catch {}
+  return null;
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    const va = a[i];
+    const vb = b[i];
+    dot += va * vb;
+    na += va * va;
+    nb += vb * vb;
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+async function getSimilarityThresholdFromSettings(): Promise<number> {
+  const rows = await prisma.siteSettings.findMany({
+    where: { key: 'faceRecognitionSimilarityThreshold' },
+  });
+  const val = rows[0]?.value;
+  const num = parseFloat(val || '0.7');
+  return isNaN(num) ? 0.7 : num;
 }
 
 // POST: Process unassigned faces based on similarity threshold
 export async function POST(request: NextRequest) {
   try {
-    const body: ProcessRequest = await request.json();
-    const { similarityThreshold = 0.7, mode = 'both' } = body;
+    const body: ProcessRequest = await request.json().catch(() => ({}));
+    let similarityThreshold = typeof body.similarityThreshold === 'number' ? body.similarityThreshold : undefined;
+    const mode: 'create_new' | 'assign_existing' | 'both' = (body.mode as any) || 'both';
+
+    if (similarityThreshold === undefined) {
+      similarityThreshold = await getSimilarityThresholdFromSettings();
+    }
 
     if (similarityThreshold < 0 || similarityThreshold > 1) {
       return NextResponse.json(
@@ -19,20 +58,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all unassigned faces
+    // Get all unassigned faces with embeddings
     const unassignedFaces = await prisma.face.findMany({
       where: {
         personId: null,
-        ignored: { not: true }
+        ignored: { not: true },
+        hasEmbedding: true,
+        embedding: { not: null },
       },
-      include: {
-        photo: {
-          include: {
-            thumbnails: { where: { size: 'SMALL' } }
-          }
-        }
-      },
-      orderBy: { confidence: 'desc' }
+      select: { id: true, confidence: true, embedding: true },
+      orderBy: { confidence: 'desc' },
     });
 
     if (unassignedFaces.length === 0) {
@@ -48,75 +83,105 @@ export async function POST(request: NextRequest) {
     let newPeopleCount = 0;
     let assignedToExistingCount = 0;
 
-    // Get existing people for comparison (if mode allows assignment to existing)
-    const existingPeople = (mode === 'assign_existing' || mode === 'both') 
+    // Prepare embeddings
+    const unassignedWithEmb = unassignedFaces
+      .map(f => ({ id: f.id, confidence: f.confidence, emb: parseEmbedding(f.embedding as any) }))
+      .filter(f => f.emb && f.emb.length) as Array<{ id: string; confidence: number; emb: number[] }>;
+
+    // Get existing people with a few face embeddings (if mode allows assignment to existing)
+    const existingPeople = (mode === 'assign_existing' || mode === 'both')
       ? await prisma.person.findMany({
           include: {
             faces: {
-              where: { ignored: { not: true } },
+              where: { ignored: { not: true }, hasEmbedding: true, embedding: { not: null } },
               orderBy: { confidence: 'desc' },
-              take: 5 // Take top 5 faces for comparison
-            }
-          }
+              take: 5,
+              select: { id: true, embedding: true },
+            },
+          },
         })
       : [];
 
-    // Simple face clustering based on confidence and basic similarity
-    // This is a simplified implementation - in a real system, you'd use proper face embeddings
-    const processedFaces = new Set<string>();
-    const clusters: { faces: typeof unassignedFaces; representative?: typeof unassignedFaces[0] }[] = [];
+    const existingPeopleEmb = existingPeople.map(p => ({
+      id: p.id,
+      faces: p.faces
+        .map(f => parseEmbedding(f.embedding))
+        .filter((e): e is number[] => Array.isArray(e) && e.length > 0),
+    }));
 
-    for (const face of unassignedFaces) {
-      if (processedFaces.has(face.id)) continue;
-
-      // Try to assign to existing person first (if mode allows)
-      let assignedToExisting = false;
-      if (mode === 'assign_existing' || mode === 'both') {
-        for (const person of existingPeople) {
-          if (person.faces.length === 0) continue;
-          
-          // Simple similarity check based on confidence difference
-          // In a real implementation, you'd compare face embeddings
-          const avgConfidence = person.faces.reduce((sum: number, f: { confidence: number }) => sum + f.confidence, 0) / person.faces.length;
-          const confidenceDiff = Math.abs(face.confidence - avgConfidence);
-          
-          if (confidenceDiff <= (1 - similarityThreshold)) {
-            // Assign this face to the existing person
-            await prisma.face.update({
-              where: { id: face.id },
-              data: { personId: person.id }
-            });
-            
-            processedFaces.add(face.id);
-            processedCount++;
-            assignedToExistingCount++;
-            assignedToExisting = true;
-            break;
+    // Assign to existing people first using embedding similarity
+    const remaining: typeof unassignedWithEmb = [];
+    if (mode === 'assign_existing' || mode === 'both') {
+      for (const f of unassignedWithEmb) {
+        let bestPerson: string | null = null;
+        let bestSim = 0;
+        for (const p of existingPeopleEmb) {
+          for (const pe of p.faces) {
+            const sim = cosineSimilarity(f.emb, pe);
+            if (sim >= (similarityThreshold as number) && sim > bestSim) {
+              bestSim = sim;
+              bestPerson = p.id;
+            }
           }
+        }
+        if (bestPerson) {
+          await prisma.face.update({ where: { id: f.id }, data: { personId: bestPerson } });
+          processedCount++;
+          assignedToExistingCount++;
+        } else {
+          remaining.push(f);
+        }
+      }
+    } else {
+      remaining.push(...unassignedWithEmb);
+    }
+
+    // Cluster remaining unassigned faces by embedding similarity
+    const clusters: Array<{ ids: string[] } > = [];
+    if (mode === 'create_new' || mode === 'both') {
+      const m = remaining.length;
+      const parent = Array.from({ length: m }, (_, i) => i);
+      const find = (a: number): number => (parent[a] === a ? a : (parent[a] = find(parent[a])));
+      const union = (a: number, b: number) => {
+        const ra = find(a), rb = find(b);
+        if (ra !== rb) parent[rb] = ra;
+      };
+
+      // Normalize embeddings
+      const norm = remaining.map(r => {
+        const e = r.emb;
+        let mag = 0; for (const v of e) mag += v*v; mag = Math.sqrt(mag);
+        return mag === 0 ? e.slice() : e.map(v => v/mag);
+      });
+
+      for (let i = 0; i < m; i++) {
+        for (let j = i + 1; j < m; j++) {
+          let dot = 0; const a = norm[i], b = norm[j];
+          for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
+          if (dot >= (similarityThreshold as number)) union(i, j);
         }
       }
 
-      if (assignedToExisting) continue;
+      // Build groups
+      const groups = new Map<number, number[]>();
+      for (let i = 0; i < m; i++) {
+        const r = find(i);
+        if (!groups.has(r)) groups.set(r, []);
+        groups.get(r)!.push(i);
+      }
 
-      // If not assigned to existing, try to create new cluster
-      if (mode === 'create_new' || mode === 'both') {
-        const cluster = { faces: [face] };
-        
-        // Find similar faces for this cluster
-        for (const otherFace of unassignedFaces) {
-          if (processedFaces.has(otherFace.id) || otherFace.id === face.id) continue;
-          
-          // Simple similarity check based on confidence
-          const confidenceDiff = Math.abs(face.confidence - otherFace.confidence);
-          
-          if (confidenceDiff <= (1 - similarityThreshold)) {
-            cluster.faces.push(otherFace);
-            processedFaces.add(otherFace.id);
-          }
+      for (const idxs of groups.values()) {
+        if (idxs.length > 1) {
+          clusters.push({ ids: idxs.map(i => remaining[i].id) });
         }
-        
-        processedFaces.add(face.id);
-        clusters.push(cluster);
+      }
+
+      // Create persons and assign faces for each cluster
+      for (const cluster of clusters) {
+        const person = await prisma.person.create({ data: { name: `Person ${Date.now()}${Math.random().toString(36).slice(2,6)}`, confirmed: false } });
+        await prisma.face.updateMany({ where: { id: { in: cluster.ids } }, data: { personId: person.id } });
+        processedCount += cluster.ids.length;
+        newPeopleCount++;
       }
     }
 
@@ -151,7 +216,9 @@ export async function POST(request: NextRequest) {
       processed: processedCount,
       newPeople: newPeopleCount,
       assignedToExisting: assignedToExistingCount,
-      totalUnassigned: unassignedFaces.length
+      totalUnassigned: unassignedFaces.length,
+      usedSimilarityThreshold: similarityThreshold,
+      createdGroups: clusters.length,
     });
 
   } catch (error) {

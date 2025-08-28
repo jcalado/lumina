@@ -768,6 +768,10 @@ export default function FaceRecognitionAdminPage() {
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
+        // Align unassigned processing defaults with detection thresholds
+        if (typeof data.faceRecognitionSimilarityThreshold === 'number') {
+          setSimilarityThreshold(data.faceRecognitionSimilarityThreshold);
+        }
       } else {
         toast({
           title: 'Error',
