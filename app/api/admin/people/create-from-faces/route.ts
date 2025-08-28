@@ -42,58 +42,29 @@ export async function POST(request: NextRequest) {
       console.log('Creating person with name:', name.trim());
       
       const result = await prisma.$transaction(async (tx) => {
-        // Create person
-        const personResult = await tx.$executeRaw`
-          INSERT INTO people (id, name, confirmed, createdAt, updatedAt) 
-          VALUES (
-            UUID(),
-            ${name.trim()}, 
-            0, 
-            NOW(), 
-            NOW()
-          )
-        `;
-        
-        console.log('Person creation result:', personResult);
+        // Create person via Prisma to use CUID id and correct columns
+        const person = await tx.person.create({
+          data: {
+            name: name.trim(),
+            confirmed: false,
+          },
+          select: { id: true },
+        });
 
-        // Get the created person
-        const createdPerson = await tx.$queryRaw`
-          SELECT * FROM people WHERE name = ${name.trim()} ORDER BY createdAt DESC LIMIT 1
-        `;
-        
-        console.log('Created person query result:', createdPerson);
+        // Assign all requested faces that are currently unassigned
+        const updateResult = await tx.face.updateMany({
+          where: { id: { in: faceIds as string[] }, personId: null },
+          data: { personId: person.id },
+        });
 
-        const person = (createdPerson as any[])[0];
-        if (!person) {
-          throw new Error('Failed to create person');
-        }
-
-        // Update faces to assign them to the person one by one
-        let updatedFaceCount = 0;
-        const failedFaces: string[] = [];
-        
-        for (const faceId of faceIds) {
-          const updateResult = await tx.$executeRaw`
-            UPDATE faces SET personId = ${person.id} WHERE id = ${faceId} AND personId IS NULL
-          `;
-          const affectedRows = Number(updateResult);
-          console.log(`Updated face ${faceId}, result:`, affectedRows);
-          
-          if (affectedRows > 0) {
-            updatedFaceCount++;
-          } else {
-            failedFaces.push(faceId);
-          }
-        }
-        
+        const updatedFaceCount = updateResult.count;
         console.log(`Successfully updated ${updatedFaceCount} out of ${faceIds.length} faces`);
-        console.log('Failed faces:', failedFaces);
-        
+
         if (updatedFaceCount === 0) {
           throw new Error('No faces were available for assignment. They may have already been assigned to other people.');
         }
-        
-        return { ...person, updatedFaceCount };
+
+        return { id: person.id, updatedFaceCount };
       });
 
       personId = result.id;
