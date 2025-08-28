@@ -87,7 +87,7 @@ export async function GET(
       },
     });
 
-    const similarFaces = [];
+    const similarFaces: any[] = [];
 
     for (const unassignedFace of unassignedFaces) {
       if (!unassignedFace.embedding) continue;
