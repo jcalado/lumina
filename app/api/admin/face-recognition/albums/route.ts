@@ -5,10 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     // First get albums with total photo counts
     const albums = await prisma.album.findMany({
-      where: {
-        enabled: true,
-        status: 'PUBLIC'
-      },
+      // Show all albums to admins regardless of status/enabled
       select: {
         id: true,
         name: true,
@@ -46,24 +43,36 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Filter out albums with no photos
-    const albumsWithPhotos = albumsWithUnprocessedCount.filter(album => album.totalPhotos > 0);
+    // Include all albums that have photos, plus their ancestor paths to preserve hierarchy
+    const pathToAlbum = new Map(albumsWithUnprocessedCount.map(a => [a.path, a] as const));
+    const includedPaths = new Set<string>();
+    for (const a of albumsWithUnprocessedCount) {
+      if (a.totalPhotos > 0) {
+        // include this album
+        includedPaths.add(a.path);
+        // include ancestors by path segments
+        const parts = a.path.split('/').filter(Boolean);
+        for (let i = parts.length - 1; i > 0; i--) {
+          const p = parts.slice(0, i).join('/');
+          includedPaths.add(p);
+        }
+      }
+    }
+    const albumsWithPhotos = albumsWithUnprocessedCount.filter(a => includedPaths.has(a.path));
 
-    // Build tree structure using longest existing path prefix as parent (like Album Management)
+    // Build tree structure using exact parent path, avoid accidental prefix nesting
     const buildTree = (albums: typeof albumsWithPhotos): any[] => {
       const tree: any[] = [];
-      const nodesById = new Map<string, any>();
+      const pathMap = new Map<string, any>();
 
-      // Sort by path depth, then by path for deterministic parent resolution
-      const sorted = [...albums].sort((a, b) => {
-        const depthA = a.path.split('/').length;
-        const depthB = b.path.split('/').length;
-        if (depthA !== depthB) return depthA - depthB;
-        return a.path.localeCompare(b.path);
-      });
+      // Sort by path to ensure parents come before children when they exist in list
+      const sorted = [...albums].sort((a, b) => a.path.localeCompare(b.path));
 
       for (const album of sorted) {
-        const depth = Math.max(0, album.path.split('/').length - 1);
+        const parts = album.path.split('/').filter(Boolean);
+        const depth = Math.max(0, parts.length - 1);
+        const parentPath = parts.slice(0, -1).join('/');
+
         const node = {
           id: album.id,
           name: album.name,
@@ -74,26 +83,17 @@ export async function GET(request: NextRequest) {
           depth,
           children: [] as any[]
         };
-        nodesById.set(album.id, node);
 
-        // Find the parent as the album with the longest path that is a prefix of this path
-        let parent: any | null = null;
-        let maxLen = -1;
-        for (const candidate of nodesById.values()) {
-          if (candidate.path === album.path) continue;
-          if (album.path.startsWith(candidate.path + '/')) {
-            if (candidate.path.length > maxLen) {
-              maxLen = candidate.path.length;
-              parent = candidate;
-            }
-          }
-        }
-
+        // Attach to exact parent if present in list; otherwise treat as root
+        const parent = parentPath ? pathMap.get(parentPath) : null;
         if (parent) {
           parent.children.push(node);
         } else {
           tree.push(node);
         }
+
+        // Register this node for possible children
+        pathMap.set(album.path, node);
       }
 
       return tree;
