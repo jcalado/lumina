@@ -153,46 +153,37 @@ function AlbumTree({ albums, selectedAlbumIds, expandedAlbums, onToggleSelection
     const hasChildren = album.children && album.children.length > 0;
     const isExpanded = expandedAlbums.has(album.id);
     const isSelected = selectedAlbumIds.has(album.id);
-    const indentLevel = album.depth * 16; // 16px per level
+    const indentLevel = album.depth * 20; // 20px per level for clearer tree
 
     return (
       <div key={album.id}>
         <div
-          className="flex items-center justify-between p-2 rounded border hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-          style={{ marginLeft: `${indentLevel}px` }}
+          className="flex items-center justify-between px-3 py-2 border-b hover:bg-muted/30 cursor-pointer"
+          style={{ paddingLeft: `${indentLevel + 12}px` }}
           onClick={() => onToggleSelection(album.id)}
         >
-          <div className="flex items-center gap-2">
-            {hasChildren && (
+          <div className="flex items-center gap-2 min-w-0">
+            {hasChildren ? (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleExpansion(album.id);
-                }}
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                onClick={(e) => { e.stopPropagation(); onToggleExpansion(album.id); }}
+                className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent"
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
               >
-                {isExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
+                {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               </button>
+            ) : (
+              <div className="w-6" />
             )}
-            {!hasChildren && <div className="w-5" />} {/* Spacer for alignment */}
-            <Checkbox
-              checked={isSelected}
-              onChange={() => {}} // Handled by onClick
-            />
-            <div>
-              <p className="font-medium text-sm">{album.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {album.unprocessedPhotos} of {album.totalPhotos} photos need processing
-              </p>
+            <FolderOpen className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            <Checkbox checked={isSelected} onChange={() => {}} />
+            <div className="min-w-0">
+              <div className="font-medium text-sm truncate">{album.name}</div>
+              <div className="text-xs text-muted-foreground truncate">
+                {album.unprocessedPhotos} of {album.totalPhotos} need processing
+              </div>
             </div>
           </div>
-          <Badge variant="secondary" className="text-xs">
-            {album.totalPhotos} total
-          </Badge>
+          <Badge variant="secondary" className="text-xs flex-shrink-0">{album.totalPhotos} total</Badge>
         </div>
         {hasChildren && isExpanded && (
           <div>

@@ -49,20 +49,22 @@ export async function GET(request: NextRequest) {
     // Filter out albums with no photos
     const albumsWithPhotos = albumsWithUnprocessedCount.filter(album => album.totalPhotos > 0);
 
-    // Build tree structure
+    // Build tree structure using longest existing path prefix as parent (like Album Management)
     const buildTree = (albums: typeof albumsWithPhotos): any[] => {
       const tree: any[] = [];
-      const pathMap = new Map<string, any>();
+      const nodesById = new Map<string, any>();
 
-      // Sort by path to ensure parents come before children
-      albums.sort((a, b) => a.path.localeCompare(b.path));
+      // Sort by path depth, then by path for deterministic parent resolution
+      const sorted = [...albums].sort((a, b) => {
+        const depthA = a.path.split('/').length;
+        const depthB = b.path.split('/').length;
+        if (depthA !== depthB) return depthA - depthB;
+        return a.path.localeCompare(b.path);
+      });
 
-      albums.forEach(album => {
-        const pathParts = album.path.split('/').filter(p => p.length > 0);
-        const depth = pathParts.length - 1; // Root albums have depth 0
-        const parentPath = pathParts.slice(0, -1).join('/');
-
-        const treeNode = {
+      for (const album of sorted) {
+        const depth = Math.max(0, album.path.split('/').length - 1);
+        const node = {
           id: album.id,
           name: album.name,
           slug: album.slug,
@@ -70,26 +72,29 @@ export async function GET(request: NextRequest) {
           totalPhotos: album.totalPhotos,
           unprocessedPhotos: album.unprocessedPhotos,
           depth,
-          children: []
+          children: [] as any[]
         };
+        nodesById.set(album.id, node);
 
-        if (depth === 0) {
-          // Root album
-          tree.push(treeNode);
-          pathMap.set(album.path, treeNode);
-        } else {
-          // Child album - find parent
-          const parent = pathMap.get(parentPath);
-          if (parent) {
-            parent.children.push(treeNode);
-            pathMap.set(album.path, treeNode);
-          } else {
-            // Parent not found, treat as root
-            tree.push(treeNode);
-            pathMap.set(album.path, treeNode);
+        // Find the parent as the album with the longest path that is a prefix of this path
+        let parent: any | null = null;
+        let maxLen = -1;
+        for (const candidate of nodesById.values()) {
+          if (candidate.path === album.path) continue;
+          if (album.path.startsWith(candidate.path + '/')) {
+            if (candidate.path.length > maxLen) {
+              maxLen = candidate.path.length;
+              parent = candidate;
+            }
           }
         }
-      });
+
+        if (parent) {
+          parent.children.push(node);
+        } else {
+          tree.push(node);
+        }
+      }
 
       return tree;
     };
