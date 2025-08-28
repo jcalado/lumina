@@ -823,16 +823,18 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
       });
       jobState.logs.push(`Reset processing timestamp for ${resetPhotosResult.count} photos`);
       
-      photos = await prisma.$queryRaw<Array<{
+      photos = await prisma.$queryRawUnsafe<Array<{
         id: string;
         filename: string;
         s3Key: string;
-      }>>`
-        SELECT id, filename, "s3Key" 
+      }>>(
+        `SELECT id, filename, "s3Key" 
           FROM "photos" 
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY(${selectedAlbumIds}::uuid[])` : ''}
-          LIMIT ${Math.min(jobState.totalPhotos)}
-      `;
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::uuid[])` : ''}
+          LIMIT $2`,
+        selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
+        Math.min(jobState.totalPhotos)
+      );
     } else if (jobState.mode === 'reprocess_keep_people') {
       // Reprocess all photos but keep existing persons - only delete faces and reset timestamps
       jobState.logs.push('Reprocessing all photos (keeping persons): clearing existing faces...');
@@ -847,29 +849,33 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
       });
       jobState.logs.push(`Reset processing timestamp for ${resetPhotosResult.count} photos`);
       
-      photos = await prisma.$queryRaw<Array<{
+      photos = await prisma.$queryRawUnsafe<Array<{
         id: string;
         filename: string;
         s3Key: string;
-      }>>`
-        SELECT id, filename, "s3Key" 
+      }>>(
+        `SELECT id, filename, "s3Key" 
           FROM "photos" 
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY(${selectedAlbumIds}::uuid[])` : ''}
-          LIMIT ${Math.min(jobState.totalPhotos)}
-      `;
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `WHERE "albumId" = ANY($1::uuid[])` : ''}
+          LIMIT $2`,
+        selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
+        Math.min(jobState.totalPhotos)
+      );
     } else {
       // Default: only process photos that haven't been processed yet
-      photos = await prisma.$queryRaw<Array<{
+      photos = await prisma.$queryRawUnsafe<Array<{
         id: string;
         filename: string;
         s3Key: string;
-      }>>`
-        SELECT id, filename, "s3Key" 
+      }>>(
+        `SELECT id, filename, "s3Key" 
           FROM "photos" 
           WHERE "faceProcessedAt" IS NULL
-          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `AND "albumId" = ANY(${selectedAlbumIds}::uuid[])` : ''}
-          LIMIT ${Math.min(jobState.totalPhotos)}
-      `;
+          ${selectedAlbumIds && selectedAlbumIds.length > 0 ? `AND "albumId" = ANY($1::uuid[])` : ''}
+          LIMIT $2`,
+        selectedAlbumIds && selectedAlbumIds.length > 0 ? selectedAlbumIds : [],
+        Math.min(jobState.totalPhotos)
+      );
     }
 
     const photoIds = photos.map(p => p.id);
@@ -1272,9 +1278,10 @@ export async function POST(request: NextRequest) {
     if (mode === 'reprocess_keep_people' || mode === 'reprocess_clear_all') {
       // Reprocess modes: count all photos
       if (selectedAlbumIds && selectedAlbumIds.length > 0) {
-        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-          SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY(${selectedAlbumIds}::uuid[])
-        `;
+        photoCountResult = await prisma.$queryRawUnsafe<{ count: number }[]>(
+          `SELECT COUNT(*) as count FROM "photos" WHERE "albumId" = ANY($1::uuid[])`,
+          selectedAlbumIds
+        );
       } else {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
           SELECT COUNT(*) as count FROM "photos"
@@ -1283,9 +1290,10 @@ export async function POST(request: NextRequest) {
     } else {
       // Default: only process photos that haven't been processed yet
       if (selectedAlbumIds && selectedAlbumIds.length > 0) {
-        photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
-          SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY(${selectedAlbumIds}::uuid[])
-        `;
+        photoCountResult = await prisma.$queryRawUnsafe<{ count: number }[]>(
+          `SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL AND "albumId" = ANY($1::uuid[])`,
+          selectedAlbumIds
+        );
       } else {
         photoCountResult = await prisma.$queryRaw<{ count: number }[]>`
           SELECT COUNT(*) as count FROM "photos" WHERE "faceProcessedAt" IS NULL
