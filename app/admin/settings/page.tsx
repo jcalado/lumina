@@ -398,19 +398,16 @@ export default function AdminSettingsPage() {
                 id="batchProcessingSize"
                 type="number"
                 min="1"
-                max="12"
                 value={settings.batchProcessingSize}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   handleInputChange("batchProcessingSize", e.target.value)
                 }
                 placeholder="4"
               />
               <p className="text-sm text-muted-foreground">
-                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources.
+                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources. Maximum is limited by available CPU threads.
               </p>
-            </div>
-            
-            <div className="flex justify-end">
+            </div>            <div className="flex justify-end">
               <Button 
                 onClick={handleSave}
                 disabled={saving}

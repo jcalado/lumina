@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import * as os from "os"
 
 export interface SiteSettings {
   siteName: string
@@ -66,15 +67,16 @@ export async function getBatchProcessingSize(): Promise<number> {
   try {
     const settings = await getSiteSettings()
     const batchSize = parseInt(settings.batchProcessingSize || "4", 10)
+    const maxThreads = os.cpus().length
     
-    // Ensure batch size is within valid range
-    if (batchSize < 1 || batchSize > 12) {
-      return 4 // Default fallback
+    // Ensure batch size is within valid range (1 to number of CPU threads)
+    if (batchSize < 1 || batchSize > maxThreads) {
+      return Math.min(4, maxThreads) // Default fallback, capped at available threads
     }
     
     return batchSize
   } catch (error) {
     console.error("Error getting batch processing size:", error)
-    return 4 // Default fallback
+    return Math.min(4, os.cpus().length) // Default fallback, capped at available threads
   }
 }
