@@ -1091,7 +1091,7 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
           for (const photoId of batch) {
             try {
               await prisma.$executeRaw`
-                UPDATE "photos" SET "faceProcessedAt" = ${new Date().toISOString()} WHERE id = ${photoId}
+                UPDATE "photos" SET "faceProcessedAt" = NOW() WHERE id = ${photoId}
               `;
               // Yield control after each update
               await new Promise(resolve => setImmediate(resolve));
