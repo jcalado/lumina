@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Calendar, HardDrive, Cloud, CheckCircle2, XCircle, Clock, ImageIcon } from "lucide-react"
+import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Calendar, HardDrive, Cloud, CheckCircle2, XCircle, Clock, ImageIcon, GripVertical } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface Album {
@@ -26,6 +26,7 @@ interface Album {
   localFilesSafeDelete: boolean
   lastSyncAt: string | null
   createdAt: string
+  displayOrder?: number
   _count: {
     photos: number
   }
@@ -42,6 +43,8 @@ export default function AdminAlbumsPage() {
   const [albums, setAlbums] = useState<Album[]>([])
   const [albumTree, setAlbumTree] = useState<AlbumTreeNode[]>([])
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  type DragInfo = { id: string; parentPath: string; level: number } | null
+  const [dragging, setDragging] = useState<DragInfo>(null)
   const [loading, setLoading] = useState(true)
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null)
   const [editForm, setEditForm] = useState({
@@ -62,8 +65,29 @@ export default function AdminAlbumsPage() {
     }
   }, [albums, expandedNodes])
 
+  const getParentPath = (path: string) => {
+    const idx = path.lastIndexOf('/')
+    return idx === -1 ? '' : path.substring(0, idx)
+  }
+
+  const sortNodesRecursively = (nodes: AlbumTreeNode[]): AlbumTreeNode[] => {
+    const sorted = [...nodes]
+    sorted.sort((a, b) => {
+      const ao = a.album.displayOrder ?? 0
+      const bo = b.album.displayOrder ?? 0
+      if (ao !== bo) return ao - bo
+      return a.album.name.localeCompare(b.album.name)
+    })
+    for (const n of sorted) {
+      if (n.children && n.children.length) {
+        n.children = sortNodesRecursively(n.children)
+      }
+    }
+    return sorted
+  }
+
   const buildAlbumTree = () => {
-    const tree: AlbumTreeNode[] = []
+    let tree: AlbumTreeNode[] = []
     const nodeMap = new Map<string, AlbumTreeNode>()
     
     // Sort albums by path depth first, then alphabetically
@@ -112,7 +136,48 @@ export default function AdminAlbumsPage() {
       }
     }
     
-    setAlbumTree(tree)
+    // Sort tree by displayOrder for roots and all children
+    setAlbumTree(sortNodesRecursively(tree))
+  }
+
+  const reorderSiblingsInTree = (
+    prevTree: AlbumTreeNode[],
+    parentPath: string,
+    fromId: string,
+    toId: string
+  ): AlbumTreeNode[] => {
+    const reorderArray = (arr: AlbumTreeNode[], fromId: string, toId: string) => {
+      const fromIdx = arr.findIndex(n => n.album.id === fromId)
+      const toIdx = arr.findIndex(n => n.album.id === toId)
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return arr
+      const next = [...arr]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    }
+
+    if (parentPath === '') {
+      return reorderArray(prevTree, fromId, toId)
+    }
+
+    const dfs = (nodes: AlbumTreeNode[]): AlbumTreeNode[] => {
+      return nodes.map(n => {
+        if (n.album.path === parentPath) {
+          return {
+            ...n,
+            children: reorderArray(n.children, fromId, toId)
+          }
+        }
+        if (n.children && n.children.length) {
+          return {
+            ...n,
+            children: dfs(n.children)
+          }
+        }
+        return n
+      })
+    }
+    return dfs(prevTree)
   }
 
   const toggleNode = (nodeId: string) => {
@@ -129,13 +194,75 @@ export default function AdminAlbumsPage() {
     const { album, children, level, isExpanded } = node
     const hasChildren = children.length > 0
     const indentStyle = { paddingLeft: `${level * 24 + 12}px` }
+    const parentPath = getParentPath(album.path)
 
     return (
       <div key={album.id}>
         {/* Album Row */}
-        <div className="grid grid-cols-12 gap-4 py-3 px-3 border-b border-border/40 hover:bg-muted/30 transition-colors items-center text-sm" style={indentStyle}>
+        <div
+          className="grid grid-cols-12 gap-4 py-3 px-3 border-b border-border/40 hover:bg-muted/30 transition-colors items-center text-sm"
+          style={indentStyle}
+          draggable
+          data-node-id={album.id}
+          data-node-level={level}
+          data-parent-path={parentPath}
+          onDragStart={(e) => {
+            setDragging({ id: album.id, parentPath, level })
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            const targetId = e.currentTarget.getAttribute('data-node-id') || ''
+            const targetLevel = Number(e.currentTarget.getAttribute('data-node-level') || '0')
+            const targetParentPath = e.currentTarget.getAttribute('data-parent-path') || ''
+            if (!dragging) return
+            if (dragging.id === targetId) return
+            if (dragging.level !== targetLevel) return
+            if (dragging.parentPath !== targetParentPath) return
+            // Reorder within the same sibling group optimistically
+            setAlbumTree(prev => reorderSiblingsInTree(prev, targetParentPath, dragging.id, targetId))
+          }}
+          onDragEnd={async () => {
+            if (!dragging) return
+            const currentParent = dragging.parentPath
+            // Collect ordered IDs for this sibling group
+            let order: string[] = []
+            if (currentParent === '') {
+              order = albumTree.map(n => n.album.id)
+            } else {
+              // find parent node and list its children ids
+              const findParent = (nodes: AlbumTreeNode[]): AlbumTreeNode | null => {
+                for (const n of nodes) {
+                  if (n.album.path === currentParent) return n
+                  const found = findParent(n.children)
+                  if (found) return found
+                }
+                return null
+              }
+              const parentNode = findParent(albumTree)
+              if (parentNode) {
+                order = parentNode.children.map(c => c.album.id)
+              }
+            }
+            setDragging(null)
+            try {
+              const res = await fetch('/api/admin/albums/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order }),
+              })
+              if (!res.ok) throw new Error('Failed to save order')
+              toast({ title: 'Order updated', description: 'Album order saved' })
+              // Refresh albums to get updated displayOrder
+              fetchAlbums()
+            } catch (err) {
+              toast({ title: 'Error', description: 'Failed to save album order', variant: 'destructive' })
+            }
+          }}
+        >
           {/* Album Name & Path - Col 1-4 */}
           <div className="col-span-4 flex items-center gap-2">
+            <GripVertical className="h-3 w-3 text-muted-foreground cursor-grab" />
             {hasChildren ? (
               <Button
                 variant="ghost"

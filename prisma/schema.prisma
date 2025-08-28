@@ -15,6 +15,7 @@ model Album {
   path                  String   @unique // filesystem path
   slug                  String   // URL-friendly slug (unique within parent context)
   name                  String
+  displayOrder          Int      @default(0)
   description           String?  // from project.md
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
   enabled               Boolean  @default(true)

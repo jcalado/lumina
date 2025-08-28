@@ -24,7 +24,11 @@ export async function GET() {
           select: { photos: true }
         }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: [
+        { displayOrder: "asc" },
+        { name: "asc" },
+        { createdAt: "desc" }
+      ]
     })
 
     const formattedAlbums = albums.map((album: any) => ({

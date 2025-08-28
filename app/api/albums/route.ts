@@ -83,7 +83,7 @@ export async function GET() {
         WHERE final_rn <= 5
         GROUP BY parentAlbumId
       ) t ON t.parentAlbumId = a.id
-      ORDER BY a.name ASC
+      ORDER BY COALESCE(a."displayOrder", 0) ASC, a.name ASC
     ` as any[];
 
     console.log(`Found ${result.length} albums`);
