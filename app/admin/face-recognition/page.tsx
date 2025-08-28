@@ -236,6 +236,8 @@ export default function FaceRecognitionAdminPage() {
   const [showSingleFace, setShowSingleFace] = useState(false);
   const [lastJobStatus, setLastJobStatus] = useState<string | null>(null);
   const [unassignedFaces, setUnassignedFaces] = useState<UnassignedFace[]>([]);
+  const [originalUnassignedFaces, setOriginalUnassignedFaces] = useState<UnassignedFace[] | null>(null);
+  const [showingSimilar, setShowingSimilar] = useState(false);
   const [unassignedLoading, setUnassignedLoading] = useState(false);
   const [unassignedPage, setUnassignedPage] = useState(1);
   const [unassignedLimit, setUnassignedLimit] = useState(48);
@@ -269,6 +271,8 @@ export default function FaceRecognitionAdminPage() {
   const [assigneeSearching, setAssigneeSearching] = useState(false);
   const assigneeDebounce = useRef<number | null>(null);
   const peopleSearchDebounce = useRef<number | null>(null);
+  const personNameInputRef = useRef<HTMLInputElement | null>(null);
+  const [similarFilterThreshold, setSimilarFilterThreshold] = useState(0.7);
   
   // Album selection state
   const [availableAlbums, setAvailableAlbums] = useState<Array<{
@@ -453,6 +457,9 @@ export default function FaceRecognitionAdminPage() {
         const data = await response.json();
         // people route returns { unassignedFaces, pagination }
         setUnassignedFaces(data.unassignedFaces || []);
+        if (!originalUnassignedFaces) {
+          setOriginalUnassignedFaces(data.unassignedFaces || []);
+        }
         // Ensure we always have a pagination object (fallback if server omitted it)
         if (data.pagination) {
           setUnassignedPagination(data.pagination);
@@ -474,6 +481,73 @@ export default function FaceRecognitionAdminPage() {
   useEffect(() => {
     loadUnassignedFaces();
   }, [unassignedPage, unassignedLimit]);
+
+  // Focus the create person input when faces are selected
+  useEffect(() => {
+    if (selectedFaces.size > 0 && personNameInputRef.current) {
+      personNameInputRef.current.focus();
+      personNameInputRef.current.select();
+    }
+  }, [selectedFaces.size]);
+
+  const ignoreSelectedFaces = async () => {
+    if (selectedFaces.size === 0) {
+      toast({ title: 'Nothing selected', description: 'Select one or more faces first.' });
+      return;
+    }
+    if (!confirm(`Ignore ${selectedFaces.size} selected face(s)? They will be hidden from this list.`)) return;
+    try {
+      setUnassignedLoading(true);
+      const ids = Array.from(selectedFaces);
+      await Promise.all(ids.map(async (id) => {
+        const res = await fetch(`/api/admin/faces/${id}/ignore`, { method: 'POST' });
+        if (!res.ok) throw new Error('failed');
+      }));
+      toast({ title: 'Ignored', description: `Ignored ${ids.length} face(s).` });
+      setSelectedFaces(new Set());
+      setShowingSimilar(false);
+      setOriginalUnassignedFaces(null);
+      loadUnassignedFaces();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to ignore selected faces', variant: 'destructive' });
+    } finally {
+      setUnassignedLoading(false);
+    }
+  };
+
+  const showSimilarForSelected = async () => {
+    if (selectedFaces.size === 0) {
+      toast({ title: 'Nothing selected', description: 'Select one or more faces first.' });
+      return;
+    }
+    try {
+      setUnassignedLoading(true);
+      if (!originalUnassignedFaces) setOriginalUnassignedFaces(unassignedFaces);
+      const res = await fetch('/api/admin/faces/similar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceIds: Array.from(selectedFaces), threshold: similarFilterThreshold })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch similar faces');
+      }
+      const data = await res.json();
+      setUnassignedFaces(data.similarFaces || []);
+      setShowingSimilar(true);
+      setUnassignedPagination({ page: 1, limit: data.similarFaces?.length || 0, total: data.similarFaces?.length || 0, totalPages: 1, hasMore: false });
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to show similar faces', variant: 'destructive' });
+    } finally {
+      setUnassignedLoading(false);
+    }
+  };
+
+  const clearSimilarFilter = () => {
+    if (originalUnassignedFaces) setUnassignedFaces(originalUnassignedFaces);
+    setOriginalUnassignedFaces(null);
+    setShowingSimilar(false);
+  };
 
   const loadAlbums = async () => {
     try {
@@ -759,6 +833,9 @@ export default function FaceRecognitionAdminPage() {
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
+        if (typeof data.faceRecognitionSimilarityThreshold === 'number') {
+          setSimilarFilterThreshold(data.faceRecognitionSimilarityThreshold);
+        }
         // Align unassigned processing defaults with detection thresholds
         if (typeof data.faceRecognitionSimilarityThreshold === 'number') {
           setSimilarityThreshold(data.faceRecognitionSimilarityThreshold);
@@ -1728,6 +1805,21 @@ export default function FaceRecognitionAdminPage() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                          {/* Toolbar: ignore + similar filter */}
+                          <div className="flex items-center gap-2 ml-2">
+                            <Button variant="outline" size="sm" disabled={unassignedLoading || selectedFaces.size === 0} onClick={ignoreSelectedFaces}>Ignore Selected</Button>
+                            <Button variant="outline" size="sm" disabled={unassignedLoading || selectedFaces.size === 0} onClick={showSimilarForSelected}>
+                              Show Similar
+                            </Button>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              Similarity
+                              <Slider min={0.3} max={0.95} step={0.05} value={[similarFilterThreshold]} onValueChange={(v) => setSimilarFilterThreshold(v[0])} className="w-40" />
+                              <span className="w-10 text-right">{Math.round(similarFilterThreshold * 100)}%</span>
+                            </div>
+                            {showingSimilar && (
+                              <Button variant="ghost" size="sm" onClick={clearSimilarFilter}>Clear Filter</Button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -1746,7 +1838,6 @@ export default function FaceRecognitionAdminPage() {
                                     <div key={face.id} className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${selectedFaces.has(face.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`} onClick={() => toggleFaceSelection(face.id)}>
                                       <div className="aspect-square bg-gray-100"><img src={`/api/faces/${face.id}/serve`} alt={`face-${face.id}`} className="w-full h-full object-cover" /></div>
                                       {face.ignored && (<div className="absolute top-1 left-1 bg-yellow-100 text-yellow-800 text-xs px-1 rounded">Ignored</div>)}
-                                      <div className="absolute bottom-1 right-1 flex gap-1"><Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); ignoreFace(face.id); }}>Ignore</Button></div>
                                     </div>
                                   ))}
                                 </div>
@@ -1819,6 +1910,7 @@ export default function FaceRecognitionAdminPage() {
                 else createPersonFromFaces();
               }
             }}
+          ref={personNameInputRef}
           />
           {/* Autocomplete dropdown for existing people */}
           {(assigneeSearching || (assigneeResults && assigneeResults.length > 0)) && (
