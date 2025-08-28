@@ -43,11 +43,28 @@ interface ThumbnailJobLog {
   thumbnailsCreated: number
 }
 
+interface SyncJobLog {
+  id: string
+  status: string
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  logs: string | null
+  errors: string | null
+  progress: number
+  completedAlbums: number
+  totalAlbums: number
+  filesProcessed: number
+  filesUploaded: number
+}
+
 export default function LogsPage() {
   const [blurhashLogs, setBlurhashLogs] = useState<LogEntry[]>([])
   const [thumbnailLogs, setThumbnailLogs] = useState<LogEntry[]>([])
+  const [syncLogs, setSyncLogs] = useState<LogEntry[]>([])
   const [blurhashJobs, setBlurhashJobs] = useState<BlurhashJobLog[]>([])
   const [thumbnailJobs, setThumbnailJobs] = useState<ThumbnailJobLog[]>([])
+  const [syncJobs, setSyncJobs] = useState<SyncJobLog[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -264,6 +281,89 @@ export default function LogsPage() {
         parsedThumbnailLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         setThumbnailLogs(parsedThumbnailLogs)
       }
+
+      // Fetch sync job logs
+      const syncResponse = await fetch("/api/admin/sync/status")
+      if (syncResponse.ok) {
+        const syncData = await syncResponse.json()
+        setSyncJobs(syncData.currentJob ? [syncData.currentJob] : [])
+        
+        // Parse logs from sync jobs
+        const parsedSyncLogs: LogEntry[] = []
+        
+        if (syncData.currentJob) {
+          const job = syncData.currentJob
+          
+          // Add job creation log
+          parsedSyncLogs.push({
+            id: `${job.id}-created`,
+            timestamp: job.startedAt || job.createdAt,
+            level: 'INFO',
+            message: `Sync job created`,
+            details: `Job ID: ${job.id}`,
+            jobId: job.id
+          })
+          
+          // Add job start log
+          if (job.startedAt) {
+            parsedSyncLogs.push({
+              id: `${job.id}-started`,
+              timestamp: job.startedAt,
+              level: 'INFO',
+              message: `Sync job started`,
+              details: `Processing ${job.totalAlbums} albums`,
+              jobId: job.id
+            })
+          }
+          
+          // Add progress logs from job logs
+          if (job.logs) {
+            try {
+              const logLines = job.logs.split('\n').filter(line => line.trim())
+              logLines.forEach((line, index) => {
+                const timestamp = job.startedAt || job.createdAt
+                const logTime = new Date(timestamp)
+                logTime.setSeconds(logTime.getSeconds() + index)
+                
+                let level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS' = 'INFO'
+                if (line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')) {
+                  level = 'ERROR'
+                } else if (line.toLowerCase().includes('warning') || line.toLowerCase().includes('warn')) {
+                  level = 'WARN'
+                } else if (line.toLowerCase().includes('completed') || line.toLowerCase().includes('success')) {
+                  level = 'SUCCESS'
+                }
+                
+                parsedSyncLogs.push({
+                  id: `${job.id}-log-${index}`,
+                  timestamp: logTime.toISOString(),
+                  level,
+                  message: line,
+                  jobId: job.id
+                })
+              })
+            } catch (error) {
+              console.error('Error parsing sync job logs:', error)
+            }
+          }
+          
+          // Add completion log
+          if (job.completedAt) {
+            parsedSyncLogs.push({
+              id: `${job.id}-completed`,
+              timestamp: job.completedAt,
+              level: job.status === 'COMPLETED' ? 'SUCCESS' : 'ERROR',
+              message: `Sync job ${job.status.toLowerCase()}`,
+              details: `Processed ${job.completedAlbums} of ${job.totalAlbums} albums, ${job.filesProcessed} files`,
+              jobId: job.id
+            })
+          }
+        }
+        
+        // Sort logs by timestamp (newest first)
+        parsedSyncLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        setSyncLogs(parsedSyncLogs)
+      }
       
     } catch (error) {
       console.error('Error fetching logs:', error)
@@ -323,6 +423,33 @@ export default function LogsPage() {
       toast({
         title: "Error",
         description: "Failed to clear thumbnail logs",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const clearSyncLogs = async () => {
+    try {
+      const response = await fetch("/api/admin/sync", {
+        method: "DELETE"
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setSyncLogs([])
+        setSyncJobs([])
+        toast({
+          title: "Success",
+          description: data.message || `Deleted ${data.deletedCount} sync jobs`
+        })
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to clear sync logs")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to clear sync logs",
         variant: "destructive"
       })
     }
@@ -566,6 +693,89 @@ export default function LogsPage() {
         </CardContent>
       </Card>
 
+      {/* Sync Worker Logs */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5" />
+                Sync Worker Logs
+              </CardTitle>
+              <CardDescription>
+                Logs from album sync jobs and file processing operations
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadLogs(syncLogs, 'sync-logs.txt')}
+                disabled={syncLogs.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearSyncLogs}
+                disabled={syncLogs.length === 0}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {syncLogs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No sync logs available</p>
+              <p className="text-sm">Logs will appear here when sync jobs are executed</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {syncLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex-shrink-0 mt-0.5">
+                    {getLogIcon(log.level)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={getBadgeVariant(log.level)} className="text-xs">
+                        {log.level}
+                      </Badge>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {formatTimestamp(log.timestamp)}
+                      </div>
+                      {log.jobId && (
+                        <Badge variant="outline" className="text-xs">
+                          Job: {log.jobId.slice(-8)}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-foreground break-words">
+                      {log.message}
+                    </p>
+                    {log.details && (
+                      <p className="text-xs text-muted-foreground mt-1 break-words">
+                        {log.details}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Job Summary */}
       {blurhashJobs.length > 0 && (
         <Card>
@@ -666,6 +876,62 @@ export default function LogsPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {job.thumbnailsCreated} thumbnails created
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Sync Jobs Summary */}
+      {syncJobs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Recent Sync Jobs
+            </CardTitle>
+            <CardDescription>
+              Summary of recent album sync jobs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {syncJobs.slice(0, 5).map((job) => (
+                <div
+                  key={job.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                >
+                  <div className="flex items-center gap-3">
+                    <Badge 
+                      variant={
+                        job.status === 'COMPLETED' ? 'default' :
+                        job.status === 'FAILED' ? 'destructive' :
+                        job.status === 'RUNNING' ? 'secondary' : 'outline'
+                      }
+                    >
+                      {job.status}
+                    </Badge>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Job {job.id.slice(-8)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatTimestamp(job.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">
+                      {job.completedAlbums} / {job.totalAlbums}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {Math.round(job.progress)}% complete
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {job.filesProcessed} files processed
                     </p>
                   </div>
                 </div>
