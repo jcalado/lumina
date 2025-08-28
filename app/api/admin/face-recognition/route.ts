@@ -1069,18 +1069,17 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
           jobState.processedPhotos += result.processed;
           jobState.errors.push(...result.errors);
 
-          // Count actual faces detected for this batch using raw SQL
-          const placeholders = batch.map(() => '?').join(',');
+          // Count actual faces detected for this batch using raw SQL (Postgres-safe)
           const facesDetectedResult = await prisma.$queryRawUnsafe(
-            `SELECT COUNT(*) as count FROM faces WHERE photoId IN (${placeholders})`,
-            ...batch
+            `SELECT COUNT(*) as count FROM "faces" WHERE "photoId" = ANY($1::text[])`,
+            batch
           ) as { count: number }[];
           let facesDetectedRaw = facesDetectedResult[0]?.count ?? 0;
           const facesDetectedCount = typeof facesDetectedRaw === 'bigint' ? Number(facesDetectedRaw) : Number(facesDetectedRaw || 0);
           
           const facesMatchedResult = await prisma.$queryRawUnsafe(
-            `SELECT COUNT(*) as count FROM "faces" WHERE "photoId" IN (${placeholders}) AND "personId" IS NOT NULL`,
-            ...batch
+            `SELECT COUNT(*) as count FROM "faces" WHERE "photoId" = ANY($1::text[]) AND "personId" IS NOT NULL`,
+            batch
           ) as { count: number }[];
           let facesMatchedRaw = facesMatchedResult[0]?.count ?? 0;
           const facesMatchedCount = typeof facesMatchedRaw === 'bigint' ? Number(facesMatchedRaw) : Number(facesMatchedRaw || 0);
