@@ -185,32 +185,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create new people from clusters
-    for (const cluster of clusters) {
-      if (cluster.faces.length === 0) continue;
-      
-      // Create new person
-      const person = await prisma.person.create({
-        data: {
-          name: `Person ${Date.now()}${Math.random().toString(36).substr(2, 4)}`,
-          confirmed: false
-        }
-      });
-
-      // Assign all faces in cluster to this person
-      await prisma.face.updateMany({
-        where: {
-          id: { in: cluster.faces.map((f: typeof unassignedFaces[0]) => f.id) }
-        },
-        data: {
-          personId: person.id
-        }
-      });
-
-      processedCount += cluster.faces.length;
-      newPeopleCount++;
-    }
-
     return NextResponse.json({
       message: `Processed ${processedCount} faces: created ${newPeopleCount} new people, assigned ${assignedToExistingCount} to existing people`,
       processed: processedCount,
