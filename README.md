@@ -187,6 +187,7 @@ npm run sanity:embeddings            # Scan face embeddings (flag invalid rows)
 npm run sanity:embeddings:repair     # Attempt to repair numeric arrays
 npm run sanity:embeddings:null       # Null out malformed embeddings
 npm run sanity:embeddings:delete     # Delete only malformed rows
+npm run faces:process-unassigned     # Group unassigned faces from CLI
 ```
 
 ### Face Embedding Sanitizer
@@ -223,6 +224,31 @@ npm run sanity:embeddings:delete
 ```
 
 Note: Always take a database backup before running destructive modes like `null` or `delete`.
+
+### Unassigned Face Processing (CLI)
+
+Run the grouping logic from the console without hitting the API (useful for large datasets or avoiding request timeouts).
+
+- Script: `scripts/process-unassigned-faces.ts`
+- Behavior: assigns unassigned faces to existing people (by similarity), then clusters remaining into new people.
+
+Options:
+- `--limit=<n>`: max unassigned faces to consider in this pass (default 500).
+- `--threshold=<0..1>`: similarity threshold (defaults to DB setting `faceRecognitionSimilarityThreshold` or 0.7).
+- `--mode=<both|assign_existing|create_new>`: which steps to perform (default `both`).
+- `--dry-run`: preview actions without writing.
+
+Examples:
+```bash
+# Dry-run, preview 500 faces with default threshold from settings
+npm run faces:process-unassigned -- --dry-run
+
+# Assign to existing only for 2000 faces at 0.6 similarity
+npm run faces:process-unassigned -- --mode=assign_existing --limit=2000 --threshold=0.6
+
+# Full pass (assign + cluster) for 800 faces
+npm run faces:process-unassigned -- --limit=800
+```
 
 ### Adding New Features
 

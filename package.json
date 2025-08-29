@@ -32,6 +32,7 @@
     "sanity:embeddings:repair": "tsx scripts/sanitize-face-embeddings.ts --mode=repair",
     "sanity:embeddings:null": "tsx scripts/sanitize-face-embeddings.ts --mode=null",
     "sanity:embeddings:delete": "tsx scripts/sanitize-face-embeddings.ts --mode=delete",
+    "faces:process-unassigned": "tsx scripts/process-unassigned-faces.ts",
     "delete-single-face-people": "node scripts/delete-single-face-people.js",
     "optimize-face-queries": "node scripts/optimize-face-queries.js"
   },
