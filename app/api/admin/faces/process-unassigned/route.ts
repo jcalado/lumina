@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           LIMIT ${limit}
         `;
       }
-      console.log('[process-unassigned] fetched via raw', { count: unassignedRows.length, ms: Date.now() - t0 });
+      console.log('[process-unassigned] fetched via raw', { count: unassignedRows ? unassignedRows.length : 0, ms: Date.now() - t0 });
     } catch (rawErrFast) {
       console.warn('[process-unassigned] raw fetch failed, falling back to safe per-id path', rawErrFast);
     }
