@@ -1700,8 +1700,9 @@ export default function FaceRecognitionAdminPage() {
 
                     {/* Unassigned Faces Section */}
                     <div className="mt-8">
+                      <h3 className="text-lg font-medium flex items-center gap-2 mb-4 mt-10"><Grid3X3 className="h-5 w-5" /> Unassigned Faces</h3>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-medium flex items-center gap-2"><Grid3X3 className="h-5 w-5" /> Unassigned Faces</h3>
+                        
                         <div className="flex items-center gap-2">
                           {/* Process Unassigned Faces with Settings */}
                           <AlertDialog>
@@ -1712,7 +1713,7 @@ export default function FaceRecognitionAdminPage() {
                                 ) : (
                                   <Cpu className="h-4 w-4 mr-2" />
                                 )}
-                                Auto-Process Faces
+                                Auto-Process
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="max-w-lg">
@@ -1824,7 +1825,7 @@ export default function FaceRecognitionAdminPage() {
                                 ) : (
                                   <Trash2 className="h-4 w-4 mr-2" />
                                 )}
-                                Delete All Unassigned
+                                Delete Unassigned
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -1863,33 +1864,64 @@ export default function FaceRecognitionAdminPage() {
 
                       <Card>
                         <CardContent className="p-4">
-                          {unassignedLoading ? (
-                            <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div><p className="text-muted-foreground">Loading unassigned faces...</p></div>
-                          ) : unassignedFaces.length === 0 ? (
-                            <div className="text-center py-8"><CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" /><h4 className="font-medium mb-2">All Faces Assigned</h4><p className="text-muted-foreground">All detected faces have been assigned to people</p></div>
-                          ) : (
-                            <div className="space-y-4">
-                              <div>
-                                <p className="text-sm text-muted-foreground mb-3">Click faces to select them for grouping into a person. Selected: {selectedFaces.size}</p>
-                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                                  {unassignedFaces.map((face) => (
-                                    <div key={face.id} className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${selectedFaces.has(face.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`} onClick={() => toggleFaceSelection(face.id)}>
-                                      <div className="aspect-square bg-gray-100"><img src={`/api/faces/${face.id}/serve`} alt={`face-${face.id}`} className="w-full h-full object-cover" /></div>
-                                      {face.ignored && (<div className="absolute top-1 left-1 bg-yellow-100 text-yellow-800 text-xs px-1 rounded">Ignored</div>)}
-                                    </div>
-                                  ))}
+                          <div className="relative">
+                            {/* Overlay loader to avoid layout shift */}
+                            {unassignedLoading && (
+                              <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                                <div className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                                  <span className="text-sm text-muted-foreground">Loading unassigned faces…</span>
                                 </div>
+                              </div>
+                            )}
 
-                                <div className="mt-4 flex items-center justify-between">
-                                  <p className="text-sm text-muted-foreground">Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1} · {unassignedPagination?.total ?? unassignedFaces.length} faces</p>
-                                  <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" disabled={unassignedLoading || ((unassignedPagination?.page ?? unassignedPage) <= 1)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; if (current > 1) setUnassignedPage(current - 1); }}>Prev</Button>
-                                    <Button variant="outline" size="sm" disabled={unassignedLoading || !(unassignedPagination?.hasMore ?? false)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; setUnassignedPage(current + 1); }}>Next</Button>
+                            {unassignedFaces.length === 0 && !unassignedLoading ? (
+                              <div className="text-center py-8">
+                                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                <h4 className="font-medium mb-2">All Faces Assigned</h4>
+                                <p className="text-muted-foreground">All detected faces have been assigned to people</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-sm text-muted-foreground mb-3">Click faces to select them for grouping into a person. Selected: {selectedFaces.size}</p>
+                                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                    {unassignedFaces.map((face) => (
+                                      <div key={face.id} className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${selectedFaces.has(face.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`} onClick={() => toggleFaceSelection(face.id)}>
+                                        <div className="aspect-square bg-gray-100"><img src={`/api/faces/${face.id}/serve`} alt={`face-${face.id}`} className="w-full h-full object-cover" /></div>
+                                        {face.ignored && (<div className="absolute top-1 left-1 bg-yellow-100 text-yellow-800 text-xs px-1 rounded">Ignored</div>)}
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div className="mt-4 flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">Page {unassignedPagination?.page ?? unassignedPage} of {unassignedPagination?.totalPages ?? 1} · {unassignedPagination?.total ?? unassignedFaces.length} faces</p>
+                                    <div className="flex items-center gap-2">
+                                      <Button variant="outline" size="sm" disabled={unassignedLoading || ((unassignedPagination?.page ?? unassignedPage) <= 1)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; if (current > 1) setUnassignedPage(current - 1); }}>Prev</Button>
+                                      {/* Page selector for quick jump */}
+                                      <Select
+                                        value={String(unassignedPagination?.page ?? unassignedPage)}
+                                        onValueChange={(value) => setUnassignedPage(parseInt(value))}
+                                        disabled={unassignedLoading}
+                                      >
+                                        <SelectTrigger className="w-20 h-9">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {Array.from({ length: unassignedPagination?.totalPages ?? 1 }, (_, i) => i + 1).map((pageNum) => (
+                                            <SelectItem key={pageNum} value={String(pageNum)}>
+                                              {pageNum}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button variant="outline" size="sm" disabled={unassignedLoading || !(unassignedPagination?.hasMore ?? false)} onClick={() => { const current = unassignedPagination?.page ?? unassignedPage; setUnassignedPage(current + 1); }}>Next</Button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     </div>
