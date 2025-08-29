@@ -90,6 +90,19 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [selectedPersonFaces, setSelectedPersonFaces] = useState<Set<string>>(new Set());
   const [disablingFaces, setDisablingFaces] = useState(false);
+  // Duplicate detection state
+  const [duplicateCandidates, setDuplicateCandidates] = useState<Array<{
+    id: string;
+    name: string | null;
+    confirmed: boolean;
+    faceCount: number;
+    bestSimilarity: number;
+    previewFaceId: string | null;
+  }>>([]);
+  const [selectedDuplicates, setSelectedDuplicates] = useState<Set<string>>(new Set());
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
+  const [duplicateThreshold, setDuplicateThreshold] = useState<number | null>(null);
+  const [usedDuplicateThreshold, setUsedDuplicateThreshold] = useState<number | null>(null);
 
   useEffect(() => {
     // When person changes, clear similar faces and selections
@@ -100,6 +113,10 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
     setNameInput(person.name);
     setIsEditingName(false);
     setIsConfirmed(person.confirmed);
+    // reset duplicate selections when switching person
+    setDuplicateCandidates([]);
+    setSelectedDuplicates(new Set());
+    setUsedDuplicateThreshold(null);
   }, [person.id]);
 
   useEffect(() => {
@@ -294,6 +311,67 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
         description: 'Failed to remove face from person.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPossibleDuplicates = async () => {
+    setLoadingDuplicates(true);
+    try {
+      const params = new URLSearchParams();
+      if (duplicateThreshold !== null) params.set('threshold', String(duplicateThreshold));
+      const res = await fetch(`/api/admin/people/${person.id}/possible-duplicates?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDuplicateCandidates(data.duplicates || []);
+        setUsedDuplicateThreshold(typeof data.usedThreshold === 'number' ? data.usedThreshold : null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: err.error || 'Failed to load duplicates', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to load duplicates', variant: 'destructive' });
+    } finally {
+      setLoadingDuplicates(false);
+    }
+  };
+
+  const toggleDuplicateSelection = (personId: string) => {
+    setSelectedDuplicates(prev => {
+      const s = new Set(prev);
+      if (s.has(personId)) s.delete(personId); else s.add(personId);
+      return s;
+    });
+  };
+
+  const mergeSelectedDuplicates = async () => {
+    if (selectedDuplicates.size === 0) {
+      toast({ title: 'Error', description: 'Select at least one duplicate to merge', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Merge ${selectedDuplicates.size} selected person(s) into "${person.name}"? This will move all their faces and delete those person records.`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/people/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId: person.id, sourceIds: Array.from(selectedDuplicates) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast({ title: 'Merged', description: data.message || 'People merged successfully' });
+        setSelectedDuplicates(new Set());
+        // Refresh this person's details and surrounding lists
+        onPersonUpdated();
+        // Refresh duplicate list after merge
+        fetchPossibleDuplicates();
+      } else {
+        const err = await res.json();
+        toast({ title: 'Error', description: err.error || 'Failed to merge people', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to merge people', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -575,6 +653,98 @@ export function PersonDetail({ person, onBack, onPersonUpdated }: PersonDetailPr
                   </Button>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Section for possible duplicates */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+            Possible Duplicates
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                Threshold
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1.0}
+                  step={0.05}
+                  value={duplicateThreshold ?? 0.7}
+                  onChange={(e) => setDuplicateThreshold(parseFloat(e.target.value))}
+                  className="w-28"
+                />
+                <span className="w-10 text-right">{Math.round((duplicateThreshold ?? 0.7) * 100)}%</span>
+              </div>
+              <Button onClick={fetchPossibleDuplicates} disabled={loadingDuplicates} className="flex items-center gap-2">
+                {loadingDuplicates ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Find Duplicates
+              </Button>
+            </div>
+          </h3>
+
+          {usedDuplicateThreshold !== null && (
+            <p className="text-xs text-muted-foreground mb-2">Using threshold: {Math.round(usedDuplicateThreshold * 100)}%</p>
+          )}
+
+          {duplicateCandidates.length === 0 && !loadingDuplicates ? (
+            <p className="text-muted-foreground text-center py-4">No duplicates found. Try lowering the threshold.</p>
+          ) : (
+            <div className="space-y-3">
+              {duplicateCandidates.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Selected: {selectedDuplicates.size}</p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedDuplicates(new Set(duplicateCandidates.map(p => p.id)))} disabled={duplicateCandidates.length === 0}>Select All</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedDuplicates(new Set())} disabled={selectedDuplicates.size === 0}>Clear</Button>
+                    <Button onClick={mergeSelectedDuplicates} disabled={selectedDuplicates.size === 0 || loading} className="flex items-center gap-2">
+                      {loading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                      Merge {selectedDuplicates.size || ''} into {person.name}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {duplicateCandidates.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`relative rounded-lg border-2 p-3 flex gap-3 cursor-pointer transition-all ${selectedDuplicates.has(p.id) ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'}`}
+                    onClick={() => toggleDuplicateSelection(p.id)}
+                  >
+                    <div className="relative w-16 h-16 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                      {p.previewFaceId ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`/api/faces/${p.previewFaceId}/serve`} alt={p.name || 'Person preview'} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">No preview</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{p.name || 'Unnamed person'}</span>
+                        {p.confirmed ? (
+                          <Badge variant="default" className="text-[10px]">Confirmed</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">Pending</Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{p.faceCount} face{p.faceCount !== 1 ? 's' : ''}</div>
+                      <div className="text-xs mt-1">Similarity: {Math.round(p.bestSimilarity * 100)}%</div>
+                    </div>
+                    {selectedDuplicates.has(p.id) && (
+                      <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✓</div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
