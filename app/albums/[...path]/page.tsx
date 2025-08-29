@@ -539,6 +539,30 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     }
   };
 
+  const startAlbumDownload = async () => {
+    if (!albumData || isDownloading) return;
+    try {
+      setIsDownloading(true);
+      const response = await fetch('/api/download/job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'album', albumPath })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to start download: ${response.status} - ${errorText}`);
+      }
+      const data = await response.json();
+      const url = data?.url as string | undefined;
+      if (url) window.location.href = url;
+    } catch (err) {
+      console.error('Error starting album download:', err);
+      alert('Failed to start download. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb Navigation */}
@@ -566,7 +590,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <div className="flex gap-2">
             <button
               className="border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm h-9 px-4 py-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
-              onClick={downloadAlbum}
+              onClick={startAlbumDownload}
               disabled={isDownloading}
             >
               <Download className="h-4 w-4" />

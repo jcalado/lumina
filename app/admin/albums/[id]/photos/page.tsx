@@ -47,6 +47,7 @@ export default function AlbumPhotosPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingPhotos, setDeletingPhotos] = useState(false)
+  const [downloadingSelected, setDownloadingSelected] = useState(false)
 
   useEffect(() => {
     fetchAlbumAndPhotos()
@@ -147,6 +148,30 @@ export default function AlbumPhotosPage() {
       })
     } finally {
       setDeletingPhotos(false)
+    }
+  }
+
+  const handleDownloadSelected = async () => {
+    if (selectedPhotos.size === 0) return
+    try {
+      setDownloadingSelected(true)
+      const photoIds = Array.from(selectedPhotos)
+      const response = await fetch('/api/download/job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'photos', photoIds })
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to start download')
+      }
+      const data = await response.json()
+      const url = data?.url as string | undefined
+      if (url) window.location.href = url
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to start download', variant: 'destructive' })
+    } finally {
+      setDownloadingSelected(false)
     }
   }
 
@@ -254,43 +279,49 @@ export default function AlbumPhotosPage() {
 
             <div className="flex items-center gap-2">
               {selectedPhotos.size > 0 && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" disabled={deletingPhotos}>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Selected ({selectedPhotos.size})
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Photos</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to delete {selectedPhotos.size} photo(s)?
-                        <br />
-                        <br />
-                        <strong>This action will:</strong>
-                        <ul className="list-disc list-inside mt-2 space-y-1">
-                          <li>Remove the photos from the database</li>
-                          <li>Delete the files from local storage</li>
-                          <li>Delete the files from remote storage (S3)</li>
-                          <li>Remove all associated thumbnails</li>
-                        </ul>
-                        <br />
-                        <strong className="text-destructive">This action cannot be undone.</strong>
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDeletePhotos}
-                        className="bg-destructive hover:bg-destructive/90"
-                        disabled={deletingPhotos}
-                      >
-                        {deletingPhotos ? "Deleting..." : "Delete Photos"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <>
+                  <Button variant="default" size="sm" onClick={handleDownloadSelected} disabled={downloadingSelected}>
+                    <Download className="h-4 w-4 mr-2" />
+                    {downloadingSelected ? 'Starting…' : `Download Selected (${selectedPhotos.size})`}
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm" disabled={deletingPhotos}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Selected ({selectedPhotos.size})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Photos</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete {selectedPhotos.size} photo(s)?
+                          <br />
+                          <br />
+                          <strong>This action will:</strong>
+                          <ul className="list-disc list-inside mt-2 space-y-1">
+                            <li>Remove the photos from the database</li>
+                            <li>Delete the files from local storage</li>
+                            <li>Delete the files from remote storage (S3)</li>
+                            <li>Remove all associated thumbnails</li>
+                          </ul>
+                          <br />
+                          <strong className="text-destructive">This action cannot be undone.</strong>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeletePhotos}
+                          className="bg-destructive hover:bg-destructive/90"
+                          disabled={deletingPhotos}
+                        >
+                          {deletingPhotos ? "Deleting..." : "Delete Photos"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
               )}
               
               <div className="flex items-center gap-2">

@@ -249,7 +249,7 @@ export default function FaceRecognitionAdminPage() {
   const [deletingAllPeople, setDeletingAllPeople] = useState(false);
   const [deletingUnassignedFaces, setDeletingUnassignedFaces] = useState(false);
   const [processingUnassigned, setProcessingUnassigned] = useState(false);
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.45);
   const [processMode, setProcessMode] = useState<'create_new' | 'assign_existing' | 'both'>('both');
   
   // New state variables for face processing modes
