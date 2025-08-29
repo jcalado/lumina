@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight, Download, Info, Check, Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { PhotoExifInfo } from '@/components/Gallery/PhotoExifInfo';
 import { useDownloadSelection } from '@/contexts/DownloadSelectionContext';
 
 interface Video {
@@ -354,26 +355,38 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
       {/* Metadata panel */}
       {showMetadata && (
         <div className="absolute bottom-4 right-4 z-20">
-          <Card className="w-96 max-h-[80vh] overflow-hidden">
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-sm mb-2">
-                {isVideo ? 'Video Information' : 'Photo Information'}
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div><strong>Filename:</strong> {currentMedia.filename}</div>
-                <div><strong>File Size:</strong> {(currentMedia.fileSize / 1024 / 1024).toFixed(2)} MB</div>
-                {isVideo && currentMedia.duration && (
-                  <div><strong>Duration:</strong> {formatTime(currentMedia.duration)}</div>
-                )}
-                {isVideo && currentMedia.width && currentMedia.height && (
-                  <div><strong>Resolution:</strong> {currentMedia.width} × {currentMedia.height}</div>
-                )}
-                {currentMedia.takenAt && (
-                  <div><strong>Date Taken:</strong> {new Date(currentMedia.takenAt).toLocaleDateString()}</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {isVideo ? (
+            <Card className="w-96 max-h-[80vh] overflow-hidden">
+              <CardContent className="p-4">
+                <h3 className="font-semibold text-sm mb-2">Video Information</h3>
+                <div className="space-y-2 text-sm">
+                  <div><strong>Filename:</strong> {currentMedia.filename}</div>
+                  <div><strong>File Size:</strong> {(currentMedia.fileSize / 1024 / 1024).toFixed(2)} MB</div>
+                  {currentMedia.duration && (
+                    <div><strong>Duration:</strong> {formatTime(currentMedia.duration)}</div>
+                  )}
+                  {currentMedia.width && currentMedia.height && (
+                    <div><strong>Resolution:</strong> {currentMedia.width} × {currentMedia.height}</div>
+                  )}
+                  {currentMedia.takenAt && (
+                    <div><strong>Date Taken:</strong> {new Date(currentMedia.takenAt).toLocaleDateString()}</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <PhotoExifInfo
+              photo={{
+                id: currentMedia.id,
+                filename: currentMedia.filename,
+                fileSize: currentMedia.fileSize,
+                takenAt: currentMedia.takenAt,
+                createdAt: currentMedia.createdAt,
+                metadata: currentMedia.metadata || null,
+                orientation: currentMedia.orientation,
+              }}
+            />
+          )}
         </div>
       )}
     </div>

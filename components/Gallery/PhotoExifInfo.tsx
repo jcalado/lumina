@@ -72,18 +72,19 @@ function ExifSection({ title, icon, children, defaultExpanded = false }: ExifSec
 
 interface ExifFieldProps {
   label: string;
-  value: string | number | null | undefined;
+  value: string | number | boolean | null | undefined;
   unit?: string;
 }
 
 function ExifField({ label, value, unit }: ExifFieldProps) {
   if (value === null || value === undefined || value === '') return null;
+  const displayValue = typeof value === 'boolean' ? (value ? 'true' : 'false') : value;
   
   return (
     <div className="flex justify-between py-1 text-xs">
       <span className="text-muted-foreground font-medium">{label}:</span>
       <span className="text-right">
-        {value}
+        {displayValue}
         {unit && <span className="text-muted-foreground ml-1">{unit}</span>}
       </span>
     </div>
@@ -207,16 +208,82 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
   };
 
   // Get all other EXIF fields (raw data)
-  const excludedFields = new Set([
-    'filename', 'size', 'takenAt', 'camera', 'lens', 'settings', 'gps', 'orientation',
+  // Build sets to avoid duplicating fields we already render explicitly
+  const displayedTopLevelKeys = new Set<string>([
+    // Basic
+    'filename', 'size', 'takenAt', 'orientation',
+    // Common custom
+    'camera', 'lens', 'settings', 'gps',
+    // Camera
     'Make', 'Model', 'LensModel', 'SerialNumber', 'OwnerName', 'Software',
-    'ISO', 'FNumber', 'ExposureTime', 'FocalLength', 'ExposureProgram', 'MeteringMode',
-    'Flash', 'WhiteBalance', 'ExposureCompensation', 'ColorSpace', 'XResolution',
-    'YResolution', 'ResolutionUnit', 'GPSLatitude', 'GPSLongitude', 'Copyright', 'Artist', 'UserComment'
+    // Capture
+    'ISO', 'FNumber', 'ExposureTime', 'FocalLength', 'ExposureProgram', 'MeteringMode', 'Flash', 'WhiteBalance', 'ExposureCompensation',
+    // Image
+    'ColorSpace', 'XResolution', 'YResolution', 'ResolutionUnit',
+    // GPS
+    'GPSLatitude', 'GPSLongitude',
+    // Copyright
+    'Copyright', 'Artist', 'UserComment',
   ]);
 
-  const rawExifData = Object.entries(exifData)
-    .filter(([key]) => !excludedFields.has(key))
+  // Group any object-valued top-level metadata keys into their own collapsible sections
+  const objectGroups = Object.entries(exifData)
+    .filter(([_, value]) => value && typeof value === 'object' && !Array.isArray(value)) as Array<[string, Record<string, any>]>;
+
+  const groupOrder = (key: string) => {
+    const k = key.toLowerCase();
+    const weights: Record<string, number> = {
+      exif: 1,
+      exififd: 2,
+      ifd0: 3,
+      subifd: 4,
+      tiff: 5,
+      gps: 6,
+      iptc: 7,
+      xmp: 8,
+      icc: 9,
+      iccprofile: 9,
+      makernote: 10,
+      composite: 11,
+      photoshop: 12,
+      jfif: 13,
+      quicktime: 14,
+      png: 15,
+      file: 16,
+    };
+    return weights[k] ?? 100;
+  };
+
+  const groupLabel = (key: string) => {
+    const map: Record<string, string> = {
+      exif: 'EXIF',
+      exififd: 'EXIF',
+      ifd0: 'IFD0 (TIFF)',
+      subifd: 'SubIFD',
+      tiff: 'TIFF',
+      gps: 'GPS',
+      iptc: 'IPTC',
+      xmp: 'XMP',
+      icc: 'ICC Profile',
+      iccprofile: 'ICC Profile',
+      makernote: 'Maker Notes',
+      composite: 'Composite',
+      photoshop: 'Photoshop',
+      jfif: 'JFIF',
+      quicktime: 'QuickTime',
+      png: 'PNG',
+      file: 'File',
+    };
+    const k = key.toLowerCase();
+    return map[k] || key;
+  };
+
+  // Mark grouped keys as displayed to avoid duplication later
+  for (const [k] of objectGroups) displayedTopLevelKeys.add(k);
+
+  // Other top-level fields not covered by explicit sections or object groups
+  const otherTopLevelEntries = Object.entries(exifData)
+    .filter(([key]) => !displayedTopLevelKeys.has(key))
     .sort(([a], [b]) => a.localeCompare(b));
 
   return (
@@ -379,22 +446,56 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
             </ExifSection>
           )}
 
-          {/* Raw EXIF Data */}
-          {rawExifData.length > 0 && (
+          {/* Structured metadata objects */}
+          {objectGroups
+            .sort(([a], [b]) => {
+              const d = groupOrder(a) - groupOrder(b);
+              return d !== 0 ? d : a.localeCompare(b);
+            })
+            .map(([key, obj]) => (
+              <ExifSection
+                key={key}
+                title={`${groupLabel(key)} (${Object.keys(obj || {}).length})`}
+                icon={<Info className="h-4 w-4" />}
+              >
+                <div className="space-y-1">
+                  {Object.entries(obj || {})
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([subKey, subVal]) => (
+                      <ExifField
+                        key={subKey}
+                        label={subKey}
+                        value={
+                          subVal === null || subVal === undefined
+                            ? ''
+                            : typeof subVal === 'object'
+                              ? JSON.stringify(subVal)
+                              : (subVal as any).toString()
+                        }
+                      />
+                    ))}
+                </div>
+              </ExifSection>
+            ))}
+
+          {/* Other metadata fields not covered above */}
+          {otherTopLevelEntries.length > 0 && (
             <ExifSection
-              title={t('allExifData', { count: rawExifData.length })}
+              title={t('allExifData', { count: otherTopLevelEntries.length })}
               icon={<Info className="h-4 w-4" />}
             >
               <div className="space-y-1">
-                {rawExifData.map(([key, value]) => (
-                  <ExifField 
-                    key={key} 
-                    label={key} 
+                {otherTopLevelEntries.map(([key, value]) => (
+                  <ExifField
+                    key={key}
+                    label={key}
                     value={
-                      typeof value === 'object' 
-                        ? JSON.stringify(value)
-                        : String(value)
-                    } 
+                      value === null || value === undefined
+                        ? ''
+                        : typeof value === 'object'
+                          ? JSON.stringify(value)
+                          : (value as any).toString()
+                    }
                   />
                 ))}
               </div>
