@@ -181,7 +181,48 @@ npm run lint         # Run ESLint
 npm run db:generate  # Generate Prisma client
 npm run db:push      # Push schema to database
 npm run db:studio    # Open Prisma Studio
+
+# Data maintenance
+npm run sanity:embeddings            # Scan face embeddings (flag invalid rows)
+npm run sanity:embeddings:repair     # Attempt to repair numeric arrays
+npm run sanity:embeddings:null       # Null out malformed embeddings
+npm run sanity:embeddings:delete     # Delete only malformed rows
 ```
+
+### Face Embedding Sanitizer
+
+Use the embedding sanitizer when Prisma starts throwing string conversion errors (e.g., GenericFailure / napi string) or when face processing fails due to malformed `faces.embedding` data.
+
+- Script: `scripts/sanitize-face-embeddings.ts`
+- Behavior: scans `faces` and safely inspects each row; isolates bad rows by reading embeddings per-id to avoid bulk failures.
+
+Modes (`--mode`):
+- `flag` (default): set `hasEmbedding=false` for invalid rows; keeps original `embedding` intact.
+- `repair`: if JSON is an array of numeric-like values, rewrites as numeric JSON and sets `hasEmbedding` accordingly; otherwise falls back to `flag`.
+- `null`: set `embedding=NULL` and `hasEmbedding=false` for invalid rows.
+- `delete`: delete only malformed face rows.
+
+Options:
+- `--limit=<n>`: limit number of rows scanned (useful for large datasets).
+- `--dry-run`: report what would change without writing.
+- `--mode=<flag|repair|null|delete>`: choose action.
+
+Examples:
+```bash
+# Inspect without changes (recommended first)
+npm run sanity:embeddings -- --dry-run
+
+# Attempt to repair the first 1000 rows
+npm run sanity:embeddings:repair -- --limit=1000
+
+# Null out all malformed embeddings
+npm run sanity:embeddings:null
+
+# Delete only malformed rows (irreversible)
+npm run sanity:embeddings:delete
+```
+
+Note: Always take a database backup before running destructive modes like `null` or `delete`.
 
 ### Adding New Features
 
