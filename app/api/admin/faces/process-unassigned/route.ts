@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 interface ProcessRequest {
   similarityThreshold?: number;
   mode?: 'create_new' | 'assign_existing' | 'both';
+  limit?: number; // max number of unassigned faces to consider
 }
 
 function parseEmbedding(json: string | null): number[] | null {
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
     const body: ProcessRequest = await request.json().catch(() => ({}));
     let similarityThreshold = typeof body.similarityThreshold === 'number' ? body.similarityThreshold : undefined;
     const mode: 'create_new' | 'assign_existing' | 'both' = (body.mode as any) || 'both';
+    const limit = Number.isFinite(body.limit as any) && (body.limit as any)! > 0 ? Math.min(Number(body.limit), 2000) : 500;
 
     if (similarityThreshold === undefined) {
       similarityThreshold = await getSimilarityThresholdFromSettings();
@@ -58,39 +60,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all unassigned faces (ids + confidence only; fetch embeddings per-id to isolate bad rows)
-    let unassignedFacesBase: Array<{ id: string; confidence: number }> = [];
+    const t0 = Date.now();
+    console.log('[process-unassigned] start', { threshold: similarityThreshold, mode, limit });
+
+    // Try to fetch unassigned faces with embeddings via raw SQL first (fast path)
+    let unassignedRows: Array<{ id: string; confidence: number; embedding: string | null }> | null = null;
     try {
-      unassignedFacesBase = await prisma.face.findMany({
-        where: {
-          personId: null,
-          ignored: { not: true },
-          hasEmbedding: true,
-          embedding: { not: null },
-        },
-        select: { id: true, confidence: true },
-        orderBy: { confidence: 'desc' },
-      });
-    } catch (e) {
-      // Fallback to raw SQL if Prisma string conversion fails on some rows
+      unassignedRows = await prisma.$queryRaw<Array<{ id: string; confidence: number; embedding: string | null }>>`
+        SELECT id, confidence, embedding
+        FROM "faces"
+        WHERE "personId" IS NULL
+          AND ("ignored" IS NULL OR "ignored" = FALSE)
+          AND "hasEmbedding" = TRUE
+          AND embedding IS NOT NULL
+        ORDER BY confidence DESC
+        LIMIT ${limit}
+      `;
+      console.log('[process-unassigned] fetched via raw', { count: unassignedRows.length, ms: Date.now() - t0 });
+    } catch (rawErrFast) {
+      console.warn('[process-unassigned] raw fetch failed, falling back to safe per-id path', rawErrFast);
+    }
+
+    // Safe per-id fallback path if raw failed
+    let unassignedFacesBase: Array<{ id: string; confidence: number }> = [];
+    if (!unassignedRows) {
       try {
-        const rows = await prisma.$queryRaw<Array<{ id: string; confidence: number }>>`
-          SELECT id, confidence
-          FROM "faces"
-          WHERE "personId" IS NULL
-            AND ("ignored" IS NULL OR "ignored" = FALSE)
-            AND "hasEmbedding" = TRUE
-            AND embedding IS NOT NULL
-          ORDER BY confidence DESC
-        `;
-        unassignedFacesBase = rows;
-      } catch (rawErr) {
-        console.error('Failed fallback fetching unassigned faces via raw SQL:', rawErr);
-        throw e; // rethrow original error so caller sees the same context
+        unassignedFacesBase = await prisma.face.findMany({
+          where: {
+            personId: null,
+            ignored: { not: true },
+            hasEmbedding: true,
+            embedding: { not: null },
+          },
+          select: { id: true, confidence: true },
+          orderBy: { confidence: 'desc' },
+          take: limit,
+        });
+        console.log('[process-unassigned] fetched ids via prisma', { count: unassignedFacesBase.length, ms: Date.now() - t0 });
+      } catch (e) {
+        // Fallback to raw SQL if Prisma string conversion fails on some rows
+        try {
+          const rows = await prisma.$queryRaw<Array<{ id: string; confidence: number }>>`
+            SELECT id, confidence
+            FROM "faces"
+            WHERE "personId" IS NULL
+              AND ("ignored" IS NULL OR "ignored" = FALSE)
+              AND "hasEmbedding" = TRUE
+              AND embedding IS NOT NULL
+            ORDER BY confidence DESC
+            LIMIT ${limit}
+          `;
+          unassignedFacesBase = rows;
+          console.log('[process-unassigned] fetched ids via raw fallback', { count: unassignedFacesBase.length, ms: Date.now() - t0 });
+        } catch (rawErr) {
+          console.error('Failed fallback fetching unassigned faces via raw SQL:', rawErr);
+          throw e; // rethrow original error so caller sees the same context
+        }
       }
     }
 
-    if (unassignedFacesBase.length === 0) {
+    if (unassignedRows && unassignedRows.length === 0) {
+      return NextResponse.json({
+        message: 'No unassigned faces to process',
+        processed: 0,
+        newPeople: 0,
+        assignedToExisting: 0
+      });
+    }
+
+    if (!unassignedRows && unassignedFacesBase.length === 0) {
       return NextResponse.json({
         message: 'No unassigned faces to process',
         processed: 0,
@@ -103,19 +141,29 @@ export async function POST(request: NextRequest) {
     let newPeopleCount = 0;
     let assignedToExistingCount = 0;
 
-    // Fetch embeddings per-id to skip any problematic rows
+    // Prepare embeddings (fast path if we got rows already)
     const unassignedWithEmb: Array<{ id: string; confidence: number; emb: number[] }> = [];
-    for (const f of unassignedFacesBase) {
-      try {
-        const row = await prisma.face.findUnique({ where: { id: f.id }, select: { embedding: true } });
-        const emb = parseEmbedding((row?.embedding ?? null) as any);
-        if (emb && emb.length) {
-          unassignedWithEmb.push({ id: f.id, confidence: f.confidence, emb });
-        }
-      } catch (perRowErr) {
-        // Skip rows that fail to convert/parse; continue processing others
-        continue;
+    if (unassignedRows) {
+      for (const r of unassignedRows) {
+        const emb = parseEmbedding(r.embedding as any);
+        if (emb && emb.length) unassignedWithEmb.push({ id: r.id, confidence: r.confidence, emb });
       }
+      console.log('[process-unassigned] parsed embeddings via raw', { valid: unassignedWithEmb.length, ms: Date.now() - t0 });
+    } else {
+      // Fetch embeddings per-id to skip any problematic rows
+      for (const f of unassignedFacesBase) {
+        try {
+          const row = await prisma.face.findUnique({ where: { id: f.id }, select: { embedding: true } });
+          const emb = parseEmbedding((row?.embedding ?? null) as any);
+          if (emb && emb.length) {
+            unassignedWithEmb.push({ id: f.id, confidence: f.confidence, emb });
+          }
+        } catch (perRowErr) {
+          // Skip rows that fail to convert/parse; continue processing others
+          continue;
+        }
+      }
+      console.log('[process-unassigned] parsed embeddings via per-id', { valid: unassignedWithEmb.length, ms: Date.now() - t0 });
     }
 
     if (unassignedWithEmb.length === 0) {
@@ -226,13 +274,18 @@ export async function POST(request: NextRequest) {
         return mag === 0 ? e.slice() : e.map(v => v/mag);
       });
 
-      for (let i = 0; i < m; i++) {
-        for (let j = i + 1; j < m; j++) {
+      // Cap total comparisons to avoid timeouts
+      const maxComparisons = 50000;
+      let comparisons = 0;
+      for (let i = 0; i < m && comparisons < maxComparisons; i++) {
+        for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
+          comparisons++;
           let dot = 0; const a = norm[i], b = norm[j];
           for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
           if (dot >= (similarityThreshold as number)) union(i, j);
         }
       }
+      console.log('[process-unassigned] clustering', { remaining: m, comparisons, ms: Date.now() - t0 });
 
       // Build groups
       const groups = new Map<number, number[]>();
@@ -255,6 +308,7 @@ export async function POST(request: NextRequest) {
         processedCount += cluster.ids.length;
         newPeopleCount++;
       }
+      console.log('[process-unassigned] created people for clusters', { clusters: clusters.length, ms: Date.now() - t0 });
     }
 
     return NextResponse.json({
@@ -262,7 +316,7 @@ export async function POST(request: NextRequest) {
       processed: processedCount,
       newPeople: newPeopleCount,
       assignedToExisting: assignedToExistingCount,
-      totalUnassigned: unassignedFacesBase.length,
+      totalUnassigned: (unassignedRows ? unassignedRows.length : unassignedFacesBase.length),
       usedSimilarityThreshold: similarityThreshold,
       createdGroups: clusters.length,
     });
