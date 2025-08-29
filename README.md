@@ -262,6 +262,17 @@ npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --randomize --
 # With LSH pre-clustering enabled
 npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --pre-cluster --bands=8 --rows-per-band=4 --max-comparisons=300000
 
+#### LSH, Pre‑cluster, and Paging — in plain terms
+
+- Pre‑cluster: Quickly groups “likely similar” faces before detailed checks. Think of it as making small piles of look‑alikes so we only compare within those piles. Faster on big datasets.
+- Bands: How many separate “attempts” we make to bucket a face. More bands = wider net (finds more potential matches), but more bucket work.
+- Rows per band: How strict each bucket is. More rows = stricter buckets (fewer faces per bucket: faster but may miss some matches). Fewer rows = looser buckets (more faces per bucket: slower but catches more).
+- Offset: Lets you page through unassigned faces instead of always processing the same first slice. Use with `--limit` (and optionally `--randomize`) to cover everything over several runs.
+
+Rule of thumb:
+- Want more recall (catch more)? Increase `--bands` or decrease `--rows-per-band` a bit.
+- Want faster runs? Decrease `--bands` or increase `--rows-per-band`, and/or lower `--max-comparisons`.
+
 ### Person Centroids
 
 To improve matching recall and performance, Lumina maintains a centroid (average) embedding per person.
