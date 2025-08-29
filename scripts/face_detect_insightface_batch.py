@@ -8,6 +8,14 @@ Requirements:
 Usage:
   python scripts/face_detect_insightface_batch.py /path/to/temp/dir
 
+Model configuration (via environment variables):
+  - LUMINA_INSIGHTFACE_MODEL: model pack name (default: "buffalo_l")
+      Examples: "buffalo_l", "antelopev2".
+  - LUMINA_INSIGHTFACE_PROVIDERS: ONNX Runtime providers CSV (default: "CPUExecutionProvider")
+      Examples: "CUDAExecutionProvider,CPUExecutionProvider" or "CPUExecutionProvider".
+  - LUMINA_INSIGHTFACE_CTX_ID: GPU id (>=0) or -1 for CPU (default: -1)
+  - LUMINA_INSIGHTFACE_DET_SIZE: detector size as "W,H" (default: "640,640")
+
 Expected input:
   - A directory containing image files named with their photo IDs
   - A batch.json file in the directory with the list of files to process
@@ -98,6 +106,30 @@ def process_single_image(fa, img_path, photo_id):
         }
 
 
+def _get_env(name: str, default: str) -> str:
+    try:
+        v = os.environ.get(name)
+        return v if (v is not None and str(v).strip() != "") else default
+    except Exception:
+        return default
+
+
+def _parse_providers(env_val: str) -> list:
+    parts = [p.strip() for p in env_val.split(',') if p.strip()]
+    return parts or ["CPUExecutionProvider"]
+
+
+def _parse_det_size(env_val: str) -> tuple:
+    try:
+        w_str, h_str = env_val.split(',')
+        w = int(w_str.strip()); h = int(h_str.strip())
+        if w > 0 and h > 0:
+            return (w, h)
+    except Exception:
+        pass
+    return (640, 640)
+
+
 def main():
     try:
         if len(sys.argv) < 2:
@@ -126,9 +158,22 @@ def main():
         # Redirect stdout to stderr for insightface's internal prints
         f = io.StringIO()
         with redirect_stdout(f):
-            # Use CPU (ctx_id=-1). Adjust if you have GPU and want to use it.
-            fa = FaceAnalysis(allowed_modules=["detection", "recognition"], providers=['CPUExecutionProvider'])
-            fa.prepare(ctx_id=-1, det_size=(640, 640))
+            # Read configuration from environment
+            model_name = _get_env('LUMINA_INSIGHTFACE_MODEL', 'buffalo_l')
+            providers = _parse_providers(_get_env('LUMINA_INSIGHTFACE_PROVIDERS', 'CPUExecutionProvider'))
+            try:
+                ctx_id = int(_get_env('LUMINA_INSIGHTFACE_CTX_ID', '-1'))
+            except Exception:
+                ctx_id = -1
+            det_size = _parse_det_size(_get_env('LUMINA_INSIGHTFACE_DET_SIZE', '640,640'))
+
+            # Construct FaceAnalysis with explicit model pack
+            try:
+                fa = FaceAnalysis(name=model_name, allowed_modules=["detection", "recognition"], providers=providers)
+            except Exception:
+                # Fallback: try default pack if model not available
+                fa = FaceAnalysis(allowed_modules=["detection", "recognition"], providers=providers)
+            fa.prepare(ctx_id=ctx_id, det_size=det_size)
 
         # Print captured stdout to stderr
         sys.stderr.write(f.getvalue())

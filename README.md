@@ -160,6 +160,14 @@ lumina/
 | `PHOTOS_ROOT_PATH` | Local photos directory | Required |
 | `SYNC_CRON` | Background sync schedule | `0 3 * * *` |
 
+**InsightFace Model**
+- **Model Pack**: set `LUMINA_INSIGHTFACE_MODEL` (default `buffalo_l`).
+- **Providers**: set `LUMINA_INSIGHTFACE_PROVIDERS` (default `CPUExecutionProvider`).
+- **Context**: set `LUMINA_INSIGHTFACE_CTX_ID` (`-1` CPU, `0`+ for GPU).
+- **Detector Size**: set `LUMINA_INSIGHTFACE_DET_SIZE` (default `640,640`).
+
+The Python helpers in `scripts/face_detect_insightface.py` and `scripts/face_detect_insightface_batch.py` will use these values. By default, the higher‑accuracy `buffalo_l` model is used.
+
 ### Album Management
 
 Place a `project.md` file in any photo directory to add descriptions:
