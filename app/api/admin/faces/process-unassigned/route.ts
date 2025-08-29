@@ -58,19 +58,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all unassigned faces with embeddings
-    const unassignedFaces = await prisma.face.findMany({
-      where: {
-        personId: null,
-        ignored: { not: true },
-        hasEmbedding: true,
-        embedding: { not: null },
-      },
-      select: { id: true, confidence: true, embedding: true },
-      orderBy: { confidence: 'desc' },
-    });
+    // Get all unassigned faces (ids + confidence only; fetch embeddings per-id to isolate bad rows)
+    let unassignedFacesBase: Array<{ id: string; confidence: number }> = [];
+    try {
+      unassignedFacesBase = await prisma.face.findMany({
+        where: {
+          personId: null,
+          ignored: { not: true },
+          hasEmbedding: true,
+          embedding: { not: null },
+        },
+        select: { id: true, confidence: true },
+        orderBy: { confidence: 'desc' },
+      });
+    } catch (e) {
+      // Fallback to raw SQL if Prisma string conversion fails on some rows
+      try {
+        const rows = await prisma.$queryRaw<Array<{ id: string; confidence: number }>>`
+          SELECT id, confidence
+          FROM "faces"
+          WHERE "personId" IS NULL
+            AND ("ignored" IS NULL OR "ignored" = FALSE)
+            AND "hasEmbedding" = TRUE
+            AND embedding IS NOT NULL
+          ORDER BY confidence DESC
+        `;
+        unassignedFacesBase = rows;
+      } catch (rawErr) {
+        console.error('Failed fallback fetching unassigned faces via raw SQL:', rawErr);
+        throw e; // rethrow original error so caller sees the same context
+      }
+    }
 
-    if (unassignedFaces.length === 0) {
+    if (unassignedFacesBase.length === 0) {
       return NextResponse.json({
         message: 'No unassigned faces to process',
         processed: 0,
@@ -83,14 +103,38 @@ export async function POST(request: NextRequest) {
     let newPeopleCount = 0;
     let assignedToExistingCount = 0;
 
-    // Prepare embeddings
-    const unassignedWithEmb = unassignedFaces
-      .map(f => ({ id: f.id, confidence: f.confidence, emb: parseEmbedding(f.embedding as any) }))
-      .filter(f => f.emb && f.emb.length) as Array<{ id: string; confidence: number; emb: number[] }>;
+    // Fetch embeddings per-id to skip any problematic rows
+    const unassignedWithEmb: Array<{ id: string; confidence: number; emb: number[] }> = [];
+    for (const f of unassignedFacesBase) {
+      try {
+        const row = await prisma.face.findUnique({ where: { id: f.id }, select: { embedding: true } });
+        const emb = parseEmbedding((row?.embedding ?? null) as any);
+        if (emb && emb.length) {
+          unassignedWithEmb.push({ id: f.id, confidence: f.confidence, emb });
+        }
+      } catch (perRowErr) {
+        // Skip rows that fail to convert/parse; continue processing others
+        continue;
+      }
+    }
+
+    if (unassignedWithEmb.length === 0) {
+      return NextResponse.json({
+        message: 'No valid embeddings among unassigned faces to process',
+        processed: 0,
+        newPeople: 0,
+        assignedToExisting: 0,
+        totalUnassigned: unassignedFaces.length,
+        usedSimilarityThreshold: similarityThreshold,
+        createdGroups: 0,
+      });
+    }
 
     // Get existing people with a few face embeddings (if mode allows assignment to existing)
-    const existingPeople = (mode === 'assign_existing' || mode === 'both')
-      ? await prisma.person.findMany({
+    let existingPeople: Array<{ id: string; faces: Array<{ id: string; embedding: string | null }> }> = [];
+    if (mode === 'assign_existing' || mode === 'both') {
+      try {
+        existingPeople = await prisma.person.findMany({
           include: {
             faces: {
               where: { ignored: { not: true }, hasEmbedding: true, embedding: { not: null } },
@@ -99,8 +143,36 @@ export async function POST(request: NextRequest) {
               select: { id: true, embedding: true },
             },
           },
-        })
-      : [];
+        });
+      } catch (e) {
+        // Fallback to raw SQL join if Prisma fails
+        try {
+          const rows = await prisma.$queryRaw<Array<{ personId: string; faceId: string | null; embedding: string | null }>>`
+            SELECT p.id as "personId", f.id as "faceId", f.embedding as embedding
+            FROM "people" p
+            LEFT JOIN "faces" f
+              ON f."personId" = p.id
+             AND (f."ignored" IS NULL OR f."ignored" = FALSE)
+             AND f."hasEmbedding" = TRUE
+             AND f.embedding IS NOT NULL
+            ORDER BY p.id
+          `;
+          const map = new Map<string, Array<{ id: string; embedding: string | null }>>();
+          for (const r of rows) {
+            if (!map.has(r.personId)) map.set(r.personId, []);
+            if (r.faceId) {
+              // keep at most 5 embeddings per person, favoring earlier rows
+              const arr = map.get(r.personId)!;
+              if (arr.length < 5) arr.push({ id: r.faceId, embedding: r.embedding });
+            }
+          }
+          existingPeople = Array.from(map.entries()).map(([id, faces]) => ({ id, faces }));
+        } catch (rawErr) {
+          console.error('Failed fallback fetching existing people via raw SQL:', rawErr);
+          existingPeople = [];
+        }
+      }
+    }
 
     const existingPeopleEmb = existingPeople.map(p => ({
       id: p.id,
