@@ -171,6 +171,7 @@ model Person {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   faces     Face[]
+  centroidEmbedding String? @db.Text // Cached centroid (average) embedding for this person
 
   // Performance optimizations
   @@index([confirmed]) // For filtering confirmed/unconfirmed people

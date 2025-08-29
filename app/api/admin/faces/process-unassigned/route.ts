@@ -5,6 +5,9 @@ interface ProcessRequest {
   similarityThreshold?: number;
   mode?: 'create_new' | 'assign_existing' | 'both';
   limit?: number; // max number of unassigned faces to consider
+  offset?: number; // offset into unassigned list for diversity
+  randomize?: boolean; // randomize selection of unassigned faces
+  maxComparisons?: number; // cap pairwise comparisons for clustering
 }
 
 function parseEmbedding(json: string | null): number[] | null {
@@ -48,6 +51,9 @@ export async function POST(request: NextRequest) {
     let similarityThreshold = typeof body.similarityThreshold === 'number' ? body.similarityThreshold : undefined;
     const mode: 'create_new' | 'assign_existing' | 'both' = (body.mode as any) || 'both';
     const limit = Number.isFinite(body.limit as any) && (body.limit as any)! > 0 ? Math.min(Number(body.limit), 2000) : 500;
+    const offset = Number.isFinite(body.offset as any) && (body.offset as any)! > 0 ? Math.min(Number(body.offset), 1000000) : 0;
+    const randomize = !!body.randomize;
+    const maxComparisons = Number.isFinite(body.maxComparisons as any) && (body.maxComparisons as any)! > 0 ? Math.min(Number(body.maxComparisons), 500000) : 50000;
 
     if (similarityThreshold === undefined) {
       similarityThreshold = await getSimilarityThresholdFromSettings();
@@ -66,16 +72,23 @@ export async function POST(request: NextRequest) {
     // Try to fetch unassigned faces with embeddings via raw SQL first (fast path)
     let unassignedRows: Array<{ id: string; confidence: number; embedding: string | null }> | null = null;
     try {
-      unassignedRows = await prisma.$queryRaw<Array<{ id: string; confidence: number; embedding: string | null }>>`
-        SELECT id, confidence, embedding
-        FROM "faces"
-        WHERE "personId" IS NULL
-          AND ("ignored" IS NULL OR "ignored" = FALSE)
-          AND "hasEmbedding" = TRUE
-          AND embedding IS NOT NULL
-        ORDER BY confidence DESC
-        LIMIT ${limit}
-      `;
+      if (randomize || offset > 0) {
+        const order = randomize ? 'random()' : 'confidence DESC';
+        const sql = `SELECT id, confidence, embedding FROM "faces" WHERE "personId" IS NULL AND ("ignored" IS NULL OR "ignored" = FALSE) AND "hasEmbedding" = TRUE AND embedding IS NOT NULL ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        unassignedRows = await prisma.$queryRawUnsafe<any>(sql);
+      } else {
+        unassignedRows = await prisma.$queryRaw<Array<{ id: string; confidence: number; embedding: string | null }>>`
+          SELECT id, confidence, embedding
+          FROM "faces"
+          WHERE "personId" IS NULL
+            AND ("ignored" IS NULL OR "ignored" = FALSE)
+            AND "hasEmbedding" = TRUE
+            AND embedding IS NOT NULL
+          ORDER BY confidence DESC
+          LIMIT ${limit}
+        `;
+      }
       console.log('[process-unassigned] fetched via raw', { count: unassignedRows.length, ms: Date.now() - t0 });
     } catch (rawErrFast) {
       console.warn('[process-unassigned] raw fetch failed, falling back to safe per-id path', rawErrFast);
@@ -178,20 +191,30 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get existing people with a few face embeddings (if mode allows assignment to existing)
+    // Get existing people embeddings (prefer centroids)
+    let centroidPeople: Array<{ id: string; centroid: number[] } > = [];
     let existingPeople: Array<{ id: string; faces: Array<{ id: string; embedding: string | null }> }> = [];
     if (mode === 'assign_existing' || mode === 'both') {
       try {
-        existingPeople = await prisma.person.findMany({
-          include: {
-            faces: {
-              where: { ignored: { not: true }, hasEmbedding: true, embedding: { not: null } },
-              orderBy: { confidence: 'desc' },
-              take: 5,
-              select: { id: true, embedding: true },
-            },
-          },
+        const centroids = await prisma.person.findMany({
+          select: { id: true, centroidEmbedding: true },
+          where: { centroidEmbedding: { not: null } },
         });
+        centroidPeople = centroids
+          .map(c => ({ id: c.id, centroid: parseEmbedding(c.centroidEmbedding as any) || [] }))
+          .filter(c => c.centroid.length > 0);
+        if (centroidPeople.length === 0) {
+          existingPeople = await prisma.person.findMany({
+            include: {
+              faces: {
+                where: { ignored: { not: true }, hasEmbedding: true, embedding: { not: null } },
+                orderBy: { confidence: 'desc' },
+                take: 5,
+                select: { id: true, embedding: true },
+              },
+            },
+          });
+        }
       } catch (e) {
         // Fallback to raw SQL join if Prisma fails
         try {
@@ -222,12 +245,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const existingPeopleEmb = existingPeople.map(p => ({
-      id: p.id,
-      faces: p.faces
-        .map(f => parseEmbedding(f.embedding))
-        .filter((e): e is number[] => Array.isArray(e) && e.length > 0),
-    }));
+    const existingPeopleEmb = centroidPeople.length > 0
+      ? centroidPeople.map(p => ({ id: p.id, faces: [p.centroid] }))
+      : existingPeople.map(p => ({
+          id: p.id,
+          faces: p.faces
+            .map(f => parseEmbedding(f.embedding))
+            .filter((e): e is number[] => Array.isArray(e) && e.length > 0),
+        }));
 
     // Assign to existing people first using embedding similarity
     const remaining: typeof unassignedWithEmb = [];
@@ -246,6 +271,7 @@ export async function POST(request: NextRequest) {
         }
         if (bestPerson) {
           await prisma.face.update({ where: { id: f.id }, data: { personId: bestPerson } });
+          try { const mod = await import('@/lib/people'); await mod.updatePersonCentroid(bestPerson); } catch {}
           processedCount++;
           assignedToExistingCount++;
         } else {
@@ -305,6 +331,7 @@ export async function POST(request: NextRequest) {
       for (const cluster of clusters) {
         const person = await prisma.person.create({ data: { name: `Person ${Date.now()}${Math.random().toString(36).slice(2,6)}`, confirmed: false } });
         await prisma.face.updateMany({ where: { id: { in: cluster.ids } }, data: { personId: person.id } });
+        try { const mod = await import('@/lib/people'); await mod.updatePersonCentroid(person.id); } catch {}
         processedCount += cluster.ids.length;
         newPeopleCount++;
       }

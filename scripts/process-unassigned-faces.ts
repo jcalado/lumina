@@ -7,10 +7,13 @@ interface Options {
   mode: Mode;
   limit: number;
   dryRun?: boolean;
+  maxComparisons: number;
+  randomize: boolean;
+  offset: number;
 }
 
 function parseArgs(argv: string[]): Options {
-  const opts: Options = { mode: 'both', limit: 500 } as any;
+  const opts: Options = { mode: 'both', limit: 500, maxComparisons: 100000, randomize: false, offset: 0 } as any;
   for (const arg of argv.slice(2)) {
     if (arg.startsWith('--threshold=')) {
       const v = parseFloat(arg.split('=')[1]);
@@ -23,6 +26,14 @@ function parseArgs(argv: string[]): Options {
       if (Number.isFinite(n) && n > 0) opts.limit = Math.min(n, 5000);
     } else if (arg === '--dry-run') {
       opts.dryRun = true;
+    } else if (arg.startsWith('--max-comparisons=')) {
+      const n = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(n) && n > 0) opts.maxComparisons = Math.min(n, 1000000);
+    } else if (arg === '--randomize') {
+      opts.randomize = true;
+    } else if (arg.startsWith('--offset=')) {
+      const n = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(n) && n >= 0) opts.offset = n;
     }
   }
   return opts;
@@ -63,21 +74,28 @@ async function main() {
   if (typeof threshold !== 'number') threshold = await getSimilarityThresholdFromSettings();
   if (threshold < 0 || threshold > 1) throw new Error('threshold must be between 0 and 1');
 
-  console.log('[faces:process-unassigned] start', { threshold, mode: opts.mode, limit: opts.limit, dryRun: !!opts.dryRun });
+  console.log('[faces:process-unassigned] start', { threshold, mode: opts.mode, limit: opts.limit, maxComparisons: opts.maxComparisons, randomize: opts.randomize, offset: opts.offset, dryRun: !!opts.dryRun });
 
   // 1) Fetch unassigned faces with embeddings (fast path via raw SQL)
   let unassigned: Array<{ id: string; confidence: number; embedding: string | null }> = [];
   try {
-    unassigned = await prisma.$queryRaw<Array<{ id: string; confidence: number; embedding: string | null }>>`
-      SELECT id, confidence, embedding
-      FROM "faces"
-      WHERE "personId" IS NULL
-        AND ("ignored" IS NULL OR "ignored" = FALSE)
-        AND "hasEmbedding" = TRUE
-        AND embedding IS NOT NULL
-      ORDER BY confidence DESC
-      LIMIT ${opts.limit}
-    `;
+    if (opts.randomize || opts.offset > 0) {
+      const order = opts.randomize ? 'random()' : 'confidence DESC';
+      const sql = `SELECT id, confidence, embedding FROM "faces" WHERE "personId" IS NULL AND ("ignored" IS NULL OR "ignored" = FALSE) AND "hasEmbedding" = TRUE AND embedding IS NOT NULL ORDER BY ${order} LIMIT ${opts.limit} OFFSET ${opts.offset}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      unassigned = await prisma.$queryRawUnsafe<any>(sql);
+    } else {
+      unassigned = await prisma.$queryRaw<Array<{ id: string; confidence: number; embedding: string | null }>>`
+        SELECT id, confidence, embedding
+        FROM "faces"
+        WHERE "personId" IS NULL
+          AND ("ignored" IS NULL OR "ignored" = FALSE)
+          AND "hasEmbedding" = TRUE
+          AND embedding IS NOT NULL
+        ORDER BY confidence DESC
+        LIMIT ${opts.limit}
+      `;
+    }
     console.log('[faces:process-unassigned] fetched', { count: unassigned.length, ms: Date.now() - tStart });
   } catch (e) {
     console.error('[faces:process-unassigned] failed to fetch unassigned faces', e);
@@ -104,27 +122,36 @@ async function main() {
   // 2) Assign to existing people first
   const remaining: Array<{ id: string; confidence: number; emb: number[] }> = [];
   if (opts.mode === 'assign_existing' || opts.mode === 'both') {
-    // Get existing people with up to 5 face embeddings each
-    const joinRows = await prisma.$queryRaw<Array<{ personId: string; faceId: string | null; embedding: string | null }>>`
-      SELECT p.id as "personId", f.id as "faceId", f.embedding as embedding
-      FROM "people" p
-      LEFT JOIN "faces" f
-        ON f."personId" = p.id
-       AND (f."ignored" IS NULL OR f."ignored" = FALSE)
-       AND f."hasEmbedding" = TRUE
-       AND f.embedding IS NOT NULL
-      ORDER BY p.id
-    `;
+    // Prefer centroids; fallback to sample faces
+    const centroidRows = await prisma.person.findMany({ select: { id: true, centroidEmbedding: true }, where: { centroidEmbedding: { not: null } } });
     const peopleMap = new Map<string, number[][]>();
-    for (const r of joinRows) {
-      if (!r.personId || !r.faceId || !r.embedding) continue;
-      const emb = parseEmbedding(r.embedding);
-      if (!emb || emb.length === 0) continue;
-      if (!peopleMap.has(r.personId)) peopleMap.set(r.personId, []);
-      const arr = peopleMap.get(r.personId)!;
-      if (arr.length < 5) arr.push(emb);
+    if (centroidRows.length > 0) {
+      for (const r of centroidRows) {
+        const emb = parseEmbedding(r.centroidEmbedding as any);
+        if (emb && emb.length) peopleMap.set(r.id, [emb]);
+      }
+      console.log('[faces:process-unassigned] loaded centroids', { people: peopleMap.size, ms: Date.now() - tStart });
+    } else {
+      const joinRows = await prisma.$queryRaw<Array<{ personId: string; faceId: string | null; embedding: string | null }>>`
+        SELECT p.id as "personId", f.id as "faceId", f.embedding as embedding
+        FROM "people" p
+        LEFT JOIN "faces" f
+          ON f."personId" = p.id
+         AND (f."ignored" IS NULL OR f."ignored" = FALSE)
+         AND f."hasEmbedding" = TRUE
+         AND f.embedding IS NOT NULL
+        ORDER BY p.id
+      `;
+      for (const r of joinRows) {
+        if (!r.personId || !r.faceId || !r.embedding) continue;
+        const emb = parseEmbedding(r.embedding);
+        if (!emb || emb.length === 0) continue;
+        if (!peopleMap.has(r.personId)) peopleMap.set(r.personId, []);
+        const arr = peopleMap.get(r.personId)!;
+        if (arr.length < 5) arr.push(emb);
+      }
+      console.log('[faces:process-unassigned] loaded existing embeddings', { people: peopleMap.size, ms: Date.now() - tStart });
     }
-    console.log('[faces:process-unassigned] loaded existing embeddings', { people: peopleMap.size, ms: Date.now() - tStart });
 
     for (const f of faces) {
       let bestPerson: string | null = null;
@@ -163,7 +190,7 @@ async function main() {
       const e = r.emb; let mag = 0; for (const v of e) mag += v*v; mag = Math.sqrt(mag);
       return mag === 0 ? e.slice() : e.map(v => v/mag);
     });
-    const maxComparisons = 100000; // allow more than API path
+    const maxComparisons = opts.maxComparisons; // configurable cap
     let comparisons = 0;
     for (let i = 0; i < m && comparisons < maxComparisons; i++) {
       for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
@@ -179,6 +206,7 @@ async function main() {
     for (const idxs of groups.values()) { if (idxs.length > 1) clusters.push({ ids: idxs.map(i => remaining[i].id) }); }
     console.log('[faces:process-unassigned] clustering', { remaining: m, clusters: clusters.length, comparisons, ms: Date.now() - tStart });
 
+    const updatedPersonIds: string[] = [];
     for (const cluster of clusters) {
       if (opts.dryRun) {
         createdPeople++; processed += cluster.ids.length;
@@ -186,6 +214,14 @@ async function main() {
         const person = await prisma.person.create({ data: { name: `Person ${Date.now()}${Math.random().toString(36).slice(2,6)}`, confirmed: false } });
         await prisma.face.updateMany({ where: { id: { in: cluster.ids } }, data: { personId: person.id } });
         createdPeople++; processed += cluster.ids.length;
+        updatedPersonIds.push(person.id);
+      }
+    }
+    // Update centroids for any new persons
+    if (!opts.dryRun && updatedPersonIds.length > 0) {
+      const { updatePersonCentroid } = await import('../lib/people');
+      for (const pid of updatedPersonIds) {
+        try { await updatePersonCentroid(pid); } catch {}
       }
     }
   }
@@ -207,4 +243,3 @@ main().catch(async (e) => {
   await prisma.$disconnect();
   process.exit(1);
 });
-

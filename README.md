@@ -188,6 +188,7 @@ npm run sanity:embeddings:repair     # Attempt to repair numeric arrays
 npm run sanity:embeddings:null       # Null out malformed embeddings
 npm run sanity:embeddings:delete     # Delete only malformed rows
 npm run faces:process-unassigned     # Group unassigned faces from CLI
+npm run faces:centroids:rebuild      # Rebuild person centroid embeddings
 ```
 
 ### Face Embedding Sanitizer
@@ -237,6 +238,9 @@ Options:
 - `--threshold=<0..1>`: similarity threshold (defaults to DB setting `faceRecognitionSimilarityThreshold` or 0.7).
 - `--mode=<both|assign_existing|create_new>`: which steps to perform (default `both`).
 - `--dry-run`: preview actions without writing.
+- `--max-comparisons=<n>`: cap clustering comparisons for predictable runtime (default 100k).
+- `--randomize`: randomize unassigned selection to increase diversity.
+- `--offset=<n>`: offset into unassigned set (use with pagination strategies).
 
 Examples:
 ```bash
@@ -248,6 +252,24 @@ npm run faces:process-unassigned -- --mode=assign_existing --limit=2000 --thresh
 
 # Full pass (assign + cluster) for 800 faces
 npm run faces:process-unassigned -- --limit=800
+
+# Randomized selection and higher cap
+npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --randomize --max-comparisons=300000
+
+### Person Centroids
+
+To improve matching recall and performance, Lumina maintains a centroid (average) embedding per person.
+
+- Stored in `person.centroidEmbedding` as JSON array (text).
+- Used for fast assignment of unassigned faces to existing people.
+- Updated incrementally when grouping creates or assigns faces.
+
+Rebuild all centroids (e.g., after migrations or bulk changes):
+
+```bash
+npm run faces:centroids:rebuild          # rebuild for all persons
+npm run faces:centroids:rebuild -- --limit=500  # rebuild a sample
+```
 ```
 
 ### Adding New Features

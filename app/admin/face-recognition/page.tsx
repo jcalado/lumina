@@ -251,6 +251,9 @@ export default function FaceRecognitionAdminPage() {
   const [processingUnassigned, setProcessingUnassigned] = useState(false);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.45);
   const [processMode, setProcessMode] = useState<'create_new' | 'assign_existing' | 'both'>('both');
+  const [groupingLimit, setGroupingLimit] = useState<number>(500);
+  const [groupingRandomize, setGroupingRandomize] = useState<boolean>(false);
+  const [groupingMaxComparisons, setGroupingMaxComparisons] = useState<number>(50000);
   
   // New state variables for face processing modes
   const [processingMode, setProcessingMode] = useState<'new_only' | 'reprocess_all'>('new_only');
@@ -1086,6 +1089,9 @@ export default function FaceRecognitionAdminPage() {
         body: JSON.stringify({
           similarityThreshold,
           mode: processMode,
+          limit: Math.max(50, Math.min(Number(groupingLimit) || 500, 2000)),
+          randomize: !!groupingRandomize,
+          maxComparisons: Math.max(1000, Math.min(Number(groupingMaxComparisons) || 50000, 500000)),
         }),
       });
 
@@ -1727,6 +1733,32 @@ export default function FaceRecognitionAdminPage() {
                                           className="mt-2"
                                         />
                                         <p className="text-xs text-muted-foreground mt-1">Higher values require more similarity</p>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                          <Label htmlFor="grouping-limit">Max Faces Per Run</Label>
+                                          <div className="flex items-center gap-3 mt-2">
+                                            <Input id="grouping-limit" type="number" min={50} max={2000} step={50} value={groupingLimit}
+                                              onChange={(e) => setGroupingLimit(parseInt(e.target.value || '500'))}
+                                              className="w-32" />
+                                            <span className="text-xs text-muted-foreground">50–2000</span>
+                                          </div>
+                                          <p className="text-xs text-muted-foreground mt-1">Controls batch size to avoid timeouts</p>
+                                        </div>
+                                        <div>
+                                          <Label htmlFor="grouping-maxcmp">Max Comparisons</Label>
+                                          <div className="flex items-center gap-3 mt-2">
+                                            <Input id="grouping-maxcmp" type="number" min={1000} max={500000} step={10000} value={groupingMaxComparisons}
+                                              onChange={(e) => setGroupingMaxComparisons(parseInt(e.target.value || '50000'))}
+                                              className="w-40" />
+                                          </div>
+                                          <p className="text-xs text-muted-foreground mt-1">Caps clustering comparisons for predictable runtime</p>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <Checkbox id="grouping-rand" checked={groupingRandomize} onCheckedChange={(v: any) => setGroupingRandomize(!!v)} />
+                                          <Label htmlFor="grouping-rand">Randomize selection for diversity</Label>
+                                        </div>
                                       </div>
                                       
                                       <div>
