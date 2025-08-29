@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
         processed: 0,
         newPeople: 0,
         assignedToExisting: 0,
-        totalUnassigned: unassignedFaces.length,
+        totalUnassigned: unassignedFacesBase.length,
         usedSimilarityThreshold: similarityThreshold,
         createdGroups: 0,
       });
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
       processed: processedCount,
       newPeople: newPeopleCount,
       assignedToExisting: assignedToExistingCount,
-      totalUnassigned: unassignedFaces.length,
+      totalUnassigned: unassignedFacesBase.length,
       usedSimilarityThreshold: similarityThreshold,
       createdGroups: clusters.length,
     });
