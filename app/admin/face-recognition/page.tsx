@@ -254,6 +254,7 @@ export default function FaceRecognitionAdminPage() {
   const [groupingLimit, setGroupingLimit] = useState<number>(500);
   const [groupingRandomize, setGroupingRandomize] = useState<boolean>(false);
   const [groupingMaxComparisons, setGroupingMaxComparisons] = useState<number>(50000);
+  const [groupingPreCluster, setGroupingPreCluster] = useState<boolean>(false);
   
   // New state variables for face processing modes
   const [processingMode, setProcessingMode] = useState<'new_only' | 'reprocess_all'>('new_only');
@@ -1092,6 +1093,7 @@ export default function FaceRecognitionAdminPage() {
           limit: Math.max(50, Math.min(Number(groupingLimit) || 500, 2000)),
           randomize: !!groupingRandomize,
           maxComparisons: Math.max(1000, Math.min(Number(groupingMaxComparisons) || 50000, 500000)),
+          preCluster: !!groupingPreCluster,
         }),
       });
 
@@ -1758,6 +1760,10 @@ export default function FaceRecognitionAdminPage() {
                                         <div className="flex items-center gap-2 mt-1">
                                           <Checkbox id="grouping-rand" checked={groupingRandomize} onCheckedChange={(v: any) => setGroupingRandomize(!!v)} />
                                           <Label htmlFor="grouping-rand">Randomize selection for diversity</Label>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <Checkbox id="grouping-precluster" checked={groupingPreCluster} onCheckedChange={(v: any) => setGroupingPreCluster(!!v)} />
+                                          <Label htmlFor="grouping-precluster">Pre-cluster similar faces (LSH)</Label>
                                         </div>
                                       </div>
                                       

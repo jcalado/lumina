@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { buildLSHBuckets } from '@/lib/lsh';
 
 interface ProcessRequest {
   similarityThreshold?: number;
@@ -8,6 +9,10 @@ interface ProcessRequest {
   offset?: number; // offset into unassigned list for diversity
   randomize?: boolean; // randomize selection of unassigned faces
   maxComparisons?: number; // cap pairwise comparisons for clustering
+  preCluster?: boolean; // use LSH pre-clustering to reduce comparisons
+  bands?: number; // LSH bands
+  rowsPerBand?: number; // LSH rows per band
+  maxBucketComparisons?: number; // cap comparisons per bucket
 }
 
 function parseEmbedding(json: string | null): number[] | null {
@@ -54,6 +59,10 @@ export async function POST(request: NextRequest) {
     const offset = Number.isFinite(body.offset as any) && (body.offset as any)! > 0 ? Math.min(Number(body.offset), 1000000) : 0;
     const randomize = !!body.randomize;
     const maxComparisons = Number.isFinite(body.maxComparisons as any) && (body.maxComparisons as any)! > 0 ? Math.min(Number(body.maxComparisons), 500000) : 50000;
+    const preCluster = !!body.preCluster;
+    const bands = Number.isFinite(body.bands as any) && (body.bands as any)! > 0 ? Math.min(Number(body.bands), 32) : 8;
+    const rowsPerBand = Number.isFinite(body.rowsPerBand as any) && (body.rowsPerBand as any)! > 0 ? Math.min(Number(body.rowsPerBand), 16) : 4;
+    const maxBucketComparisons = Number.isFinite(body.maxBucketComparisons as any) && (body.maxBucketComparisons as any)! > 0 ? Math.min(Number(body.maxBucketComparisons), 250000) : Math.max(1000, Math.floor(maxComparisons / Math.max(1, bands)));
 
     if (similarityThreshold === undefined) {
       similarityThreshold = await getSimilarityThresholdFromSettings();
@@ -300,18 +309,38 @@ export async function POST(request: NextRequest) {
         return mag === 0 ? e.slice() : e.map(v => v/mag);
       });
 
-      // Cap total comparisons to avoid timeouts
-      const maxComparisons = 50000;
       let comparisons = 0;
-      for (let i = 0; i < m && comparisons < maxComparisons; i++) {
-        for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
-          comparisons++;
-          let dot = 0; const a = norm[i], b = norm[j];
-          for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
-          if (dot >= (similarityThreshold as number)) union(i, j);
+      if (preCluster) {
+        // LSH bucketing to reduce comparisons
+        const buckets = buildLSHBuckets(norm, { bands, rowsPerBand });
+        for (const [, idxs] of buckets) {
+          if (idxs.length < 2) continue;
+          let local = 0;
+          for (let aIdx = 0; aIdx < idxs.length; aIdx++) {
+            for (let bIdx = aIdx + 1; bIdx < idxs.length; bIdx++) {
+              if (comparisons >= maxComparisons || local >= maxBucketComparisons) break;
+              const i = idxs[aIdx], j = idxs[bIdx];
+              local++; comparisons++;
+              let dot = 0; const a = norm[i], b = norm[j];
+              for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
+              if (dot >= (similarityThreshold as number)) union(i, j);
+            }
+            if (comparisons >= maxComparisons || local >= maxBucketComparisons) break;
+          }
         }
+        console.log('[process-unassigned] lsh clustering', { remaining: m, bands, rowsPerBand, comparisons, ms: Date.now() - t0 });
+      } else {
+        // Full pairwise with global cap
+        for (let i = 0; i < m && comparisons < maxComparisons; i++) {
+          for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
+            comparisons++;
+            let dot = 0; const a = norm[i], b = norm[j];
+            for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
+            if (dot >= (similarityThreshold as number)) union(i, j);
+          }
+        }
+        console.log('[process-unassigned] clustering', { remaining: m, comparisons, ms: Date.now() - t0 });
       }
-      console.log('[process-unassigned] clustering', { remaining: m, comparisons, ms: Date.now() - t0 });
 
       // Build groups
       const groups = new Map<number, number[]>();

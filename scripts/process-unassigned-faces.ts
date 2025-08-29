@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { buildLSHBuckets } from '../lib/lsh';
 
 type Mode = 'create_new' | 'assign_existing' | 'both';
 
@@ -10,10 +11,14 @@ interface Options {
   maxComparisons: number;
   randomize: boolean;
   offset: number;
+  preCluster: boolean;
+  bands: number;
+  rowsPerBand: number;
+  maxBucketComparisons: number;
 }
 
 function parseArgs(argv: string[]): Options {
-  const opts: Options = { mode: 'both', limit: 500, maxComparisons: 100000, randomize: false, offset: 0 } as any;
+  const opts: Options = { mode: 'both', limit: 500, maxComparisons: 100000, randomize: false, offset: 0, preCluster: false, bands: 8, rowsPerBand: 4, maxBucketComparisons: 50000 } as any;
   for (const arg of argv.slice(2)) {
     if (arg.startsWith('--threshold=')) {
       const v = parseFloat(arg.split('=')[1]);
@@ -34,6 +39,17 @@ function parseArgs(argv: string[]): Options {
     } else if (arg.startsWith('--offset=')) {
       const n = parseInt(arg.split('=')[1], 10);
       if (Number.isFinite(n) && n >= 0) opts.offset = n;
+    } else if (arg === '--pre-cluster') {
+      opts.preCluster = true;
+    } else if (arg.startsWith('--bands=')) {
+      const n = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(n) && n > 0) opts.bands = Math.min(n, 32);
+    } else if (arg.startsWith('--rows-per-band=')) {
+      const n = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(n) && n > 0) opts.rowsPerBand = Math.min(n, 16);
+    } else if (arg.startsWith('--max-bucket-comparisons=')) {
+      const n = parseInt(arg.split('=')[1], 10);
+      if (Number.isFinite(n) && n > 0) opts.maxBucketComparisons = Math.min(n, 250000);
     }
   }
   return opts;
@@ -74,7 +90,7 @@ async function main() {
   if (typeof threshold !== 'number') threshold = await getSimilarityThresholdFromSettings();
   if (threshold < 0 || threshold > 1) throw new Error('threshold must be between 0 and 1');
 
-  console.log('[faces:process-unassigned] start', { threshold, mode: opts.mode, limit: opts.limit, maxComparisons: opts.maxComparisons, randomize: opts.randomize, offset: opts.offset, dryRun: !!opts.dryRun });
+  console.log('[faces:process-unassigned] start', { threshold, mode: opts.mode, limit: opts.limit, maxComparisons: opts.maxComparisons, randomize: opts.randomize, offset: opts.offset, preCluster: opts.preCluster, bands: opts.bands, rowsPerBand: opts.rowsPerBand, maxBucketComparisons: opts.maxBucketComparisons, dryRun: !!opts.dryRun });
 
   // 1) Fetch unassigned faces with embeddings (fast path via raw SQL)
   let unassigned: Array<{ id: string; confidence: number; embedding: string | null }> = [];
@@ -192,13 +208,34 @@ async function main() {
     });
     const maxComparisons = opts.maxComparisons; // configurable cap
     let comparisons = 0;
-    for (let i = 0; i < m && comparisons < maxComparisons; i++) {
-      for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
-        comparisons++;
-        let dot = 0; const a = norm[i], b = norm[j];
-        for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
-        if (dot >= threshold) union(i, j);
+    if (opts.preCluster) {
+      const buckets = buildLSHBuckets(norm, { bands: opts.bands, rowsPerBand: opts.rowsPerBand });
+      for (const [, idxs] of buckets) {
+        if (idxs.length < 2) continue;
+        let local = 0;
+        for (let aIdx = 0; aIdx < idxs.length; aIdx++) {
+          for (let bIdx = aIdx + 1; bIdx < idxs.length; bIdx++) {
+            if (comparisons >= maxComparisons || local >= opts.maxBucketComparisons) break;
+            const i = idxs[aIdx], j = idxs[bIdx];
+            local++; comparisons++;
+            let dot = 0; const a = norm[i], b = norm[j];
+            for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
+            if (dot >= threshold) union(i, j);
+          }
+          if (comparisons >= maxComparisons || local >= opts.maxBucketComparisons) break;
+        }
       }
+      console.log('[faces:process-unassigned] lsh clustering', { remaining: m, bands: opts.bands, rowsPerBand: opts.rowsPerBand, comparisons, ms: Date.now() - tStart });
+    } else {
+      for (let i = 0; i < m && comparisons < maxComparisons; i++) {
+        for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
+          comparisons++;
+          let dot = 0; const a = norm[i], b = norm[j];
+          for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
+          if (dot >= threshold) union(i, j);
+        }
+      }
+      console.log('[faces:process-unassigned] clustering', { remaining: m, comparisons, ms: Date.now() - tStart });
     }
     const groups = new Map<number, number[]>();
     for (let i = 0; i < m; i++) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r)!.push(i); }

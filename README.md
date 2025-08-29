@@ -241,6 +241,9 @@ Options:
 - `--max-comparisons=<n>`: cap clustering comparisons for predictable runtime (default 100k).
 - `--randomize`: randomize unassigned selection to increase diversity.
 - `--offset=<n>`: offset into unassigned set (use with pagination strategies).
+- `--pre-cluster`: enable LSH-based pre-clustering to reduce comparisons and improve coverage.
+- `--bands=<n>` and `--rows-per-band=<n>`: LSH parameters (defaults 8 bands × 4 rows).
+- `--max-bucket-comparisons=<n>`: cap pairwise comparisons per LSH bucket (defaults to ~maxComparisons/bands).
 
 Examples:
 ```bash
@@ -255,6 +258,9 @@ npm run faces:process-unassigned -- --limit=800
 
 # Randomized selection and higher cap
 npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --randomize --max-comparisons=300000
+
+# With LSH pre-clustering enabled
+npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --pre-cluster --bands=8 --rows-per-band=4 --max-comparisons=300000
 
 ### Person Centroids
 
