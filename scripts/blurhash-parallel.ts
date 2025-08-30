@@ -5,7 +5,12 @@ import { PrismaClient } from '@prisma/client';
 import * as path from 'path';
 import * as os from 'os';
 import * as dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 import { getBatchProcessingSize } from '../lib/settings';
+
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -58,7 +63,7 @@ function validateEnvironment(): string | null {
 
 async function processPhotoInWorker(photoTask: PhotoTask): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
-    const workerPath = path.join(__dirname, 'blurhash-worker-only.ts');
+    const workerPath = path.join(__dirname, 'blurhash-worker-only.js');
     
     const worker = new Worker(workerPath, {
       workerData: {

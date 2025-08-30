@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:workers && next build",
+    "build:workers": "tsc scripts/blurhash-worker-only.ts scripts/thumbnail-worker-only.ts --outDir scripts --module commonjs --target es2017 --moduleResolution node --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",

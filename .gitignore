@@ -33,6 +33,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Compiled worker files
+scripts/*-worker-only.js
+
 # Database
 /prisma/dev.db
 /prisma/dev.db-journal
