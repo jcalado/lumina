@@ -160,14 +160,6 @@ lumina/
 | `PHOTOS_ROOT_PATH` | Local photos directory | Required |
 | `SYNC_CRON` | Background sync schedule | `0 3 * * *` |
 
-**InsightFace Model**
-- **Model Pack**: set `LUMINA_INSIGHTFACE_MODEL` (default `buffalo_l`).
-- **Providers**: set `LUMINA_INSIGHTFACE_PROVIDERS` (default `CPUExecutionProvider`).
-- **Context**: set `LUMINA_INSIGHTFACE_CTX_ID` (`-1` CPU, `0`+ for GPU).
-- **Detector Size**: set `LUMINA_INSIGHTFACE_DET_SIZE` (default `640,640`).
-
-The Python helpers in `scripts/face_detect_insightface.py` and `scripts/face_detect_insightface_batch.py` will use these values. By default, the higher‑accuracy `buffalo_l` model is used.
-
 ### Album Management
 
 Place a `project.md` file in any photo directory to add descriptions:
@@ -189,111 +181,6 @@ npm run lint         # Run ESLint
 npm run db:generate  # Generate Prisma client
 npm run db:push      # Push schema to database
 npm run db:studio    # Open Prisma Studio
-
-# Data maintenance
-npm run sanity:embeddings            # Scan face embeddings (flag invalid rows)
-npm run sanity:embeddings:repair     # Attempt to repair numeric arrays
-npm run sanity:embeddings:null       # Null out malformed embeddings
-npm run sanity:embeddings:delete     # Delete only malformed rows
-npm run faces:process-unassigned     # Group unassigned faces from CLI
-npm run faces:centroids:rebuild      # Rebuild person centroid embeddings
-```
-
-### Face Embedding Sanitizer
-
-Use the embedding sanitizer when Prisma starts throwing string conversion errors (e.g., GenericFailure / napi string) or when face processing fails due to malformed `faces.embedding` data.
-
-- Script: `scripts/sanitize-face-embeddings.ts`
-- Behavior: scans `faces` and safely inspects each row; isolates bad rows by reading embeddings per-id to avoid bulk failures.
-
-Modes (`--mode`):
-- `flag` (default): set `hasEmbedding=false` for invalid rows; keeps original `embedding` intact.
-- `repair`: if JSON is an array of numeric-like values, rewrites as numeric JSON and sets `hasEmbedding` accordingly; otherwise falls back to `flag`.
-- `null`: set `embedding=NULL` and `hasEmbedding=false` for invalid rows.
-- `delete`: delete only malformed face rows.
-
-Options:
-- `--limit=<n>`: limit number of rows scanned (useful for large datasets).
-- `--dry-run`: report what would change without writing.
-- `--mode=<flag|repair|null|delete>`: choose action.
-
-Examples:
-```bash
-# Inspect without changes (recommended first)
-npm run sanity:embeddings -- --dry-run
-
-# Attempt to repair the first 1000 rows
-npm run sanity:embeddings:repair -- --limit=1000
-
-# Null out all malformed embeddings
-npm run sanity:embeddings:null
-
-# Delete only malformed rows (irreversible)
-npm run sanity:embeddings:delete
-```
-
-Note: Always take a database backup before running destructive modes like `null` or `delete`.
-
-### Unassigned Face Processing (CLI)
-
-Run the grouping logic from the console without hitting the API (useful for large datasets or avoiding request timeouts).
-
-- Script: `scripts/process-unassigned-faces.ts`
-- Behavior: assigns unassigned faces to existing people (by similarity), then clusters remaining into new people.
-
-Options:
-- `--limit=<n>`: max unassigned faces to consider in this pass (default 500).
-- `--threshold=<0..1>`: similarity threshold (defaults to DB setting `faceRecognitionSimilarityThreshold` or 0.7).
-- `--mode=<both|assign_existing|create_new>`: which steps to perform (default `both`).
-- `--dry-run`: preview actions without writing.
-- `--max-comparisons=<n>`: cap clustering comparisons for predictable runtime (default 100k).
-- `--randomize`: randomize unassigned selection to increase diversity.
-- `--offset=<n>`: offset into unassigned set (use with pagination strategies).
-- `--pre-cluster`: enable LSH-based pre-clustering to reduce comparisons and improve coverage.
-- `--bands=<n>` and `--rows-per-band=<n>`: LSH parameters (defaults 8 bands × 4 rows).
-- `--max-bucket-comparisons=<n>`: cap pairwise comparisons per LSH bucket (defaults to ~maxComparisons/bands).
-
-Examples:
-```bash
-# Dry-run, preview 500 faces with default threshold from settings
-npm run faces:process-unassigned -- --dry-run
-
-# Assign to existing only for 2000 faces at 0.6 similarity
-npm run faces:process-unassigned -- --mode=assign_existing --limit=2000 --threshold=0.6
-
-# Full pass (assign + cluster) for 800 faces
-npm run faces:process-unassigned -- --limit=800
-
-# Randomized selection and higher cap
-npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --randomize --max-comparisons=300000
-
-# With LSH pre-clustering enabled
-npm run faces:process-unassigned -- --limit=1500 --threshold=0.45 --pre-cluster --bands=8 --rows-per-band=4 --max-comparisons=300000
-
-#### LSH, Pre‑cluster, and Paging — in plain terms
-
-- Pre‑cluster: Quickly groups “likely similar” faces before detailed checks. Think of it as making small piles of look‑alikes so we only compare within those piles. Faster on big datasets.
-- Bands: How many separate “attempts” we make to bucket a face. More bands = wider net (finds more potential matches), but more bucket work.
-- Rows per band: How strict each bucket is. More rows = stricter buckets (fewer faces per bucket: faster but may miss some matches). Fewer rows = looser buckets (more faces per bucket: slower but catches more).
-- Offset: Lets you page through unassigned faces instead of always processing the same first slice. Use with `--limit` (and optionally `--randomize`) to cover everything over several runs.
-
-Rule of thumb:
-- Want more recall (catch more)? Increase `--bands` or decrease `--rows-per-band` a bit.
-- Want faster runs? Decrease `--bands` or increase `--rows-per-band`, and/or lower `--max-comparisons`.
-
-### Person Centroids
-
-To improve matching recall and performance, Lumina maintains a centroid (average) embedding per person.
-
-- Stored in `person.centroidEmbedding` as JSON array (text).
-- Used for fast assignment of unassigned faces to existing people.
-- Updated incrementally when grouping creates or assigns faces.
-
-Rebuild all centroids (e.g., after migrations or bulk changes):
-
-```bash
-npm run faces:centroids:rebuild          # rebuild for all persons
-npm run faces:centroids:rebuild -- --limit=500  # rebuild a sample
 ```
 ```
 

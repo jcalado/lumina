@@ -1,10 +1,7 @@
 -- MariaDB Optimizations for Lumina Photo Gallery
 -- Run these queries after migration to optimize performance
 
--- Face recognition optimizations
-CREATE INDEX IF NOT EXISTS idx_faces_embedding_not_null ON faces (photoId) WHERE embedding IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_faces_person_embedding ON faces (personId, embedding(100));
-CREATE INDEX IF NOT EXISTS idx_faces_confidence ON faces (confidence DESC);
+-- Face recognition optimizations (removed in legacy cleanup)
 
 -- Photo and album optimizations
 CREATE INDEX IF NOT EXISTS idx_photos_album_taken_at ON photos (albumId, takenAt DESC);
@@ -16,9 +13,8 @@ CREATE INDEX IF NOT EXISTS idx_albums_sync_status ON albums (syncStatus);
 CREATE INDEX IF NOT EXISTS idx_thumbnails_photo_size ON thumbnails (photoId, size);
 CREATE INDEX IF NOT EXISTS idx_video_thumbnails_video_size ON video_thumbnails (videoId, size);
 
--- Job monitoring optimizations
 CREATE INDEX IF NOT EXISTS idx_sync_jobs_status_created ON sync_jobs (status, createdAt DESC);
-CREATE INDEX IF NOT EXISTS idx_face_jobs_status_created ON face_recognition_jobs (status, createdAt DESC);
+-- Legacy face recognition jobs removed
 
 -- Settings optimization
 CREATE INDEX IF NOT EXISTS idx_site_settings_key ON site_settings (key);
@@ -27,9 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_site_settings_key ON site_settings (key);
 SET GLOBAL query_cache_type = ON;
 SET GLOBAL query_cache_size = 268435456; -- 256MB
 
--- MariaDB specific: Optimize for face embedding storage
--- Increase max_allowed_packet for large face embeddings
-SET GLOBAL max_allowed_packet = 67108864; -- 64MB
+-- Legacy face embedding storage removed
 
 -- InnoDB optimizations for large datasets
 SET GLOBAL innodb_buffer_pool_size = 1073741824; -- 1GB (adjust based on available RAM)

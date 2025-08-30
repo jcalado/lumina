@@ -121,7 +121,7 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
             thumbnailBuffer = await processedImage
               .resize(squareSize, squareSize, {
                 fit: 'cover', // Crop to fill the entire square
-                position: 'attention', // Smart positioning for faces/subjects
+                position: 'attention', // Smart positioning for subjects
                 withoutEnlargement: false
               })
               .sharpen()

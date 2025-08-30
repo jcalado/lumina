@@ -98,8 +98,8 @@ async function checkDataCounts() {
   
   const tables = [
     'albums', 'photos', 'videos', 'thumbnails', 'video_thumbnails',
-    'sync_jobs', 'blurhash_jobs', 'thumbnail_jobs', 'face_recognition_jobs',
-    'people', 'faces', 'site_settings', 'admin_users'
+    'sync_jobs', 'blurhash_jobs', 'thumbnail_jobs',
+    'site_settings', 'admin_users'
   ];
   
   const counts = {
@@ -128,9 +128,6 @@ async function checkDataCounts() {
     counts.mariadb.sync_jobs = await mariadb.syncJob.count();
     counts.mariadb.blurhash_jobs = await mariadb.blurhashJob.count();
     counts.mariadb.thumbnail_jobs = await mariadb.thumbnailJob.count();
-    counts.mariadb.face_recognition_jobs = await mariadb.faceRecognitionJob.count();
-    counts.mariadb.people = await mariadb.person.count();
-    counts.mariadb.faces = await mariadb.face.count();
     counts.mariadb.site_settings = await mariadb.siteSettings.count();
     counts.mariadb.admin_users = await mariadb.adminUser.count();
   } catch (error) {
@@ -494,108 +491,7 @@ async function migrateVideoThumbnails() {
   return sqliteVideoThumbnails.length;
 }
 
-async function migratePeopleAndFaces() {
-  console.log('\n👥 Migrating people and faces...');
-  
-  // Migrate people first
-  const sqlitePeople = sqlite.prepare(`
-    SELECT * FROM people ORDER BY createdAt
-  `).all();
-  
-  console.log(`Found ${sqlitePeople.length} people in SQLite`);
-  
-  if (!isDryRun && sqlitePeople.length > 0) {
-    for (const person of sqlitePeople) {
-      try {
-        const existing = await mariadb.person.findUnique({
-          where: { id: person.id }
-        });
-        
-        if (!existing) {
-          await mariadb.person.create({
-            data: {
-              id: person.id,
-              name: person.name,
-              confirmed: Boolean(person.confirmed),
-              createdAt: new Date(person.createdAt),
-              updatedAt: new Date(person.updatedAt)
-            }
-          });
-        }
-      } catch (error) {
-        console.error(`  ❌ Failed to migrate person:`, error.message);
-      }
-    }
-  }
-  
-  // Migrate faces
-  const sqliteFaces = sqlite.prepare(`
-    SELECT * FROM faces ORDER BY createdAt
-  `).all();
-  
-  console.log(`Found ${sqliteFaces.length} faces in SQLite`);
-  
-  if (!isDryRun && sqliteFaces.length > 0) {
-    const batchSize = 500;
-    for (let i = 0; i < sqliteFaces.length; i += batchSize) {
-      const batch = sqliteFaces.slice(i, i + batchSize);
-      
-      try {
-        await mariadb.$transaction(async (tx) => {
-          for (const face of batch) {
-            const existing = await tx.face.findUnique({
-              where: { id: face.id }
-            });
-            
-            if (!existing) {
-              // Verify the photo exists before creating face
-              const photoExists = await tx.photo.findUnique({
-                where: { id: face.photoId }
-              });
-              
-              if (!photoExists) {
-                console.log(`  ⚠️  Skipping face for photo ${face.photoId} - photo not found`);
-                continue;
-              }
-              
-              // If personId is specified, verify the person exists
-              if (face.personId) {
-                const personExists = await tx.person.findUnique({
-                  where: { id: face.personId }
-                });
-                
-                if (!personExists) {
-                  console.log(`  ⚠️  Face references non-existent person ${face.personId}, setting to null`);
-                  face.personId = null;
-                }
-              }
-              
-              await tx.face.create({
-                data: {
-                  id: face.id,
-                  photoId: face.photoId,
-                  personId: face.personId,
-                  boundingBox: face.boundingBox,
-                  confidence: face.confidence,
-                  embedding: face.embedding,
-                  verified: Boolean(face.verified ?? false),
-                  ignored: Boolean(face.ignored ?? false),
-                  createdAt: new Date(face.createdAt)
-                }
-              });
-            }
-          }
-        });
-        
-        console.log(`  ✅ Migrated ${Math.min(batchSize, sqliteFaces.length - i)} faces (${i + batch.length}/${sqliteFaces.length})`);
-      } catch (error) {
-        console.error(`  ❌ Failed to migrate face batch:`, error.message);
-      }
-    }
-  }
-  
-  return { people: sqlitePeople.length, faces: sqliteFaces.length };
-}
+// Legacy people/faces migration removed
 
 async function migrateJobs() {
   console.log('\n⚙️  Migrating job records...');
@@ -603,8 +499,7 @@ async function migrateJobs() {
   const jobTables = [
     { sqlite: 'sync_jobs', model: 'syncJob' },
     { sqlite: 'blurhash_jobs', model: 'blurhashJob' },
-    { sqlite: 'thumbnail_jobs', model: 'thumbnailJob' },
-    { sqlite: 'face_recognition_jobs', model: 'faceRecognitionJob' }
+    { sqlite: 'thumbnail_jobs', model: 'thumbnailJob' }
   ];
   
   let totalMigrated = 0;
@@ -647,12 +542,6 @@ async function migrateJobs() {
                 data.totalPhotos = job.totalPhotos || 0;
                 data.processedPhotos = job.processedPhotos || 0;
                 data.thumbnailsCreated = job.thumbnailsCreated || 0;
-              } else if (model === 'faceRecognitionJob') {
-                data.totalPhotos = job.totalPhotos || 0;
-                data.processedPhotos = job.processedPhotos || 0;
-                data.facesDetected = job.facesDetected || 0;
-                data.facesMatched = job.facesMatched || 0;
-                data.pausedAt = job.pausedAt ? new Date(job.pausedAt) : null;
               }
               
               await mariadb[model].create({ data });
@@ -815,7 +704,6 @@ async function main() {
       videos: await migrateVideos(),
       thumbnails: await migrateThumbnails(),
       videoThumbnails: await migrateVideoThumbnails(),
-      peopleAndFaces: await migratePeopleAndFaces(),
       jobs: await migrateJobs(),
       settings: await migrateSettings(),
       adminUsers: await migrateAdminUsers()
@@ -834,8 +722,6 @@ async function main() {
     console.log(`🎥 Videos: ${results.videos}`);
     console.log(`🖼️  Thumbnails: ${results.thumbnails}`);
     console.log(`🎬 Video Thumbnails: ${results.videoThumbnails}`);
-    console.log(`👥 People: ${results.peopleAndFaces.people}`);
-    console.log(`👤 Faces: ${results.peopleAndFaces.faces}`);
     console.log(`⚙️  Jobs: ${results.jobs}`);
     console.log(`🔧 Settings: ${results.settings}`);
     console.log(`👨‍💼 Admin Users: ${results.adminUsers}`);

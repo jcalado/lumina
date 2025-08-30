@@ -70,14 +70,12 @@ async function main() {
     try {
       const albumCount = await prisma.album.count();
       const photoCount = await prisma.photo.count();
-      const faceCount = await prisma.face.count();
-      
+
       console.log('');
       console.log('📊 Database Statistics:');
       console.log(`   Albums: ${albumCount.toLocaleString()}`);
       console.log(`   Photos: ${photoCount.toLocaleString()}`);
-      console.log(`   Faces: ${faceCount.toLocaleString()}`);
-      
+
     } catch (error) {
       console.log('   ⚠️  Tables not found - database may need migration');
     }

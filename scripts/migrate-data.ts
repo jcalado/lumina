@@ -57,8 +57,6 @@ class DataMigrator {
       await this.migrateVideos();
       await this.migrateThumbnails();
       await this.migrateVideoThumbnails();
-      await this.migratePeople();
-      await this.migrateFaces();
       await this.migrateJobs();
 
       console.log('✅ Data migration completed successfully!');
@@ -230,51 +228,7 @@ class DataMigrator {
     console.log(`✅ Migrated ${videoThumbnails.length} video thumbnails`);
   }
 
-  private async migratePeople() {
-    console.log('📝 Migrating people...');
-    
-    const people = await this.sqlitePrisma.person.findMany();
-    
-    for (const person of people) {
-      await this.mariadbPrisma.person.upsert({
-        where: { id: person.id },
-        update: person,
-        create: person
-      });
-    }
-    
-    console.log(`✅ Migrated ${people.length} people`);
-  }
-
-  private async migrateFaces() {
-    console.log('📝 Migrating faces...');
-    
-    let offset = 0;
-    let totalMigrated = 0;
-
-    while (true) {
-      const faces = await this.sqlitePrisma.face.findMany({
-        skip: offset,
-        take: this.config.batchSize
-      });
-
-      if (faces.length === 0) break;
-
-      for (const face of faces) {
-        await this.mariadbPrisma.face.upsert({
-          where: { id: face.id },
-          update: face,
-          create: face
-        });
-      }
-
-      totalMigrated += faces.length;
-      offset += this.config.batchSize;
-      console.log(`   👤 Migrated ${totalMigrated} faces so far...`);
-    }
-    
-    console.log(`✅ Migrated ${totalMigrated} faces total`);
-  }
+  // Legacy people/faces migration removed
 
   private async migrateJobs() {
     console.log('📝 Migrating job records...');
@@ -309,17 +263,7 @@ class DataMigrator {
       });
     }
 
-    // Migrate face recognition jobs
-    const faceJobs = await this.sqlitePrisma.faceRecognitionJob.findMany();
-    for (const job of faceJobs) {
-      await this.mariadbPrisma.faceRecognitionJob.upsert({
-        where: { id: job.id },
-        update: job,
-        create: job
-      });
-    }
-    
-    const totalJobs = syncJobs.length + blurhashJobs.length + thumbnailJobs.length + faceJobs.length;
+    const totalJobs = syncJobs.length + blurhashJobs.length + thumbnailJobs.length;
     console.log(`✅ Migrated ${totalJobs} job records`);
   }
 }
