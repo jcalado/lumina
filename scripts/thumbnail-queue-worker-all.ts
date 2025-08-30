@@ -5,6 +5,7 @@ import os from 'os'
 import { Worker, QueueEvents } from 'bullmq'
 import { generateThumbnails } from '@/lib/thumbnails'
 import { generateVideoThumbnails } from '@/lib/video-thumbnails'
+import { processBlurhashForPhoto } from '@/lib/blurhash'
 
 function connection() {
   const url = process.env.REDIS_URL || 'redis://localhost:6379'
@@ -73,3 +74,22 @@ videoEvents.on('failed', ({ jobId, failedReason }) => console.error('[videos] fa
 
 console.log(`Thumbnail queue worker (photos=${photoConcurrency}, videos=${videoConcurrency}) started`)
 
+// Blurhash worker
+const blurhashConcurrency = Number(process.env.BLURHASH_CONCURRENCY || defaultCpu)
+const blurhashWorker = new Worker(
+  'blurhash',
+  async (job) => {
+    const data = job.data as { photoId: string; originalPath: string; s3Key: string; filename?: string }
+    return processBlurhashForPhoto(data)
+  },
+  { connection: connection(), concurrency: blurhashConcurrency }
+)
+const blurhashEvents = new QueueEvents('blurhash', { connection: connection() })
+blurhashWorker.on('completed', (job) => console.log(`[blurhash] completed ${job.id}`))
+blurhashWorker.on('failed', (job, err) => console.error(`[blurhash] failed ${job?.id}:`, err))
+blurhashEvents.on('waiting', ({ jobId }) => console.log('[blurhash] waiting', jobId))
+blurhashEvents.on('active', ({ jobId }) => console.log('[blurhash] active', jobId))
+blurhashEvents.on('completed', ({ jobId }) => console.log('[blurhash] completed', jobId))
+blurhashEvents.on('failed', ({ jobId, failedReason }) => console.error('[blurhash] failed', jobId, failedReason))
+
+console.log(`Blurhash worker started (concurrency=${blurhashConcurrency})`)
