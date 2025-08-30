@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scanner } from '@/lib/filesystem';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
-import { generateThumbnails } from '@/lib/thumbnails';
+import { enqueueThumbnailJob } from '@/lib/queues/thumbnailQueue';
 import { getBatchProcessingSize } from '@/lib/settings';
 import { generateUniqueSlug } from '@/lib/slugs';
 import { 
@@ -605,14 +605,14 @@ async function syncAlbumPhotos(
           },
         });
         
-        // Queue thumbnail generation for this photo
-        await generateThumbnails({
+        // Enqueue thumbnail generation for this photo (async)
+        await enqueueThumbnailJob({
           photoId: newPhoto.id,
           originalPath: photoPath,
-          s3Key: s3Key,
-          albumPath: albumPath,
+          s3Key,
+          albumPath,
           filename: photoData.filename,
-        });
+        })
         
         filesUploaded++;
         logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
@@ -811,13 +811,13 @@ async function syncAlbumPhotosConcurrent(
         });
         
         // Queue thumbnail generation for this photo
-        await generateThumbnails({
+        await enqueueThumbnailJob({
           photoId: newPhoto.id,
           originalPath: photoPath,
-          s3Key: s3Key,
-          albumPath: albumPath,
+          s3Key,
+          albumPath,
           filename: photoData.filename,
-        });
+        })
         
         logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
         return { success: true, filename: photoData.filename };

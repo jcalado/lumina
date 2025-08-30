@@ -71,6 +71,10 @@ export default function AdminJobsPage() {
   const [useParallelProcessing, setUseParallelProcessing] = useState(true)
   const [useThumbnailParallelProcessing, setUseThumbnailParallelProcessing] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [thumbQueue, setThumbQueue] = useState<{waiting:number;active:number;completed:number;failed:number;delayed:number;paused:number}|null>(null)
+  const isActiveThumb = (thumbQueue?.active || 0) > 0
+  const isPausedThumb = (thumbQueue?.paused || 0) === 1
+  const isThumbBusy = ((thumbQueue?.waiting || 0) + (thumbQueue?.active || 0)) > 0
 
   useEffect(() => {
     fetchBlurhashJobs()
@@ -78,6 +82,7 @@ export default function AdminJobsPage() {
     fetchVideoThumbnailJobs()
     fetchJobStats()
     fetchThumbnailStats()
+    fetchThumbQueue()
     
     // Poll for job updates every 3 seconds if there's a running job
     const interval = setInterval(() => {
@@ -85,6 +90,7 @@ export default function AdminJobsPage() {
         fetchBlurhashJobs()
         fetchThumbnailJobs()
         fetchVideoThumbnailJobs()
+        fetchThumbQueue()
       }
     }, 3000)
 
@@ -104,6 +110,15 @@ export default function AdminJobsPage() {
       console.error('Error fetching blurhash jobs:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchThumbQueue = async () => {
+    try {
+      const res = await fetch('/api/admin/jobs/thumbnail-queue')
+      if (res.ok) setThumbQueue(await res.json())
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -160,6 +175,13 @@ export default function AdminJobsPage() {
       console.error('Error fetching thumbnail stats:', error)
     }
   }
+
+  // Always poll thumb queue to keep UI in sync (including paused state)
+  useEffect(() => {
+    fetchThumbQueue()
+    const q = setInterval(fetchThumbQueue, 3000)
+    return () => clearInterval(q)
+  }, [])
 
   const handleStartBlurhashJob = async () => {
     setBlurhashJobLoading(true)
@@ -239,12 +261,12 @@ export default function AdminJobsPage() {
   const handleStartThumbnailJob = async () => {
     setThumbnailJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/thumbnails/enqueue-missing", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "start", parallel: useThumbnailParallelProcessing })
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -277,12 +299,12 @@ export default function AdminJobsPage() {
   const handleStopThumbnailJob = async () => {
     setThumbnailJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/thumbnails/pause", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "stop" })
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -311,15 +333,37 @@ export default function AdminJobsPage() {
     }
   }
 
+  const handleResumeThumbnailJob = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      })
+      if (response.ok) {
+        toast({ title: "Resumed", description: "Thumbnail queue resumed" })
+        fetchThumbQueue()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to resume queue")
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to resume queue", variant: "destructive" })
+    } finally {
+      setThumbnailJobLoading(false)
+    }
+  }
+
   const handleReprocessThumbnails = async () => {
     setThumbnailJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/thumbnails/enqueue-reprocess", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "reprocess" })
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -1137,15 +1181,43 @@ export default function AdminJobsPage() {
               {/* Photo Thumbnails Section */}
               <div className="border rounded-lg p-4">
                 <h5 className="font-medium mb-3 text-sm text-muted-foreground">Photo Thumbnails</h5>
+                {thumbQueue && (
+                  <div className="mb-4 grid grid-cols-2 md:grid-cols-6 gap-2 text-center">
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Waiting</div>
+                      <div className="text-lg font-semibold">{thumbQueue.waiting}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Active</div>
+                      <div className="text-lg font-semibold">{thumbQueue.active}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Completed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.completed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Failed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.failed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Delayed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.delayed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Paused</div>
+                      <div className="text-lg font-semibold">{thumbQueue.paused}</div>
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-3 flex-wrap">
                   <Button
                     onClick={handleStartThumbnailJob}
-                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || isActiveThumb || videoThumbnailJob?.status === 'RUNNING' || isPausedThumb}
                     className="flex items-center space-x-2"
                   >
                     <Play className="h-4 w-4" />
                     <span>
-                      {thumbnailJob?.status === 'RUNNING' 
+                      {isActiveThumb 
                         ? 'Processing Photos...' 
                         : thumbnailStats?.photosWithoutThumbnails === 0
                         ? 'Reprocess All Photos'
@@ -1154,7 +1226,7 @@ export default function AdminJobsPage() {
                     </span>
                   </Button>
 
-                  {thumbnailJob?.status === 'RUNNING' && (
+                  {isActiveThumb && (
                     <Button
                       onClick={handleStopThumbnailJob}
                       disabled={thumbnailJobLoading}
@@ -1162,6 +1234,17 @@ export default function AdminJobsPage() {
                     >
                       <Pause className="h-4 w-4" />
                       <span>Stop Photos</span>
+                    </Button>
+                  )}
+
+                  {isPausedThumb && (
+                    <Button
+                      onClick={handleResumeThumbnailJob}
+                      disabled={thumbnailJobLoading}
+                      className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Play className="h-4 w-4" />
+                      <span>Resume Photos</span>
                     </Button>
                   )}
 
