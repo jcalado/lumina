@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recomputePersonPrototypes } from '@/lib/prototypes';
 
 interface Params {
   id: string;
@@ -39,6 +40,9 @@ export async function POST(
         personId: personId,
       },
     });
+
+    // Recompute prototypes (best-effort)
+    try { await recomputePersonPrototypes(personId); } catch (e) {}
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recomputePersonPrototypes } from '@/lib/prototypes';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +42,9 @@ export async function POST(request: NextRequest) {
 
       return { movedFaces: updateFaces.count, deletedPersons: deletePersons.count };
     });
+
+    // Recompute prototypes for the merged target (best-effort)
+    try { await recomputePersonPrototypes(targetId); } catch (e) {}
 
     return NextResponse.json({
       success: true,

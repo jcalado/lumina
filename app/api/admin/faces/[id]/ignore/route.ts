@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recomputePersonPrototypes } from '@/lib/prototypes';
 
 interface Params {
   id: string;
@@ -27,7 +28,7 @@ export async function POST(
         personId: null, // Ensure it's unassigned if ignored
       },
     });
-
+    try { if (face.personId) await recomputePersonPrototypes(face.personId); } catch (e) {}
     return NextResponse.json({ success: true, message: 'Face ignored successfully' });
   } catch (error) {
     console.error('Error ignoring face:', error);

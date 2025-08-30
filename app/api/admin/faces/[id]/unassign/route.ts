@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recomputePersonPrototypes } from '@/lib/prototypes';
 
 interface Params {
   id: string;
@@ -30,7 +31,8 @@ export async function POST(
         personId: null,
       },
     });
-
+    // Recompute prototypes for the affected person
+    try { await recomputePersonPrototypes(face.personId!); } catch (e) {}
     return NextResponse.json({ success: true, message: 'Face unassigned successfully' });
   } catch (error) {
     console.error('Error unassigning face:', error);

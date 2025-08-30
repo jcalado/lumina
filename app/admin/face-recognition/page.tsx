@@ -1484,7 +1484,7 @@ export default function FaceRecognitionAdminPage() {
                           className="flex items-center gap-2"
                         >
                           <Grid3X3 className="h-4 w-4" />
-                          {processingUnassigned ? 'Processing…' : `Group ${unassignedFaces.length} Unassigned`}
+                          {processingUnassigned ? 'Processing…' : `Group ${unassignedPagination?.total ?? unassignedFaces.length} Unassigned`}
                         </Button>
                       )}
                     </div>
@@ -2019,7 +2019,7 @@ export default function FaceRecognitionAdminPage() {
           >
             {assigneePersonId ? (assigningToPerson ? 'Assigning...' : `Assign to ${people.find(p => p.id === assigneePersonId)?.name ?? 'person'}`) : (creatingPerson ? 'Creating...' : `Create Person`)}
           </Button>
-          <Button variant="ghost" onClick={() => { setAssigneePersonId(null); setPersonQuery(''); setAssigneeResults([]); }}>
+          <Button variant="ghost" onClick={() => { setAssigneePersonId(null); setPersonQuery(''); setAssigneeResults([]); setSelectedFaces(new Set()) }}>
             Cancel
           </Button>
         </div>

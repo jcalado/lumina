@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recomputePersonPrototypes } from '@/lib/prototypes';
 
 // POST: Create person from selected faces
 export async function POST(request: NextRequest) {
@@ -77,6 +78,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Best-effort recompute of prototypes for this new person
+    try { await recomputePersonPrototypes(personId); } catch (e) {}
 
     return NextResponse.json({
       id: personId,

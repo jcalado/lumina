@@ -171,7 +171,8 @@ model Person {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   faces     Face[]
-  centroidEmbedding String? @db.Text // Cached centroid (average) embedding for this person
+  centroidEmbedding String? @db.Text // Cached centroid (average) embedding for this person (legacy)
+  prototypes PersonPrototype[]
 
   // Performance optimizations
   @@index([confirmed]) // For filtering confirmed/unconfirmed people
@@ -187,8 +188,8 @@ model Face {
   personId     String?
   boundingBox  String  @db.Text // JSON: {x, y, width, height} coordinates for LARGE thumbnail
   confidence   Float   // Detection confidence (0.0 - 1.0)
-  embedding    String? @db.Text // Face encoding for recognition (JSON array)
-  hasEmbedding Boolean @default(false) // Efficiently indexable flag for embedding existence
+  embedding    String? @db.Text // Face encoding for recognition (JSON array) (legacy)
+  hasEmbedding Boolean @default(false) // Efficiently indexable flag for embedding existence (legacy)
   verified     Boolean @default(false) // Admin verified this face belongs to this person
   ignored      Boolean @default(false) // New field: true if face should be ignored
   createdAt    DateTime @default(now())
@@ -213,6 +214,21 @@ model Face {
   @@index([ignored], name: "idx_face_not_ignored")
 
   @@map("faces")
+}
+
+// Person prototypes for pgvector-first matching (k≈3 per person typically)
+model PersonPrototype {
+  id        String  @id @default(cuid())
+  personId  String
+  person    Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  // pgvector(512) is not natively supported by Prisma; we’ll operate via raw SQL
+  embedding_vec Unsupported("vector(512)")
+  weight    Float? @default(1.0)
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([personId])
+  @@map("person_prototypes")
 }
 
 model FaceRecognitionJob {

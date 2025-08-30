@@ -1,6 +1,7 @@
 import {
   prisma
 } from '@/lib/prisma';
+import { normalizeVector, toPgvectorLiteral } from '@/lib/vector-utils';
 import {
   S3Client,
   GetObjectCommand
@@ -426,7 +427,7 @@ export async function saveFaceDetections(
         personId = match.personId;
       }
     }
-    await prisma.face.create({
+    const created = await prisma.face.create({
       data: {
         photoId,
         personId,
@@ -435,7 +436,23 @@ export async function saveFaceDetections(
         embedding: JSON.stringify(face.embedding),
         hasEmbedding: face.embedding.length > 0
       },
+      select: { id: true }
     });
+
+    // Populate pgvector column if available
+    if (face.embedding && face.embedding.length > 0) {
+      try {
+        const vec = normalizeVector(face.embedding.map((n: any) => Number(n)));
+        const lit = toPgvectorLiteral(vec);
+        await prisma.$executeRawUnsafe(
+          `UPDATE faces SET embedding_vec = $1::vector WHERE id = $2`,
+          lit,
+          created.id,
+        );
+      } catch (e) {
+        // ignore if pgvector not available or update fails
+      }
+    }
   }
 }
 
