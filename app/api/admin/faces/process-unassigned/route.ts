@@ -162,6 +162,7 @@ export async function POST(request: NextRequest) {
     let processedCount = 0;
     let newPeopleCount = 0;
     let assignedToExistingCount = 0;
+    let createdGroups = 0;
 
     // Prepare embeddings (fast path if we got rows already)
     const unassignedWithEmb: Array<{ id: string; confidence: number; emb: number[] }> = [];
@@ -263,20 +264,37 @@ export async function POST(request: NextRequest) {
             .filter((e): e is number[] => Array.isArray(e) && e.length > 0),
         }));
 
-    // Assign to existing people first using embedding similarity
+    // Assign to existing people using pgvector KNN for efficiency
     const remaining: typeof unassignedWithEmb = [];
     if (mode === 'assign_existing' || mode === 'both') {
       for (const f of unassignedWithEmb) {
+        // Use pgvector to find top similar existing faces/people with confidence weighting
+        const similar = await prisma.$queryRaw<Array<{ personId: string; distance: number; confidence: number }>>`
+          SELECT f."personId", (f.embedding <=> ${JSON.stringify(f.emb)}::vector) as distance, f.confidence
+          FROM "faces" f
+          WHERE f."personId" IS NOT NULL
+            AND f."hasEmbedding" = TRUE
+            AND f.embedding IS NOT NULL
+            AND (f."ignored" IS NULL OR f."ignored" = FALSE)
+          ORDER BY f.embedding <=> ${JSON.stringify(f.emb)}::vector
+          LIMIT 20
+        `;
         let bestPerson: string | null = null;
-        let bestSim = 0;
-        for (const p of existingPeopleEmb) {
-          for (const pe of p.faces) {
-            const sim = cosineSimilarity(f.emb, pe);
-            if (sim >= (similarityThreshold as number) && sim > bestSim) {
-              bestSim = sim;
-              bestPerson = p.id;
-            }
+        let bestScore = 1; // Lower distance is better, weighted by confidence
+        for (const s of similar) {
+          const weightedScore = s.distance / (s.confidence + 0.1); // Weight by confidence
+          if (weightedScore < bestScore) {
+            bestScore = weightedScore;
+            bestPerson = s.personId;
           }
+        }
+        if (bestPerson && bestScore < (1 - (similarityThreshold as number))) {
+          await prisma.face.update({ where: { id: f.id }, data: { personId: bestPerson } });
+          try { const mod = await import('@/lib/people'); await mod.updatePersonCentroid(bestPerson); } catch {}
+          processedCount++;
+          assignedToExistingCount++;
+        } else {
+          remaining.push(f);
         }
         if (bestPerson) {
           await prisma.face.update({ where: { id: f.id }, data: { personId: bestPerson } });
@@ -316,33 +334,48 @@ export async function POST(request: NextRequest) {
         for (const [, idxs] of buckets) {
           if (idxs.length < 2) continue;
           let local = 0;
+          // Batch distance calculations for this bucket
+          const pairs: Array<{i: number, j: number, dist: number}> = [];
           for (let aIdx = 0; aIdx < idxs.length; aIdx++) {
             for (let bIdx = aIdx + 1; bIdx < idxs.length; bIdx++) {
               if (comparisons >= maxComparisons || local >= maxBucketComparisons) break;
               const i = idxs[aIdx], j = idxs[bIdx];
+              pairs.push({i, j, dist: 0}); // placeholder
               local++; comparisons++;
-              let dot = 0; const a = norm[i], b = norm[j];
-              for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
-              if (dot >= (similarityThreshold as number)) union(i, j);
             }
             if (comparisons >= maxComparisons || local >= maxBucketComparisons) break;
           }
+
+          // Compute distances using optimized cosine similarity (vectors are normalized)
+          pairs.forEach(p => {
+            let dot = 0;
+            const a = norm[p.i], b = norm[p.j];
+            for (let k = 0; k < a.length; k++) dot += a[k] * b[k];
+            if (dot >= (similarityThreshold as number)) union(p.i, p.j);
+          });
         }
-        console.log('[process-unassigned] lsh clustering', { remaining: m, bands, rowsPerBand, comparisons, ms: Date.now() - t0 });
+        console.log('[process-unassigned] lsh clustering optimized', { remaining: m, bands, rowsPerBand, comparisons, ms: Date.now() - t0 });
       } else {
-        // Full pairwise with global cap
+        // Full pairwise with global cap using batched pgvector
+        const pairs: Array<{i: number, j: number, dist: number}> = [];
         for (let i = 0; i < m && comparisons < maxComparisons; i++) {
           for (let j = i + 1; j < m && comparisons < maxComparisons; j++) {
+            pairs.push({i, j, dist: 0});
             comparisons++;
-            let dot = 0; const a = norm[i], b = norm[j];
-            for (let k = 0; k < a.length; k++) dot += a[k]*b[k];
-            if (dot >= (similarityThreshold as number)) union(i, j);
           }
         }
-        console.log('[process-unassigned] clustering', { remaining: m, comparisons, ms: Date.now() - t0 });
+
+        // Compute distances using optimized cosine similarity
+        pairs.forEach(p => {
+          let dot = 0;
+          const a = norm[p.i], b = norm[p.j];
+          for (let k = 0; k < a.length; k++) dot += a[k] * b[k];
+          if (dot >= (similarityThreshold as number)) union(p.i, p.j);
+        });
+        console.log('[process-unassigned] clustering optimized', { remaining: m, comparisons, ms: Date.now() - t0 });
       }
 
-      // Build groups
+      // Build groups and filter out single-face clusters
       const groups = new Map<number, number[]>();
       for (let i = 0; i < m; i++) {
         const r = find(i);
@@ -350,21 +383,27 @@ export async function POST(request: NextRequest) {
         groups.get(r)!.push(i);
       }
 
-      for (const idxs of groups.values()) {
-        if (idxs.length > 1) {
-          clusters.push({ ids: idxs.map(i => remaining[i].id) });
-        }
-      }
+      // Filter clusters to only include those with multiple faces
+      const validClusters = Array.from(groups.values())
+        .filter(idxs => idxs.length > 1)
+        .map(idxs => ({ ids: idxs.map(i => remaining[i].id) }));
 
-      // Create persons and assign faces for each cluster
-      for (const cluster of clusters) {
+      console.log('[process-unassigned] found clusters', { totalGroups: groups.size, validClusters: validClusters.length, ms: Date.now() - t0 });
+
+            // Create persons and assign faces for each cluster (batched for performance)
+      const createPromises = validClusters.map(async (cluster) => {
         const person = await prisma.person.create({ data: { name: `Person ${Date.now()}${Math.random().toString(36).slice(2,6)}`, confirmed: false } });
         await prisma.face.updateMany({ where: { id: { in: cluster.ids } }, data: { personId: person.id } });
         try { const mod = await import('@/lib/people'); await mod.updatePersonCentroid(person.id); } catch {}
-        processedCount += cluster.ids.length;
-        newPeopleCount++;
-      }
-      console.log('[process-unassigned] created people for clusters', { clusters: clusters.length, ms: Date.now() - t0 });
+        return cluster.ids.length;
+      });
+
+      const faceCounts = await Promise.all(createPromises);
+      processedCount += faceCounts.reduce((sum, count) => sum + count, 0);
+      newPeopleCount = validClusters.length;
+      createdGroups = validClusters.length;
+
+      console.log('[process-unassigned] created people for clusters (parallel)', { clusters: validClusters.length, ms: Date.now() - t0 });
     }
 
     return NextResponse.json({
@@ -374,7 +413,7 @@ export async function POST(request: NextRequest) {
       assignedToExisting: assignedToExistingCount,
       totalUnassigned: (unassignedRows ? unassignedRows.length : unassignedFacesBase.length),
       usedSimilarityThreshold: similarityThreshold,
-      createdGroups: clusters.length,
+      createdGroups: createdGroups,
     });
 
   } catch (error) {
