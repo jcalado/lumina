@@ -19,6 +19,7 @@ interface VideoThumbnailJobData {
   s3Key: string;
   albumPath: string;
   filename: string;
+  reprocess?: boolean;
 }
 
 // Function to extract thumbnail from video using ffmpeg
@@ -52,12 +53,27 @@ async function extractVideoFrame(videoPath: string, outputPath: string, timeOffs
 
 // Direct video thumbnail generation function
 export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): Promise<{ thumbnailsCreated: number }> {
-  const { videoId, originalPath, s3Key, albumPath, filename } = jobData;
+  const { videoId, originalPath, s3Key, albumPath, filename, reprocess } = jobData;
   
   try {
     console.log(`Processing video thumbnails for: ${filename}`);
     
     const s3Service = new S3Service();
+
+    // If reprocessing, delete existing video thumbnails first
+    if (reprocess) {
+      try {
+        const existing = await prisma.videoThumbnail.findMany({ where: { videoId } })
+        for (const t of existing) {
+          try { await s3Service.deleteObject(t.s3Key) } catch { /* ignore */ }
+        }
+        if (existing.length > 0) {
+          await prisma.videoThumbnail.deleteMany({ where: { videoId } })
+        }
+      } catch (e) {
+        console.warn('Failed to cleanup old video thumbnails', e)
+      }
+    }
     const tempDir = os.tmpdir();
     const tempVideoPath = path.join(tempDir, `temp_video_${videoId}_${Date.now()}_${filename}`);
     const tempFramePath = path.join(tempDir, `temp_frame_${videoId}_${Date.now()}.jpg`);

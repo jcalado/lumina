@@ -144,21 +144,7 @@ model BlurhashJob {
   @@map("blurhash_jobs")
 }
 
-model ThumbnailJob {
-  id                String    @id @default(cuid())
-  status            JobStatus @default(PENDING)
-  progress          Int       @default(0)
-  totalPhotos       Int       @default(0)
-  processedPhotos   Int       @default(0)
-  thumbnailsCreated Int       @default(0)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  errors            String?   @db.Text // JSON string for error details
-  logs              String?   @db.Text // JSON array of detailed log entries
-  createdAt         DateTime  @default(now())
-
-  @@map("thumbnail_jobs")
-}
+// ThumbnailJob removed (migrated to BullMQ queues)
 
 model SiteSettings {
   id        String   @id @default(cuid())

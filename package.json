@@ -29,7 +29,8 @@
     
     "worker:thumbnails:queue": "tsx scripts/thumbnail-queue-worker.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
-    "worker:video-thumbnails": "tsx scripts/video-thumbnail-worker.ts"
+    "worker:video-thumbnails": "tsx scripts/video-thumbnail-worker.ts",
+    "worker:video-thumbnails:queue": "tsx scripts/video-thumbnail-queue-worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",

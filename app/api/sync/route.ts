@@ -976,20 +976,19 @@ async function syncAlbumVideosConcurrent(
           },
         });
         
-        // Generate video thumbnails
+        // Enqueue video thumbnail generation
         try {
-          const { generateVideoThumbnails } = await import('@/lib/video-thumbnails');
-          await generateVideoThumbnails({
+          const { enqueueVideoThumbnailJob } = await import('@/lib/queues/videoThumbnailQueue');
+          await enqueueVideoThumbnailJob({
             videoId: newVideo.id,
             originalPath: videoPath,
-            s3Key: s3Key,
-            albumPath: albumPath,
+            s3Key,
+            albumPath,
             filename: videoData.filename,
-          });
-          logger?.('info', `Generated thumbnails for video: ${videoData.filename}`);
+          })
+          logger?.('info', `Enqueued thumbnails for video: ${videoData.filename}`);
         } catch (thumbnailError) {
-          logger?.('warn', `Failed to generate thumbnails for video ${videoData.filename}: ${thumbnailError instanceof Error ? thumbnailError.message : String(thumbnailError)}`);
-          // Don't fail the entire sync if thumbnail generation fails
+          logger?.('warn', `Failed to enqueue thumbnails for video ${videoData.filename}: ${thumbnailError instanceof Error ? thumbnailError.message : String(thumbnailError)}`);
         }
         
         logger?.('info', `Successfully uploaded and processed: ${videoData.filename}`);
