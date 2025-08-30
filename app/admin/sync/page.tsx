@@ -435,11 +435,15 @@ export default function SyncPage() {
   const startSync = async () => {
     setIsSyncing(true)
     try {
-      const response = await fetch('/api/sync', { method: 'POST' })
+      // If the filesystem panel is visible and user has a selection, send only selected paths
+      const useSelective = fsAlbums.length > 0 && selectedPaths.size > 0
+      const body = useSelective ? JSON.stringify({ paths: Array.from(selectedPaths) }) : undefined
+      const headers = useSelective ? { 'Content-Type': 'application/json' } : undefined
+      const response = await fetch('/api/sync', { method: 'POST', ...(headers ? { headers } : {}), ...(body ? { body } : {}) })
       if (response.ok) {
         toast({
           title: "Sync Started",
-          description: "Photo sync has been initiated"
+          description: useSelective ? `Photo sync started for ${selectedPaths.size} album(s)` : "Photo sync has been initiated"
         })
         fetchData()
       }
