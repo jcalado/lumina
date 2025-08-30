@@ -10,9 +10,9 @@ import { randomUUID } from 'crypto';
 
 async function fetchPersonFaceVecs(personId: string): Promise<Array<{ id: string; vec: number[] }>> {
   const rows = await prisma.$queryRaw<Array<{ id: string; v: string }>>`
-    SELECT id, embedding_vec::text AS v
+    SELECT id, embedding AS v
     FROM faces
-    WHERE "personId" = ${personId} AND embedding_vec IS NOT NULL AND ignored = false
+    WHERE "personId" = ${personId} AND embedding IS NOT NULL AND ignored = false
     ORDER BY confidence DESC
     LIMIT 200
   `;
@@ -70,11 +70,11 @@ async function recomputeForPerson(personId: string) {
 
 async function main() {
   const people = await prisma.person.findMany({ select: { id: true } });
-  let done = 0;
-  for (const p of people) {
-    await recomputeForPerson(p.id);
-    done++;
-    if (done % 50 === 0) console.log(`Prototypes recomputed for ${done}/${people.length}`);
+  const batchSize = 10; // Process 10 people at a time
+  for (let i = 0; i < people.length; i += batchSize) {
+    const batch = people.slice(i, i + batchSize);
+    await Promise.all(batch.map(p => recomputeForPerson(p.id)));
+    console.log(`Prototypes recomputed for ${Math.min(i + batchSize, people.length)}/${people.length}`);
   }
   console.log('Prototypes recompute complete');
 }

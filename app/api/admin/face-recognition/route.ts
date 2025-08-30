@@ -364,7 +364,7 @@ async function consolidatePersons(similarityThreshold: number, jobState: FaceRec
 }
 
 // Function to group unassigned faces into people
-async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceRecognitionJobState): Promise<{
+async function groupUnassignedFaces(similarityThreshold: number, confidenceThreshold: number, jobState: FaceRecognitionJobState): Promise<{
   newPeopleCreated: number;
   facesGrouped: number;
   groups: Array<{ personId: string; faceCount: number; }>;
@@ -381,7 +381,7 @@ async function groupUnassignedFaces(similarityThreshold: number, jobState: FaceR
   }>>`
   SELECT id, embedding, "boundingBox", confidence, "photoId" 
   FROM "faces" 
-  WHERE "personId" IS NULL AND "hasEmbedding" = true
+  WHERE "personId" IS NULL AND "hasEmbedding" = true AND confidence >= ${confidenceThreshold}
   ORDER BY confidence DESC
   `;
   
@@ -1150,7 +1150,7 @@ async function processJob(jobId: string, selectedAlbumIds?: string[] | null) {
         await updateJobInDatabase(jobId, jobState);
         
         try {
-          const groupingResult = await groupUnassignedFaces(settings.similarityThreshold, jobState);
+          const groupingResult = await groupUnassignedFaces(settings.similarityThreshold, settings.confidenceThreshold, jobState);
           jobState.logs.push(`Face grouping completed: ${groupingResult.newPeopleCreated} new people created from ${groupingResult.facesGrouped} faces`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';

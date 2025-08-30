@@ -159,7 +159,6 @@ export default function FaceRecognitionAdminPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<any>(null);
-  const [currentJob, setCurrentJob] = useState<any>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set());
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -394,18 +393,6 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
-  const loadCurrentJob = async (jobId: string) => {
-    try {
-      const response = await fetch(`/api/admin/face-recognition?jobId=${jobId}`);
-      if (response.ok) {
-        const jobData = await response.json();
-        setCurrentJob(jobData);
-      }
-    } catch (error) {
-      console.error('Failed to load current job:', error);
-    }
-  };
-
   const loadStatus = async () => {
     try {
       const response = await fetch('/api/admin/face-recognition');
@@ -418,18 +405,6 @@ export default function FaceRecognitionAdminPage() {
         }
         setStatus(data);
         setLastJobStatus(data.status);
-
-        // If there are running jobs, fetch the current job details
-        if (data.activeJobs > 0 && data.jobs && data.jobs.length > 0) {
-          const runningJob = data.jobs.find((job: any) => job.status === 'RUNNING');
-          if (runningJob) {
-            await loadCurrentJob(runningJob.id);
-          } else {
-            setCurrentJob(null);
-          }
-        } else {
-          setCurrentJob(null);
-        }
       }
     } catch (error) {
       console.error('Failed to load status:', error);
@@ -668,23 +643,15 @@ export default function FaceRecognitionAdminPage() {
     }
 
     try {
-      const faceIds = Array.from(selectedFaces);
-      const faceIdsParam = faceIds.join(',');
-      const response = await fetch(`/api/admin/people/dummy/similar-faces?faceIds=${faceIdsParam}&threshold=${similarFilterThreshold}`);
+      const faceId = Array.from(selectedFaces)[0];
+      const response = await fetch(`/api/admin/faces/${faceId}/similar?threshold=${similarFilterThreshold}&limit=100`);
       if (response.ok) {
         const data = await response.json();
-
-        // Get the selected faces from current unassigned faces to include them in the display
-        const selectedFacesData = (originalUnassignedFaces || []).filter(face => selectedFaces.has(face.id));
-
-        // Combine similar faces with selected faces (avoiding duplicates)
         const similarFaceIds = new Set(data.similarFaces.map((f: any) => f.id));
-        const combinedFaces = [
-          ...data.similarFaces,
-          ...selectedFacesData.filter(face => !similarFaceIds.has(face.id))
-        ];
-
-        setUnassignedFaces(combinedFaces);
+        const filteredFaces = originalUnassignedFaces?.filter(face =>
+          similarFaceIds.has(face.id) || selectedFaces.has(face.id)
+        ) || [];
+        setUnassignedFaces(filteredFaces);
         setShowingSimilar(true);
       } else {
         toast({
@@ -702,10 +669,9 @@ export default function FaceRecognitionAdminPage() {
     }
   };
 
-  const clearSimilarFilter = async () => {
+  const clearSimilarFilter = () => {
+    setUnassignedFaces(originalUnassignedFaces || []);
     setShowingSimilar(false);
-    // Reload the current page of unassigned faces
-    await loadUnassignedFaces();
   };
 
   const createPersonFromFaces = async () => {
@@ -986,33 +952,6 @@ export default function FaceRecognitionAdminPage() {
   const processUnassignedFaces = async () => {
     try {
       setProcessingUnassigned(true);
-
-      // Adaptive parameter optimization based on current dataset size
-      const peopleCount = people.length;
-      const unassignedCount = unassignedFaces.length;
-
-      // Optimize parameters based on dataset characteristics
-      let optimizedLimit = Math.max(50, Math.min(Number(groupingLimit) || 500, 2000));
-      let optimizedMaxComparisons = Math.max(1000, Math.min(Number(groupingMaxComparisons) || 50000, 500000));
-      let optimizedPreCluster = !!groupingPreCluster;
-
-      // Adaptive optimizations
-      if (peopleCount > 100) {
-        // With many existing persons, reduce batch size and increase pre-clustering
-        optimizedLimit = Math.min(optimizedLimit, 300);
-        optimizedPreCluster = true;
-      } else if (peopleCount < 10) {
-        // With few persons, can process larger batches
-        optimizedLimit = Math.min(optimizedLimit, 800);
-        optimizedMaxComparisons = Math.min(optimizedMaxComparisons, 150000);
-      }
-
-      if (unassignedCount > 1000) {
-        // Large unassigned pool - prioritize speed over accuracy
-        optimizedLimit = Math.min(optimizedLimit, 200);
-        optimizedPreCluster = true;
-      }
-
       const response = await fetch('/api/admin/faces/process-unassigned', {
         method: 'POST',
         headers: {
@@ -1021,10 +960,10 @@ export default function FaceRecognitionAdminPage() {
         body: JSON.stringify({
           similarityThreshold,
           mode: processMode,
-          limit: optimizedLimit,
+          limit: Math.max(50, Math.min(Number(groupingLimit) || 500, 2000)),
           randomize: !!groupingRandomize,
-          maxComparisons: optimizedMaxComparisons,
-          preCluster: optimizedPreCluster,
+          maxComparisons: Math.max(1000, Math.min(Number(groupingMaxComparisons) || 50000, 500000)),
+          preCluster: !!groupingPreCluster,
         }),
       });
 
@@ -1097,7 +1036,6 @@ export default function FaceRecognitionAdminPage() {
             settings={settings}
             status={status}
             lastJobStatus={lastJobStatus}
-            currentJob={currentJob}
           />
 
           <ProcessingControls

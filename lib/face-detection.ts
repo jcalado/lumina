@@ -39,6 +39,21 @@ export interface ProcessPhotoResult {
   error?: string;
 }
 
+/**
+ * Calibrate confidence score to be more meaningful for face recognition
+ * InsightFace confidence scores can be quite high, this function adjusts them
+ * to be more representative of actual face recognition quality
+ */
+export function calibrateConfidenceScore(rawConfidence: number): number {
+  // InsightFace typically returns very high confidence scores (>0.9) for detected faces
+  // We calibrate this to a more meaningful scale for face recognition
+  if (rawConfidence >= 0.95) return Math.min(rawConfidence * 1.1, 1.0); // Boost very high confidence
+  if (rawConfidence >= 0.85) return rawConfidence * 0.95; // Slight boost for good confidence
+  if (rawConfidence >= 0.7) return rawConfidence * 0.9; // Moderate reduction
+  if (rawConfidence >= 0.5) return rawConfidence * 0.8; // Significant reduction
+  return rawConfidence * 0.7; // Heavy reduction for low confidence
+}
+
 export async function detectFacesInPhotoBatch(
   photos: Array<{ photoId: string; imageBuffer: Buffer; filename: string }>,
   minConfidence: number = 0.5
@@ -161,7 +176,7 @@ export async function detectFacesInPhotoBatch(
         if (score >= minConfidence) {
           faces.push({
             boundingBox,
-            confidence: score,
+            confidence: calibrateConfidenceScore(score),
             embedding
           });
         }
@@ -260,7 +275,7 @@ export async function detectFacesInPhoto(photoId: string, imageBuffer: Buffer, m
       if (score >= minConfidence) {
         faces.push({
           boundingBox,
-          confidence: score,
+          confidence: calibrateConfidenceScore(score),
           embedding
         });
       }
@@ -438,21 +453,6 @@ export async function saveFaceDetections(
       },
       select: { id: true }
     });
-
-    // Populate pgvector column if available
-    if (face.embedding && face.embedding.length > 0) {
-      try {
-        const vec = normalizeVector(face.embedding.map((n: any) => Number(n)));
-        const lit = toPgvectorLiteral(vec);
-        await prisma.$executeRawUnsafe(
-          `UPDATE faces SET embedding_vec = $1::vector WHERE id = $2`,
-          lit,
-          created.id,
-        );
-      } catch (e) {
-        // ignore if pgvector not available or update fails
-      }
-    }
   }
 }
 

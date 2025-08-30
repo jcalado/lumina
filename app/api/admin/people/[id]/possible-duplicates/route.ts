@@ -42,8 +42,8 @@ export async function GET(
     // Try pgvector path: use centroid of target person's vectors as query
     try {
       const vecRows = await prisma.$queryRaw<Array<{ v: string }>>`
-        SELECT embedding_vec::text AS v FROM faces
-        WHERE "personId" = ${personId} AND embedding_vec IS NOT NULL AND ignored = false
+        SELECT embedding AS v FROM faces
+        WHERE "personId" = ${personId} AND embedding IS NOT NULL AND ignored = false
         ORDER BY confidence DESC
         LIMIT 50
       `;
@@ -56,11 +56,11 @@ export async function GET(
           WITH ranked AS (
             SELECT p.id, p.name, p.confirmed,
                    f.id AS face_id,
-                   f.embedding_vec <=> ${lit}::vector AS dist,
+                   f.embedding::vector <=> ${lit}::vector AS dist,
                    COUNT(*) OVER (PARTITION BY p.id) AS face_count,
-                   ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY f.embedding_vec <=> ${lit}::vector ASC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY f.embedding::vector <=> ${lit}::vector ASC) AS rn
             FROM people p
-            JOIN faces f ON f."personId" = p.id AND f."hasEmbedding" = true AND f.ignored = false AND f.embedding_vec IS NOT NULL
+            JOIN faces f ON f."personId" = p.id AND f."hasEmbedding" = true AND f.ignored = false AND f.embedding IS NOT NULL
             WHERE p.id <> ${personId}
           )
           SELECT id, name, confirmed, face_count as "faceCount", face_id as "previewFaceId", dist

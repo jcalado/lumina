@@ -8,9 +8,9 @@ function l2(a: number[], b: number[]): number {
 
 export async function recomputePersonPrototypes(personId: string): Promise<void> {
   const rows = await prisma.$queryRaw<Array<{ id: string; v: string }>>`
-    SELECT id, embedding_vec::text AS v
+    SELECT id, embedding AS v
     FROM faces
-    WHERE "personId" = ${personId} AND embedding_vec IS NOT NULL AND ignored = false
+    WHERE "personId" = ${personId} AND embedding IS NOT NULL AND ignored = false
     ORDER BY confidence DESC
     LIMIT 200
   `;

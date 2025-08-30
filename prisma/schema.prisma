@@ -213,6 +213,12 @@ model Face {
   @@index([hasEmbedding], name: "idx_face_has_embedding") // Efficient boolean index for embedding existence
   @@index([ignored], name: "idx_face_not_ignored")
 
+  // CRITICAL: Add vector index for pgvector performance
+  // Note: This requires manual SQL execution after migration:
+  // CREATE INDEX CONCURRENTLY idx_face_embedding_vector ON faces USING ivfflat (embedding::vector(512)) WITH (lists = 100);
+  // Or for better performance with large datasets:
+  // CREATE INDEX CONCURRENTLY idx_face_embedding_hnsw ON faces USING hnsw (embedding::vector(512) vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+
   @@map("faces")
 }
 

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculateSimilarity } from '@/lib/face-detection';
+import { toPgvectorLiteral } from '@/lib/vector-utils';
 
 interface Body {
   faceIds?: string[];
   threshold?: number;
+}
+
+async function getConfidenceThresholdFromSettings(): Promise<number> {
+  const rows = await prisma.siteSettings.findMany({
+    where: { key: 'faceRecognitionConfidenceThreshold' },
+  });
+  const val = rows[0]?.value;
+  const num = parseFloat(val || '0.5');
+  return isNaN(num) ? 0.5 : num;
 }
 
 export async function POST(request: NextRequest) {
@@ -30,9 +39,12 @@ export async function POST(request: NextRequest) {
       where: { id: { in: ids }, embedding: { not: null } },
       select: { id: true, embedding: true }
     });
+
     if (selectedFaces.length === 0) {
       return NextResponse.json({ similarFaces: [] });
     }
+
+    // Parse selected embeddings
     const selectedEmbeddings = selectedFaces
       .map(f => {
         try { return JSON.parse(f.embedding as any) as number[] } catch { return null }
@@ -43,45 +55,81 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ similarFaces: [] });
     }
 
-    // Fetch all unassigned faces with embeddings
-    const unassigned = await prisma.face.findMany({
-      where: { personId: null, embedding: { not: null } },
-      include: {
-        photo: {
-          select: { id: true, filename: true, thumbnails: true }
-        }
-      }
+    // Convert similarity threshold to distance threshold
+    const maxDistance = 1 - threshold!;
+
+    // Get confidence threshold from settings
+    const confidenceThreshold = await getConfidenceThresholdFromSettings();
+
+    // Use pgvector to find similar faces efficiently
+    // We'll find faces similar to ANY of the selected faces
+    const similarFaces = await prisma.$queryRaw<Array<{
+      id: string;
+      boundingBox: string;
+      confidence: number;
+      ignored: boolean;
+      photoId: string;
+      photoFilename: string;
+      minDistance: number;
+      thumbnails: any;
+    }>>`
+      SELECT
+        f.id,
+        f."boundingBox",
+        f.confidence,
+        f.ignored,
+        ph.id as "photoId",
+        ph.filename as "photoFilename",
+        MIN(f.embedding::vector <=> ${toPgvectorLiteral(selectedEmbeddings[0])}::vector) as "minDistance",
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', t.id,
+              'photoId', t."photoId",
+              'size', t.size,
+              's3Key', t."s3Key",
+              'width', t.width,
+              'height', t.height
+            )
+          )
+          FROM thumbnails t
+          WHERE t."photoId" = ph.id
+        ) as thumbnails
+      FROM faces f
+      JOIN photos ph ON f."photoId" = ph.id
+      WHERE f."personId" IS NULL
+        AND f.embedding IS NOT NULL
+        AND f.ignored = false
+        AND f.confidence >= ${confidenceThreshold}
+        AND f.id NOT IN (${ids.map(id => `'${id}'`).join(', ')})
+        AND (
+          ${selectedEmbeddings.map((emb, index) =>
+            `(f.embedding::vector <=> ${toPgvectorLiteral(emb)}::vector) <= ${maxDistance}`
+          ).join(' OR ')}
+        )
+      GROUP BY f.id, f."boundingBox", f.confidence, f.ignored, ph.id, ph.filename
+      ORDER BY "minDistance" ASC
+    `;
+
+    // Convert distance back to similarity and format results
+    const formattedResults = similarFaces.map(face => ({
+      id: face.id,
+      boundingBox: JSON.parse(face.boundingBox),
+      confidence: face.confidence,
+      ignored: face.ignored,
+      photo: {
+        id: face.photoId,
+        filename: face.photoFilename,
+        thumbnails: face.thumbnails || [],
+      },
+      similarity: 1 - face.minDistance, // Convert distance back to similarity
+    }));
+
+    return NextResponse.json({
+      similarFaces: formattedResults,
+      usedThreshold: threshold
     });
 
-    const results: any[] = [];
-    for (const f of unassigned) {
-      if (!f.embedding) continue;
-      let max = 0;
-      let emb: number[] | null = null;
-      try { emb = JSON.parse(f.embedding as any) } catch {}
-      if (!emb || emb.length === 0) continue;
-      for (const sel of selectedEmbeddings) {
-        const s = calculateSimilarity(emb, sel);
-        if (s > max) max = s;
-      }
-      if (max >= threshold!) {
-        results.push({
-          id: f.id,
-          boundingBox: JSON.parse(f.boundingBox as any),
-          confidence: f.confidence,
-          ignored: f.ignored,
-          photo: {
-            id: f.photo.id,
-            filename: f.photo.filename,
-            thumbnails: f.photo.thumbnails,
-          },
-          similarity: max,
-        });
-      }
-    }
-
-    results.sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
-    return NextResponse.json({ similarFaces: results, usedThreshold: threshold });
   } catch (error) {
     console.error('Failed to fetch similar faces:', error);
     return NextResponse.json({ error: 'Failed to fetch similar faces' }, { status: 500 });

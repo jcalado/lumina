@@ -14,6 +14,7 @@ async function getFaceRecognitionSettings() {
       key: {
         in: [
           'faceRecognitionSimilarityThreshold',
+          'faceRecognitionConfidenceThreshold',
         ],
       },
     },
@@ -26,6 +27,7 @@ async function getFaceRecognitionSettings() {
 
   return {
     faceRecognitionSimilarityThreshold: parseFloat(settingsMap.faceRecognitionSimilarityThreshold || '0.7'),
+    faceRecognitionConfidenceThreshold: parseFloat(settingsMap.faceRecognitionConfidenceThreshold || '0.5'),
   };
 }
 
@@ -36,81 +38,166 @@ export async function GET(
   try {
     const { id: personId } = await context.params;
     const settings = await getFaceRecognitionSettings();
-    let { faceRecognitionSimilarityThreshold } = settings;
+    let { faceRecognitionSimilarityThreshold, faceRecognitionConfidenceThreshold } = settings;
 
     // Allow optional override via query param: ?threshold=0.6
-    try {
-      const url = new URL(request.url);
-      const qp = url.searchParams.get('threshold');
-      if (qp) {
-        const parsed = parseFloat(qp);
-        if (!Number.isNaN(parsed) && parsed >= 0.0 && parsed <= 1.0) {
-          faceRecognitionSimilarityThreshold = parsed;
-        }
+    const url = new URL(request.url);
+    const thresholdParam = url.searchParams.get('threshold');
+    if (thresholdParam) {
+      const parsed = parseFloat(thresholdParam);
+      if (!Number.isNaN(parsed) && parsed >= 0.0 && parsed <= 1.0) {
+        faceRecognitionSimilarityThreshold = parsed;
       }
-    } catch (e) {
-      // ignore malformed url/param - fall back to settings
     }
 
-    // Try pgvector path first: build query vector as normalized mean of this person's face vectors
+    // Check for faceIds parameter to allow searching by multiple faces instead of person
+    const faceIdsParam = url.searchParams.get('faceIds');
+    let targetFaceIds: string[] = [];
+    let isMultiFaceMode = false;
+
+    if (faceIdsParam) {
+      targetFaceIds = faceIdsParam.split(',').map(id => id.trim()).filter(id => id.length > 0);
+      isMultiFaceMode = targetFaceIds.length > 0;
+    }
+
+    // If no faceIds provided, require valid personId
+    if (!isMultiFaceMode && (!personId || personId === 'dummy')) {
+      return NextResponse.json(
+        { error: 'Either personId or faceIds parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    // Try pgvector path first: build query vector as normalized mean of target face vectors
     try {
-      const personVecRows = await prisma.$queryRaw<Array<{ v: string }>>`
-        SELECT embedding_vec::text AS v FROM faces
-        WHERE "personId" = ${personId} AND embedding_vec IS NOT NULL AND ignored = false
-        ORDER BY confidence DESC
-        LIMIT 50
-      `;
-      const personVectors = personVecRows
-        .map((r) => parsePgvectorText(r.v))
-        .filter((v) => v.length > 0);
-      if (personVectors.length > 0) {
-        const q = normalizeVector(meanVector(personVectors));
+      let targetVectors: number[][];
+
+      if (isMultiFaceMode) {
+        // Fetch embeddings for the specified face IDs
+        const faceVecRows = await prisma.$queryRaw<Array<{ v: string }>>`
+          SELECT embedding AS v FROM faces
+          WHERE id = ANY(${targetFaceIds}) AND embedding IS NOT NULL AND ignored = false AND confidence >= ${faceRecognitionConfidenceThreshold}
+        `;
+        targetVectors = faceVecRows
+          .map((r) => parsePgvectorText(r.v))
+          .filter((v) => v.length > 0);
+      } else {
+        // Original logic: fetch embeddings for person's faces
+        const personVecRows = await prisma.$queryRaw<Array<{ v: string }>>`
+          SELECT embedding AS v FROM faces
+          WHERE "personId" = ${personId} AND embedding IS NOT NULL AND ignored = false AND confidence >= ${faceRecognitionConfidenceThreshold}
+          ORDER BY confidence DESC
+          LIMIT 50
+        `;
+        targetVectors = personVecRows
+          .map((r) => parsePgvectorText(r.v))
+          .filter((v) => v.length > 0);
+      }
+
+      if (targetVectors.length > 0) {
+        const q = normalizeVector(meanVector(targetVectors));
         const lit = toPgvectorLiteral(q);
+
+        // Build exclusion condition for multi-face mode
+        let exclusionCondition = '';
+        if (isMultiFaceMode) {
+          exclusionCondition = `AND f.id != ANY(${targetFaceIds})`;
+        }
+
         // KNN over unassigned faces
         const rows = await prisma.$queryRaw<Array<{ id: string; similarity: number }>>`
-          SELECT f.id, 1 - (f.embedding_vec <=> ${lit}::vector) AS similarity
+          SELECT f.id, 1 - (f.embedding::vector <=> ${lit}::vector) AS similarity
           FROM faces f
-          WHERE f."personId" IS NULL AND f."hasEmbedding" = true AND f.ignored = false AND f.embedding_vec IS NOT NULL
-          ORDER BY f.embedding_vec <=> ${lit}::vector
+          WHERE f."personId" IS NULL AND f."hasEmbedding" = true AND f.ignored = false AND f.embedding IS NOT NULL AND f.confidence >= ${faceRecognitionConfidenceThreshold}
+          ${exclusionCondition}
+          ORDER BY f.embedding::vector <=> ${lit}::vector
           LIMIT 300
         `;
+
         const filtered = rows.filter((r) => typeof r.similarity === 'number' && r.similarity >= faceRecognitionSimilarityThreshold);
         const ids = filtered.map((r) => r.id);
-        if (ids.length === 0) return NextResponse.json({ similarFaces: [], usedThreshold: faceRecognitionSimilarityThreshold });
+
+        if (ids.length === 0) {
+          return NextResponse.json({
+            similarFaces: [],
+            usedThreshold: faceRecognitionSimilarityThreshold,
+            usedConfidenceThreshold: faceRecognitionConfidenceThreshold,
+            mode: isMultiFaceMode ? 'multi-face' : 'person'
+          });
+        }
+
         const faces = await prisma.face.findMany({
           where: { id: { in: ids } },
           include: { photo: { select: { id: true, filename: true, thumbnails: true } } },
         });
+
         const simMap = new Map(filtered.map((r) => [r.id, r.similarity] as const));
         const result = faces
           .map((f) => ({ ...f, boundingBox: JSON.parse(f.boundingBox), similarity: simMap.get(f.id) || 0 }))
           .sort((a, b) => (b as any).similarity - (a as any).similarity);
-        return NextResponse.json({ similarFaces: result, usedThreshold: faceRecognitionSimilarityThreshold });
+
+        return NextResponse.json({
+          similarFaces: result,
+          usedThreshold: faceRecognitionSimilarityThreshold,
+          usedConfidenceThreshold: faceRecognitionConfidenceThreshold,
+          mode: isMultiFaceMode ? 'multi-face' : 'person'
+        });
       }
     } catch (e) {
       // Fallback to legacy path below
     }
 
     // Legacy fallback using JSON embeddings & app-side similarity
-    // Get all faces for the given person
-    const personFaces = await prisma.face.findMany({
-      where: {
-        personId: personId,
-        embedding: { not: null },
-      },
-      select: {
-        id: true,
-        embedding: true,
-      },
-    });
+    let targetEmbeddings: number[][];
 
-    if (personFaces.length === 0) {
-      return NextResponse.json({ similarFaces: [] });
+    if (isMultiFaceMode) {
+      // Fetch embeddings for specified face IDs
+      const targetFaces = await prisma.face.findMany({
+        where: {
+          id: { in: targetFaceIds },
+          embedding: { not: null },
+          ignored: false,
+          confidence: { gte: faceRecognitionConfidenceThreshold }
+        },
+        select: {
+          id: true,
+          embedding: true,
+        },
+      });
+      targetEmbeddings = targetFaces.map(face => JSON.parse(face.embedding as string));
+    } else {
+      // Original logic: fetch embeddings for person's faces
+      const personFaces = await prisma.face.findMany({
+        where: {
+          personId: personId,
+          embedding: { not: null },
+          ignored: false,
+          confidence: { gte: faceRecognitionConfidenceThreshold }
+        },
+        select: {
+          id: true,
+          embedding: true,
+        },
+      });
+      targetEmbeddings = personFaces.map(face => JSON.parse(face.embedding as string));
     }
 
-    const personEmbeddings = personFaces.map(face => JSON.parse(face.embedding as string));
+    if (targetEmbeddings.length === 0) {
+      return NextResponse.json({
+        similarFaces: [],
+        usedThreshold: faceRecognitionSimilarityThreshold,
+        usedConfidenceThreshold: faceRecognitionConfidenceThreshold,
+        mode: isMultiFaceMode ? 'multi-face' : 'person'
+      });
+    }
+
     const unassignedFaces = await prisma.face.findMany({
-      where: { personId: null, embedding: { not: null } },
+      where: {
+        personId: null,
+        embedding: { not: null },
+        confidence: { gte: faceRecognitionConfidenceThreshold },
+        ...(isMultiFaceMode && { id: { notIn: targetFaceIds } }) // Exclude target faces in multi-face mode
+      },
       include: { photo: { select: { id: true, filename: true, thumbnails: true } } },
     });
 
@@ -119,8 +206,8 @@ export async function GET(
       if (!unassignedFace.embedding) continue;
       const unassignedEmbedding = JSON.parse(unassignedFace.embedding as string);
       let maxSimilarity = 0;
-      for (const personEmbedding of personEmbeddings) {
-        const similarity = calculateSimilarity(unassignedEmbedding, personEmbedding);
+      for (const targetEmbedding of targetEmbeddings) {
+        const similarity = calculateSimilarity(unassignedEmbedding, targetEmbedding);
         if (similarity > maxSimilarity) maxSimilarity = similarity;
       }
       if (maxSimilarity >= faceRecognitionSimilarityThreshold) {
@@ -131,8 +218,14 @@ export async function GET(
         });
       }
     }
+
     similarFaces.sort((a, b) => b.similarity - a.similarity);
-    return NextResponse.json({ similarFaces, usedThreshold: faceRecognitionSimilarityThreshold });
+    return NextResponse.json({
+      similarFaces,
+      usedThreshold: faceRecognitionSimilarityThreshold,
+      usedConfidenceThreshold: faceRecognitionConfidenceThreshold,
+      mode: isMultiFaceMode ? 'multi-face' : 'person'
+    });
   } catch (error) {
     console.error('Error finding similar faces:', error);
     return NextResponse.json(
