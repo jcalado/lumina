@@ -15,8 +15,17 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    let selectedPaths: string[] | null = null;
+    try {
+      const body = await request.json().catch(() => null);
+      if (body && Array.isArray(body.paths)) {
+        selectedPaths = body.paths.filter((p: any) => typeof p === 'string');
+      }
+    } catch {
+      // ignore body parse errors; default to full sync
+    }
     // Create a new sync job
     const syncJob = await prisma.syncJob.create({
       data: {
@@ -26,7 +35,7 @@ export async function POST() {
     });
 
     // Start the sync process (in a real app, this would be a background job)
-    syncPhotos(syncJob.id).catch(console.error);
+    syncPhotos(syncJob.id, selectedPaths).catch(console.error);
 
     return NextResponse.json({
       jobId: syncJob.id,
@@ -41,7 +50,7 @@ export async function POST() {
   }
 }
 
-async function syncPhotos(jobId: string) {
+async function syncPhotos(jobId: string, selectedPaths: string[] | null) {
   const logs: Array<{timestamp: string, level: string, message: string, details?: any}> = [];
   
   const addLog = (level: 'info' | 'warn' | 'error', message: string, details?: any) => {
@@ -72,8 +81,11 @@ async function syncPhotos(jobId: string) {
       data: { status: 'RUNNING', progress: 0 },
     });
 
-    // Get all albums from filesystem
-    const albumPaths = await scanner.getAllAlbums();
+    // Get all albums from filesystem (then optionally filter by selectedPaths)
+    const discoveredPaths = await scanner.getAllAlbums();
+    const albumPaths = Array.isArray(selectedPaths) && selectedPaths.length > 0
+      ? discoveredPaths.filter(p => selectedPaths!.includes(p))
+      : discoveredPaths;
     
     // Get all albums from database
     const databaseAlbums = await prisma.album.findMany({

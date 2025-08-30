@@ -237,6 +237,30 @@ export class FileSystemScanner {
     await scanRecursive('');
     return albums.sort();
   }
+
+  // Lightweight media counter for a directory (recursive)
+  async countMedia(relativePath: string): Promise<{ photos: number; videos: number; total: number }> {
+    const fullPath = path.join(this.rootPath, relativePath);
+    let photos = 0;
+    let videos = 0;
+    try {
+      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          if (isImageFile(entry.name)) photos++;
+          else if (isVideoFile(entry.name)) videos++;
+        } else if (entry.isDirectory()) {
+          const subPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+          const sub = await this.countMedia(subPath);
+          photos += sub.photos;
+          videos += sub.videos;
+        }
+      }
+    } catch (error) {
+      console.error(`Error counting media in ${fullPath}:`, error);
+    }
+    return { photos, videos, total: photos + videos };
+  }
 }
 
 export const scanner = new FileSystemScanner(process.env.PHOTOS_ROOT_PATH || '');

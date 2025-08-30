@@ -126,6 +126,9 @@ export default function SyncPage() {
   const [restoreProgress, setRestoreProgress] = useState<Map<string, { current: number; total: number; message: string }>>(new Map())
   const [reconciliationData, setReconciliationData] = useState<ReconciliationData | null>(null)
   const [createAlbumModal, setCreateAlbumModal] = useState<{ isOpen: boolean; parentPath?: string; parentName?: string }>({ isOpen: false })
+  const [fsAlbums, setFsAlbums] = useState<Array<{ path: string; name: string; counts?: { photos: number; videos: number; total: number } }>>([])
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set())
+  const [selectionInitialized, setSelectionInitialized] = useState(false)
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false)
   const [uploadModal, setUploadModal] = useState<{ isOpen: boolean; albumId: string; albumName: string }>({ isOpen: false, albumId: '', albumName: '' })
   const [isUpdatingFingerprints, setIsUpdatingFingerprints] = useState(false)
@@ -384,6 +387,38 @@ export default function SyncPage() {
       if (reconciliationRes.ok) {
         const reconciliationData = await reconciliationRes.json()
         setReconciliationData(reconciliationData)
+
+        // If filesystem has more albums than database, load full filesystem album list
+        if (
+          reconciliationData?.stats?.total?.filesystem > reconciliationData?.stats?.total?.database
+        ) {
+          const fsRes = await fetch('/api/admin/albums/filesystem')
+          if (fsRes.ok) {
+            const fsData = await fsRes.json()
+            const list: any[] = Array.isArray(fsData.albums) ? fsData.albums : []
+            // Support both string[] and object[] shapes
+            const normalized = list.map((it: any) => typeof it === 'string' 
+              ? { path: it, name: it.split('/').pop() || it }
+              : { path: it.path, name: it.name, counts: it.counts })
+            setFsAlbums(normalized)
+            // Initialize selection once to all; thereafter preserve user choices and only add new items
+            if (!selectionInitialized) {
+              setSelectedPaths(new Set(normalized.map(n => n.path)))
+              setSelectionInitialized(true)
+            } else {
+              setSelectedPaths(prev => {
+                const next = new Set(prev)
+                for (const n of normalized) {
+                  if (!next.has(n.path)) next.add(n.path)
+                }
+                return next
+              })
+            }
+          }
+        } else {
+          setFsAlbums([])
+          // Do not reset selection to preserve user choices
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -418,6 +453,84 @@ export default function SyncPage() {
       setIsSyncing(false)
     }
   }
+
+  const startSelectiveSync = async () => {
+    setIsSyncing(true)
+    try {
+      const paths = Array.from(selectedPaths)
+      const response = await fetch('/api/sync', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths })
+      })
+      if (response.ok) {
+        toast({ title: 'Sync Started', description: `${paths.length} album(s) selected` })
+        fetchData()
+      } else {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to start selective sync')
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to start selective sync', variant: 'destructive' })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  // Build filesystem album tree nodes from path strings
+  type FsNode = { path: string; name: string; depth: number; children: FsNode[]; counts?: { photos: number; videos: number; total: number } }
+  const buildFsTree = (items: Array<{ path: string; name: string; counts?: { photos: number; videos: number; total: number } }>): FsNode[] => {
+    const map = new Map<string, FsNode>()
+    const roots: FsNode[] = []
+    for (const item of items) {
+      const p = item.path
+      const parts = p.split('/').filter(Boolean)
+      let cur = ''
+      parts.forEach((part, idx) => {
+        cur = cur ? `${cur}/${part}` : part
+        if (!map.has(cur)) {
+          map.set(cur, { path: cur, name: part, depth: idx, children: [] })
+        }
+      })
+      // attach counts and canonical name on the leaf
+      const leaf = map.get(p)
+      if (leaf) {
+        leaf.name = item.name
+        if (item.counts) leaf.counts = item.counts
+      }
+    }
+    // link parents
+    map.forEach((node, key) => {
+      if (node.depth === 0) {
+        roots.push(node)
+      } else {
+        const parentKey = key.slice(0, key.lastIndexOf('/'))
+        const parent = map.get(parentKey)
+        if (parent) parent.children.push(node)
+      }
+    })
+    // sort
+    const sortNodes = (nodes: FsNode[]) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name))
+      nodes.forEach(n => sortNodes(n.children))
+    }
+    sortNodes(roots)
+    return roots
+  }
+
+  const [fsExpanded, setFsExpanded] = useState<Set<string>>(new Set())
+  const toggleFsNode = (path: string) => setFsExpanded(prev => {
+    const s = new Set(prev); s.has(path) ? s.delete(path) : s.add(path); return s
+  })
+  const toggleSelected = (path: string, checked: boolean) => {
+    setSelectedPaths(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(path); else next.delete(path)
+      return next
+    })
+  }
+  const selectAll = () => setSelectedPaths(new Set(fsAlbums.map(a => a.path)))
+  const deselectAll = () => setSelectedPaths(new Set())
 
   const updateFingerprints = async () => {
     setIsUpdatingFingerprints(true)
@@ -577,7 +690,7 @@ export default function SyncPage() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 2000) // Poll every 2 seconds
+    const interval = setInterval(fetchData, 5000) // Poll every 5 seconds to reduce churn
     return () => clearInterval(interval)
   }, [])
 
@@ -780,51 +893,171 @@ export default function SyncPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Filesystem Albums</p>
-                <p className="font-medium">{reconciliationData.stats.total.filesystem}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Filesystem Albums */}
+              <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-full bg-blue-100 text-blue-600">
+                      <Folder className="h-4 w-4" />
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Filesystem Albums</span>
+                  </div>
+                </div>
+                <div className="mt-2 text-2xl font-bold">{reconciliationData.stats.total.filesystem}</div>
               </div>
-              <div>
-                <p className="text-muted-foreground">Database Albums</p>
-                <p className="font-medium">{reconciliationData.stats.total.database}</p>
+
+              {/* Database Albums */}
+              <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-full bg-violet-100 text-violet-600">
+                      <Database className="h-4 w-4" />
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Database Albums</span>
+                  </div>
+                </div>
+                <div className="mt-2 text-2xl font-bold">{reconciliationData.stats.total.database}</div>
               </div>
-              <div>
-                <p className="text-muted-foreground">Orphaned Albums</p>
-                <p className={`font-medium ${reconciliationData.stats.total.orphaned > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+
+              {/* Orphaned Albums */}
+              <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`p-2 rounded-full ${reconciliationData.stats.total.orphaned > 0 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                      <AlertTriangle className="h-4 w-4" />
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Orphaned Albums</span>
+                  </div>
+                </div>
+                <div className={`mt-2 text-2xl font-bold ${reconciliationData.stats.total.orphaned > 0 ? 'text-orange-600' : ''}`}>
                   {reconciliationData.stats.total.orphaned}
-                </p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground">New Albums</p>
-                <p className={`font-medium ${reconciliationData.stats.total.new > 0 ? 'text-blue-600' : 'text-green-600'}`}>
+
+              {/* New Albums */}
+              <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`p-2 rounded-full ${reconciliationData.stats.total.new > 0 ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>
+                      <FolderPlus className="h-4 w-4" />
+                    </span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">New Albums</span>
+                  </div>
+                </div>
+                <div className={`mt-2 text-2xl font-bold ${reconciliationData.stats.total.new > 0 ? 'text-blue-600' : ''}`}>
                   {reconciliationData.stats.total.new}
-                </p>
+                </div>
               </div>
             </div>
 
-            {reconciliationData.summary.hasIssues && (
-              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                <div className="text-sm font-medium text-yellow-900 mb-2">Actions that will be taken during sync:</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                  {reconciliationData.stats.orphaned.cleanupNeeded > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Trash2 className="h-3 w-3 text-red-600" />
-                      <span>Clean up {reconciliationData.stats.orphaned.cleanupNeeded} empty albums</span>
+            {reconciliationData.summary.hasIssues && (() => {
+              const cleanup = reconciliationData.stats.orphaned.cleanupNeeded
+              const recoverable = reconciliationData.stats.orphaned.recoverable
+              const needsReview = reconciliationData.stats.orphaned.needsReview
+              const newAlbums = reconciliationData.stats.total.new
+              const hasActions = cleanup > 0 || recoverable > 0 || needsReview > 0 || newAlbums > 0
+              if (!hasActions) return null
+              return (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="text-sm font-medium text-yellow-900 mb-2">Actions that will be taken during sync:</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    {newAlbums > 0 && (
+                      <div className="flex items-center gap-2">
+                        <FolderPlus className="h-3 w-3 text-green-600" />
+                        <span>Create {newAlbums} new album{newAlbums === 1 ? '' : 's'} from filesystem</span>
+                      </div>
+                    )}
+                    {cleanup > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="h-3 w-3 text-red-600" />
+                        <span>Clean up {cleanup} empty album{cleanup === 1 ? '' : 's'}</span>
+                      </div>
+                    )}
+                    {recoverable > 0 && (
+                      <div className="flex items-center gap-2">
+                        <CloudDownload className="h-3 w-3 text-blue-600" />
+                        <span>Mark {recoverable} album{recoverable === 1 ? '' : 's'} as recoverable</span>
+                      </div>
+                    )}
+                    {needsReview > 0 && (
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-3 w-3 text-orange-600" />
+                        <span>{needsReview} album{needsReview === 1 ? '' : 's'} need manual review</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Selective Sync when filesystem has more albums */}
+            {reconciliationData.stats.total.filesystem > reconciliationData.stats.total.database && fsAlbums.length > 0 && (
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-medium">Select Albums to Sync</div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={selectAll}>Select All</Button>
+                    <Button variant="outline" size="sm" onClick={deselectAll}>Deselect All</Button>
+                    <Button size="sm" onClick={startSelectiveSync} disabled={isSyncing || selectedPaths.size === 0}>
+                      <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                      {isSyncing ? 'Starting...' : `Sync Selected (${selectedPaths.size})`}
+                    </Button>
+                  </div>
+                </div>
+                <div className="border rounded-md divide-y">
+                  {buildFsTree(fsAlbums).map(node => (
+                    <div key={node.path}>
+                      {/* render row */}
+                      <div className="flex items-center gap-2 py-2 px-3 hover:bg-gray-50" style={{ paddingLeft: `${12 + node.depth * 24}px` }}>
+                        {/* expand */}
+                        {node.children.length > 0 ? (
+                          <button onClick={() => toggleFsNode(node.path)} className="p-1 hover:bg-gray-200 rounded">
+                            {fsExpanded.has(node.path) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
+                        ) : (
+                          <div className="w-6" />
+                        )}
+                        {/* checkbox */}
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={selectedPaths.has(node.path)}
+                          onChange={(e) => toggleSelected(node.path, e.target.checked)}
+                        />
+                        {/* icon and label */}
+                        {node.children.length > 0 ? (
+                          fsExpanded.has(node.path) ? <FolderOpen className="h-4 w-4 text-blue-500" /> : <Folder className="h-4 w-4 text-blue-500" />
+                        ) : <div className="w-4" />}
+                        <span className="text-sm">{node.name}</span>
+                        {node.counts && (
+                          <span className="ml-2 text-xs text-muted-foreground">{node.counts.total} media (P {node.counts.photos} / V {node.counts.videos})</span>
+                        )}
+                        <span className="ml-2 text-xs text-muted-foreground">/{node.path}</span>
+                      </div>
+                      {/* children */}
+                      {node.children.length > 0 && fsExpanded.has(node.path) && (
+                        <div>
+                          {node.children.map(child => (
+                            <div key={child.path} className="flex items-center gap-2 py-2 px-3 hover:bg-gray-50" style={{ paddingLeft: `${12 + child.depth * 24}px` }}>
+                              {child.children.length > 0 ? (
+                                <button onClick={() => toggleFsNode(child.path)} className="p-1 hover:bg-gray-200 rounded">
+                                  {fsExpanded.has(child.path) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </button>
+                              ) : <div className="w-6" />}
+                              <input type="checkbox" className="h-4 w-4" checked={selectedPaths.has(child.path)} onChange={(e) => toggleSelected(child.path, e.target.checked)} />
+                              {child.children.length > 0 ? (fsExpanded.has(child.path) ? <FolderOpen className="h-4 w-4 text-blue-500" /> : <Folder className="h-4 w-4 text-blue-500" />) : <div className="w-4" />}
+                              <span className="text-sm">{child.name}</span>
+                              {child.counts && (
+                                <span className="ml-2 text-xs text-muted-foreground">{child.counts.total} media (P {child.counts.photos} / V {child.counts.videos})</span>
+                              )}
+                              <span className="ml-2 text-xs text-muted-foreground">/{child.path}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {reconciliationData.stats.orphaned.recoverable > 0 && (
-                    <div className="flex items-center gap-2">
-                      <CloudDownload className="h-3 w-3 text-blue-600" />
-                      <span>Mark {reconciliationData.stats.orphaned.recoverable} albums as recoverable</span>
-                    </div>
-                  )}
-                  {reconciliationData.stats.orphaned.needsReview > 0 && (
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-3 w-3 text-orange-600" />
-                      <span>{reconciliationData.stats.orphaned.needsReview} albums need manual review</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
