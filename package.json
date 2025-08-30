@@ -26,11 +26,8 @@
     "setup:prisma-prod": "bash scripts/setup-prisma-production.sh",
     "setup:database-url": "bash scripts/construct-database-url.sh",
     "debug:env": "bash scripts/debug-env.sh",
-    
-    "worker:thumbnails:queue": "tsx scripts/thumbnail-queue-worker.ts",
-    "worker:blurhash": "tsx scripts/blurhash-worker.ts",
-    "worker:video-thumbnails": "tsx scripts/video-thumbnail-worker.ts",
-    "worker:video-thumbnails:queue": "tsx scripts/video-thumbnail-queue-worker.ts"
+    "worker:thumbnails:all": "tsx scripts/thumbnail-queue-worker-all.ts",
+    "worker:blurhash": "tsx scripts/blurhash-worker.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",
