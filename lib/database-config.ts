@@ -1,5 +1,5 @@
 /**
- * Database Configuration Utility
+ * Database Configuration Utility (PostgreSQL only)
  * 
  * This utility constructs the DATABASE_URL from individual environment variables
  * for better security and maintainability in production environments.
@@ -39,58 +39,37 @@ interface DatabaseConfig {
   database: string;
   username: string;
   password: string;
-  charset?: string;
-  collation?: string;
 }
 
 /**
- * Constructs a MariaDB/MySQL connection URL from environment variables
+ * Constructs a PostgreSQL connection URL from environment variables
  */
 export function buildDatabaseUrl(): string {
-  // First, check if DATABASE_URL is already set and is a valid DB URL
-  if (process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('mysql://') || process.env.DATABASE_URL.startsWith('postgresql://'))) {
+  // First, check if DATABASE_URL is already set and is a valid PostgreSQL URL
+  if (process.env.DATABASE_URL?.startsWith('postgresql://')) {
     return process.env.DATABASE_URL;
   }
 
-  // If DATABASE_URL is set but it's SQLite and we have DB_* variables, prefer DB_* variables
+  // Check for required DB variables
   const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
   
   if (hasDbVariables) {
-    console.log('🔧 Building DATABASE_URL from DB_* environment variables...');
+    console.log('🔧 Building PostgreSQL DATABASE_URL from DB_* environment variables...');
     
-    const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') || process.env.DB_TYPE === 'postgres';
     const config: DatabaseConfig = {
-      host: process.env.DB_HOST || 'localhost',
-      port: process.env.DB_PORT || (isPostgres ? '5432' : '3306'),
+      host: process.env.DB_HOST!,
+      port: process.env.DB_PORT || '5432',
       database: process.env.DB_DATABASE || 'lumina_production',
       username: process.env.DB_USERNAME!,
-      password: process.env.DB_PASSWORD!,
-      charset: process.env.DB_CHARSET || 'utf8mb4',
-      collation: process.env.DB_COLLATION || 'utf8mb4_unicode_ci'
+      password: process.env.DB_PASSWORD!
     };
 
-    // Construct the URL
-    const protocol = isPostgres ? 'postgresql' : 'mysql';
-    let url = `${protocol}://${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@${config.host}:${config.port}/${config.database}`;
-
-    // Add query parameters for charset and collation (for MySQL)
-    if (!isPostgres) {
-        const params = new URLSearchParams();
-        if (config.charset) {
-          params.append('charset', config.charset);
-        }
-        if (config.collation) {
-          params.append('collation', config.collation);
-        }
-
-        if (params.toString()) {
-          url += `?${params.toString()}`;
-        }
-    }
+    // Construct the PostgreSQL URL
+    const url = `postgresql://${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@${config.host}:${config.port}/${config.database}`;
 
     // Set the constructed URL as environment variable
     process.env.DATABASE_URL = url;
-    console.log(`✅ Constructed DATABASE_URL: ${protocol}://${config.username}:***@${config.host}:${config.port}/${config.database}`);
+    console.log(`✅ Constructed DATABASE_URL: postgresql://${config.username}:***@${config.host}:${config.port}/${config.database}`);
     
     return url;
   }
@@ -107,14 +86,11 @@ export function buildDatabaseUrl(): string {
  * Gets the database configuration for display purposes (without password)
  */
 export function getDatabaseConfig(): Omit<DatabaseConfig, 'password'> & { hasPassword: boolean } {
-  const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') || process.env.DB_TYPE === 'postgres';
   return {
     host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || (isPostgres ? '5432' : '3306'),
+    port: process.env.DB_PORT || '5432',
     database: process.env.DB_DATABASE || 'lumina_production',
     username: process.env.DB_USERNAME || 'lumina_user',
-    charset: process.env.DB_CHARSET || 'utf8mb4',
-    collation: process.env.DB_COLLATION || 'utf8mb4_unicode_ci',
     hasPassword: !!process.env.DB_PASSWORD
   };
 }
@@ -126,10 +102,10 @@ export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-  const hasDbUrl = process.env.DATABASE_URL && (process.env.DATABASE_URL.startsWith('mysql://') || process.env.DATABASE_URL.startsWith('postgresql://'));
+  const hasDbUrl = process.env.DATABASE_URL?.startsWith('postgresql://');
 
   if (!hasDbUrl && !hasDbVariables) {
-    errors.push('Either DATABASE_URL (mysql:// or postgresql://) or DB_* variables (DB_HOST, DB_USERNAME, DB_PASSWORD) must be set');
+    errors.push('Either DATABASE_URL (postgresql://) or DB_* variables (DB_HOST, DB_USERNAME, DB_PASSWORD) must be set');
   }
 
   if (process.env.DB_PORT && isNaN(parseInt(process.env.DB_PORT))) {
@@ -142,11 +118,10 @@ export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   };
 }
 
-// Set the DATABASE_URL if not already set or if it's SQLite but we have DB_* variables
+// Set the DATABASE_URL if not already set
 const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-const isSqliteUrl = process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:');
 
-if (!process.env.DATABASE_URL || (isSqliteUrl && hasDbVariables)) {
+if (!process.env.DATABASE_URL && hasDbVariables) {
   try {
     buildDatabaseUrl();
   } catch (error) {
