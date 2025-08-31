@@ -31,10 +31,15 @@ const nextConfig = {
   },
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
-    // Add other required env vars
     REDIS_URL: process.env.REDIS_URL,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+    S3_ENDPOINT: process.env.S3_ENDPOINT,
+    S3_BUCKET: process.env.S3_BUCKET,
+    S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
+    S3_SECRET_KEY: process.env.S3_SECRET_KEY,
+    S3_REGION: process.env.S3_REGION,
+    PHOTOS_ROOT_PATH: process.env.PHOTOS_ROOT_PATH,
   },
 };
 
