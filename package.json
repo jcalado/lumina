@@ -20,8 +20,6 @@
     "db:migrate-to-mariadb": "tsx scripts/migrate-data.ts",
     "db:migrate:sqlite-to-mariadb": "node scripts/migrate-sqlite-to-mariadb.js",
     "db:migrate:sqlite-to-mariadb:dry-run": "node scripts/migrate-sqlite-to-mariadb.js --dry-run",
-    "db:status": "tsx scripts/db-status.ts",
-    "db:status:prod": "dotenv -e .env.production -- tsx scripts/db-status.ts",
     "setup:production": "bash scripts/setup-production.sh",
     "setup:prisma-prod": "bash scripts/setup-prisma-production.sh",
     "setup:database-url": "bash scripts/construct-database-url.sh",
