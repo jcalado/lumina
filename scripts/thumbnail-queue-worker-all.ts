@@ -1,22 +1,11 @@
 #!/usr/bin/env tsx
 
 import 'dotenv/config'
-import { register } from 'tsconfig-paths'
-import { resolve } from 'path'
-
-// Register tsconfig paths
-register({
-  baseUrl: resolve(__dirname, '..'),
-  paths: {
-    '@/*': ['./*']
-  }
-})
-
 import os from 'os'
 import { Worker, QueueEvents } from 'bullmq'
-import { generateThumbnails } from '@/lib/thumbnails'
-import { generateVideoThumbnails } from '@/lib/video-thumbnails'
-import { processBlurhashForPhoto } from '@/lib/blurhash'
+import { generateThumbnails } from '../lib/thumbnails'
+import { generateVideoThumbnails } from '../lib/video-thumbnails'
+import { processBlurhashForPhoto } from '../lib/blurhash'
 
 function connection() {
   const url = process.env.REDIS_URL || 'redis://localhost:6379'

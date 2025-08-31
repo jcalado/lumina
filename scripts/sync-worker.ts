@@ -1,17 +1,6 @@
 #!/usr/bin/env tsx
 
 import 'dotenv/config'
-import { register } from 'tsconfig-paths'
-import { resolve } from 'path'
-
-// Register tsconfig paths
-register({
-  baseUrl: resolve(__dirname, '..'),
-  paths: {
-    '@/*': ['./*']
-  }
-})
-
 import { Worker } from 'bullmq';
 import { syncPhotos, rebuildFromRemote } from '../lib/sync-logic';
 
