@@ -259,6 +259,43 @@ export default function AdminJobsPage() {
     }
   }
 
+  const handleDeleteAllBlurhashes = async () => {
+    setBlurhashJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/blurhash", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "delete-all" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "All blurhashes have been deleted"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchBlurhashJobs()
+          fetchJobStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to delete blurhashes")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete blurhashes",
+        variant: "destructive"
+      })
+    } finally {
+      setBlurhashJobLoading(false)
+    }
+  }
+
   const handleStartThumbnailJob = async () => {
     setThumbnailJobLoading(true)
     try {
@@ -743,6 +780,42 @@ export default function AdminJobsPage() {
                   {isBlurActive ? 'Processing...' : jobStats?.photosWithoutBlurhash === 0 ? 'Reprocess All Photos' : `Process ${jobStats?.photosWithoutBlurhash || 0} Remaining Photos`}
                 </span>
               </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    disabled={blurhashJobLoading || isBlurActive}
+                    className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete All Blurhashes</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete All Blurhashes</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete all blurhashes? This will:
+                      <br />
+                      • Remove blurhash data from all {jobStats?.totalPhotos || 0} photos
+                      <br />
+                      • Clear blurhash cache for faster loading
+                      <br />
+                      <br />
+                      This operation cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteAllBlurhashes}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete All Blurhashes
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
               {isBlurActive && (
                 <Button

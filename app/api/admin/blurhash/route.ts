@@ -44,6 +44,14 @@ export async function POST(request: NextRequest) {
       await q.clean(0, 1000, 'failed')
       return NextResponse.json({ success: true, message: 'Cleaned completed/failed blurhash jobs' })
     }
+    if (action === 'delete-all') {
+      // Update all photos to remove blurhash data
+      const result = await prisma.photo.updateMany({
+        where: { blurhash: { not: null } },
+        data: { blurhash: null }
+      });
+      return NextResponse.json({ success: true, message: `Deleted blurhashes from ${result.count} photos` })
+    }
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to manage blurhash queue' }, { status: 500 })
