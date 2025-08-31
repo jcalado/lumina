@@ -43,6 +43,7 @@ services:
         DATABASE_URL: ${DATABASE_URL}
         NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
         NEXTAUTH_URL: ${NEXTAUTH_URL}
+    image: lumina-app:latest
     env_file:
       - .env
     ports:
@@ -67,10 +68,7 @@ services:
 
   # Worker service (consolidated)
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runner
+    image: lumina-app:latest
     command: npm run worker:all
     env_file:
       - .env
@@ -81,6 +79,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      app:
+        condition: service_started
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
