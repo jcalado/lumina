@@ -79,20 +79,17 @@ RUN npm run build
 FROM base AS dev
 WORKDIR /app
 
-# Create non-root user for development first
-RUN adduser --system --uid 1001 nextjs
-
 # Install all dependencies for development
-COPY --chown=nextjs:node package.json package-lock.json* ./
+COPY --chown=node:node package.json package-lock.json* ./
 RUN npm ci
 
 # Copy source code including scripts with correct ownership
-COPY --chown=nextjs:node . .
+COPY --chown=node:node . .
 
 # Generate Prisma client for development
 RUN npx prisma generate
 
-USER nextjs
+USER node
 
 EXPOSE 3000
 
@@ -105,37 +102,30 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Create non-root user first
-RUN adduser --system --uid 1001 nextjs
-
-# Create non-root user first
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
 # Copy package files and install production dependencies only
-COPY --chown=nextjs:node package.json package-lock.json* ./
+COPY --chown=node:node package.json package-lock.json* ./
 
-# Switch to nextjs user before installing dependencies
-USER nextjs
+# Switch to node user before installing dependencies
+USER node
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy Prisma generated client and schema (as nextjs user)
-COPY --from=builder --chown=nextjs:node /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:node /app/node_modules/@prisma ./node_modules/@prisma
+# Copy Prisma generated client and schema (as node user)
+COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
 
-# Copy the built application (as nextjs user)
-COPY --from=builder --chown=nextjs:node /app/public ./public
-COPY --from=builder --chown=nextjs:node /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:node /app/.next/static ./.next/static
+# Copy the built application (as node user)
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
-# Copy runtime files needed for workers (as nextjs user)
-COPY --from=builder --chown=nextjs:node /app/scripts ./scripts
-COPY --from=builder --chown=nextjs:node /app/lib ./lib
-COPY --from=builder --chown=nextjs:node /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:node /app/tsconfig.json ./tsconfig.json
-COPY --from=builder --chown=nextjs:node /app/package.json ./package.json
+# Copy runtime files needed for workers (as node user)
+COPY --from=builder --chown=node:node /app/scripts ./scripts
+COPY --from=builder --chown=node:node /app/lib ./lib
+COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
+COPY --from=builder --chown=node:node /app/package.json ./package.json
 
-USER nextjs
+USER node
 
 EXPOSE 3000
 
