@@ -1,0 +1,182 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: lumina_production
+      POSTGRES_USER: lumina_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lumina-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumina_user -d lumina_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for queues and caching
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - lumina-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Main Next.js application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Worker services
+  worker-thumbnails:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: npm run worker:thumbnails:all
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  worker-blurhash:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: npm run worker:blurhash
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  worker-exif:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: npm run worker:exif
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  worker-uploads:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: npm run worker:uploads
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+  worker-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    command: npm run worker:sync
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+
+networks:
+  lumina-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  photos_data:
