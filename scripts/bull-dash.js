@@ -6,12 +6,24 @@ const { BullAdapter } = require('@bull-board/api/bullAdapter');
 const { BullMQAdapter } = require('@bull-board/api/bullMQAdapter');
 const { ExpressAdapter } = require('@bull-board/express');
 
+// Redis connection configuration
+const getRedisConnection = () => {
+  const url = process.env.REDIS_URL || 'redis://redis:6379';
+  const u = new URL(url);
+  return {
+    host: u.hostname,
+    port: Number(u.port || 6379),
+    username: u.username || undefined,
+    password: u.password || undefined,
+  };
+};
+
 const queues = [
-  new BullMQAdapter(new QueueMQ('uploads')),
-  new BullMQAdapter(new QueueMQ('thumbnails')),
-  new BullMQAdapter(new QueueMQ('blurhash')),
-  new BullMQAdapter(new QueueMQ('exif')),
-  new BullMQAdapter(new QueueMQ('sync'))
+  new BullMQAdapter(new QueueMQ('uploads', { connection: getRedisConnection() })),
+  new BullMQAdapter(new QueueMQ('thumbnails', { connection: getRedisConnection() })),
+  new BullMQAdapter(new QueueMQ('blurhash', { connection: getRedisConnection() })),
+  new BullMQAdapter(new QueueMQ('exif', { connection: getRedisConnection() })),
+  new BullMQAdapter(new QueueMQ('sync', { connection: getRedisConnection() }))
 ];
 
 const serverAdapter = new ExpressAdapter();
@@ -29,7 +41,7 @@ app.use('/admin/queues', serverAdapter.getRouter());
 // other configurations of your server
 
 app.listen(3001, () => {
-  console.log('Running on 3001...');
-  console.log('For the UI, open http://localhost:3001/admin/queues');
-  console.log('Make sure Redis is running on port 6379 by default');
+  console.log('Bull Dashboard running on port 3001...');
+  console.log('For the UI, open http://localhost:4568/admin/queues');
+  console.log('Make sure Redis is accessible via REDIS_URL environment variable');
 });

@@ -52,9 +52,79 @@ async function processExifJob(job: any) {
       }
     }
 
-    const exifData = await exifr.parse(fileBuffer);
+    let exifData;
+    try {
+      exifData = await exifr.parse(fileBuffer);
+    } catch (exifError) {
+      console.log(`EXIF parsing failed for photoId: ${photoId}`, exifError);
+      // Update photo with empty EXIF data
+      let metadata;
+      try {
+        metadata = JSON.parse(photo.metadata as string || '{}');
+      } catch (parseError) {
+        console.log(`Failed to parse existing metadata for photoId: ${photoId}, using empty object`);
+        metadata = {};
+      }
+      const updatedMetadata = {
+        ...metadata,
+        exif: null,
+        exifError: exifError instanceof Error ? exifError.message : String(exifError),
+      };
 
-    const metadata = JSON.parse(photo.metadata as string || '{}');
+      await prisma.photo.update({
+        where: { id: photoId },
+        data: {
+          metadata: JSON.stringify(updatedMetadata),
+          takenAt: metadata.takenAt || null,
+        },
+      });
+
+      console.log(`Successfully processed photo with EXIF parsing error for photoId: ${photoId}`);
+      return;
+    }
+
+    if (!exifData) {
+      console.log(`No EXIF data found for photoId: ${photoId}`);
+      // Update photo with empty EXIF data
+      let metadata;
+      try {
+        metadata = JSON.parse(photo.metadata as string || '{}');
+      } catch (parseError) {
+        console.log(`Failed to parse existing metadata for photoId: ${photoId}, using empty object`);
+        metadata = {};
+      }
+      const updatedMetadata = {
+        ...metadata,
+        exif: null,
+      };
+
+      await prisma.photo.update({
+        where: { id: photoId },
+        data: {
+          metadata: JSON.stringify(updatedMetadata),
+          takenAt: metadata.takenAt || null,
+        },
+      });
+
+      console.log(`Successfully processed photo with no EXIF data for photoId: ${photoId}`);
+      return;
+    }
+
+    console.log(`EXIF data extracted for photoId: ${photoId}`);
+    console.log(`- DateTimeOriginal: ${exifData.DateTimeOriginal || 'not found'}`);
+    console.log(`- CreateDate: ${exifData.CreateDate || 'not found'}`);
+    console.log(`- DateTime: ${exifData.DateTime || 'not found'}`);
+    console.log(`- DateTimeDigitized: ${exifData.DateTimeDigitized || 'not found'}`);
+    console.log(`- Camera: ${exifData.Make} ${exifData.Model || ''}`.trim() || 'not found');
+    console.log(`- GPS: ${exifData.latitude && exifData.longitude ? `${exifData.latitude}, ${exifData.longitude}` : 'not found'}`);
+
+    let metadata;
+    try {
+      metadata = JSON.parse(photo.metadata as string || '{}');
+    } catch (parseError) {
+      console.log(`Failed to parse existing metadata for photoId: ${photoId}, using empty object`);
+      metadata = {};
+    }
     const updatedMetadata = {
       ...metadata,
       exif: exifData,
@@ -64,7 +134,7 @@ async function processExifJob(job: any) {
       where: { id: photoId },
       data: {
         metadata: JSON.stringify(updatedMetadata),
-        takenAt: exifData.DateTimeOriginal || exifData.CreateDate || metadata.takenAt || null,
+        takenAt: (exifData.DateTimeOriginal || exifData.CreateDate || exifData.DateTime || exifData.DateTimeDigitized) || metadata.takenAt || null,
       },
     });
 
