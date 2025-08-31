@@ -66,6 +66,7 @@ COPY hooks ./hooks
 COPY contexts ./contexts
 COPY i18n ./i18n
 COPY messages ./messages
+COPY prisma ./prisma
 
 # Copy public assets
 COPY public ./public
