@@ -19,6 +19,12 @@ RUN \
   else echo "Lockfile not found." && exit 1; \
   fi
 
+# Generate Prisma client (separate stage for better caching)
+FROM deps AS prisma-builder
+WORKDIR /app
+COPY prisma/schema.prisma ./prisma/
+RUN npx prisma generate
+
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
@@ -26,19 +32,12 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY package.json package-lock.json* ./
 
-# Copy prisma schema for generation
-COPY prisma/schema.prisma ./prisma/
-
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
 # Copy Prisma generated files from prisma-builder stage
 COPY --from=prisma-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=prisma-builder /app/node_modules/@prisma ./node_modules/@prisma
-FROM deps AS prisma-builder
-WORKDIR /app
-COPY prisma/schema.prisma ./prisma/
-RUN npx prisma generate
 
 # Copy source code in layers for better caching
 COPY tsconfig.json ./
