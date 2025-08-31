@@ -35,9 +35,9 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   }
 
   // During build time, return default settings
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    return defaultSettings
-  }
+  // if (process.env.NEXT_PHASE === 'phase-production-build') {
+  //   return defaultSettings
+  // }
 
   try {
     const settings = await prisma.siteSettings.findMany()
