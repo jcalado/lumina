@@ -22,11 +22,45 @@ RUN \
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
 
-# Generate Prisma client
+# Copy package files first for better caching
+COPY package.json package-lock.json* ./
+
+# Copy prisma schema for generation
+COPY prisma/schema.prisma ./prisma/
+
+# Install all dependencies (including dev dependencies for build)
+RUN npm ci
+
+# Copy Prisma generated files from prisma-builder stage
+COPY --from=prisma-builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=prisma-builder /app/node_modules/@prisma ./node_modules/@prisma
+FROM deps AS prisma-builder
+WORKDIR /app
+COPY prisma/schema.prisma ./prisma/
 RUN npx prisma generate
+
+# Copy source code in layers for better caching
+COPY tsconfig.json ./
+COPY next.config.js ./
+COPY tailwind.config.ts ./
+COPY postcss.config.js ./
+COPY components.json ./
+
+# Copy source directories
+COPY app ./app
+COPY components ./components
+COPY lib ./lib
+COPY scripts ./scripts
+COPY types ./types
+COPY hooks ./hooks
+COPY contexts ./contexts
+COPY i18n ./i18n
+COPY messages ./messages
+
+# Copy public assets
+COPY public ./public
+COPY app-logo.png ./
 
 # Build the application
 RUN npm run build
@@ -67,25 +101,25 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Copy package files and install production dependencies only
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy Prisma generated client and schema
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
 # Copy the built application
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 
-# Copy scripts, lib, and prisma directories for workers
+# Copy runtime files needed for workers
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
