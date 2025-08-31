@@ -1,8 +1,8 @@
 /**
- * Database Configuration Utility (PostgreSQL only)
+ * Database Configuration Utility (PostgreSQL only via DATABASE_URL)
  * 
- * This utility constructs the DATABASE_URL from individual environment variables
- * for better security and maintainability in production environments.
+ * This utility manages PostgreSQL database configuration through the DATABASE_URL
+ * environment variable for better security and simplicity.
  */
 
 import * as dotenv from 'dotenv';
@@ -45,53 +45,46 @@ interface DatabaseConfig {
  * Constructs a PostgreSQL connection URL from environment variables
  */
 export function buildDatabaseUrl(): string {
-  // First, check if DATABASE_URL is already set and is a valid PostgreSQL URL
+  // Check if DATABASE_URL is already set and is a valid PostgreSQL URL
   if (process.env.DATABASE_URL?.startsWith('postgresql://')) {
     return process.env.DATABASE_URL;
   }
 
-  // Check for required DB variables
-  const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-  
-  if (hasDbVariables) {
-    console.log('🔧 Building PostgreSQL DATABASE_URL from DB_* environment variables...');
-    
-    const config: DatabaseConfig = {
-      host: process.env.DB_HOST!,
-      port: process.env.DB_PORT || '5432',
-      database: process.env.DB_DATABASE || 'lumina_production',
-      username: process.env.DB_USERNAME!,
-      password: process.env.DB_PASSWORD!
-    };
-
-    // Construct the PostgreSQL URL
-    const url = `postgresql://${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@${config.host}:${config.port}/${config.database}`;
-
-    // Set the constructed URL as environment variable
-    process.env.DATABASE_URL = url;
-    console.log(`✅ Constructed DATABASE_URL: postgresql://${config.username}:***@${config.host}:${config.port}/${config.database}`);
-    
-    return url;
-  }
-
-  // Fallback: return existing DATABASE_URL or throw error
+  // If DATABASE_URL exists but is not PostgreSQL, return it anyway (for backward compatibility)
   if (process.env.DATABASE_URL) {
     return process.env.DATABASE_URL;
   }
 
-  throw new Error('No valid database configuration found. Set either DATABASE_URL or DB_* environment variables.');
+  throw new Error('DATABASE_URL environment variable must be set with a valid PostgreSQL connection string.');
 }
 
 /**
  * Gets the database configuration for display purposes (without password)
  */
 export function getDatabaseConfig(): Omit<DatabaseConfig, 'password'> & { hasPassword: boolean } {
+  // Parse DATABASE_URL to extract components
+  if (process.env.DATABASE_URL?.startsWith('postgresql://')) {
+    try {
+      const url = new URL(process.env.DATABASE_URL);
+      return {
+        host: url.hostname,
+        port: url.port || '5432',
+        database: url.pathname.slice(1), // Remove leading slash
+        username: url.username,
+        hasPassword: !!url.password
+      };
+    } catch (error) {
+      console.warn('Failed to parse DATABASE_URL:', error);
+    }
+  }
+
+  // Fallback defaults
   return {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || '5432',
-    database: process.env.DB_DATABASE || 'lumina_production',
-    username: process.env.DB_USERNAME || 'lumina_user',
-    hasPassword: !!process.env.DB_PASSWORD
+    host: 'localhost',
+    port: '5432',
+    database: 'lumina_production',
+    username: 'lumina_user',
+    hasPassword: false
   };
 }
 
@@ -101,15 +94,10 @@ export function getDatabaseConfig(): Omit<DatabaseConfig, 'password'> & { hasPas
 export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-  const hasDbUrl = process.env.DATABASE_URL?.startsWith('postgresql://');
-
-  if (!hasDbUrl && !hasDbVariables) {
-    errors.push('Either DATABASE_URL (postgresql://) or DB_* variables (DB_HOST, DB_USERNAME, DB_PASSWORD) must be set');
-  }
-
-  if (process.env.DB_PORT && isNaN(parseInt(process.env.DB_PORT))) {
-    errors.push('DB_PORT must be a valid number');
+  if (!process.env.DATABASE_URL) {
+    errors.push('DATABASE_URL environment variable must be set');
+  } else if (!process.env.DATABASE_URL.startsWith('postgresql://')) {
+    errors.push('DATABASE_URL must be a valid PostgreSQL connection string (starting with postgresql://)');
   }
 
   return {
@@ -118,13 +106,5 @@ export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   };
 }
 
-// Set the DATABASE_URL if not already set
-const hasDbVariables = process.env.DB_HOST && process.env.DB_USERNAME && process.env.DB_PASSWORD;
-
-if (!process.env.DATABASE_URL && hasDbVariables) {
-  try {
-    buildDatabaseUrl();
-  } catch (error) {
-    console.warn('Could not construct DATABASE_URL from environment variables:', error);
-  }
-}
+// Database configuration is now handled entirely through DATABASE_URL
+// No additional initialization needed
