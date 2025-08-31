@@ -118,11 +118,11 @@ async function getPhotoBuffer(originalPath: string, s3Key: string): Promise<{ bu
   
   // Fall back to S3 download
   console.log(`📥 Local copy not available, downloading from S3: ${s3Key}`);
-  const s3Buffer = await downloadFromS3(s3Key);
+  const s3Buffer = await downloadFromS3(s3Key, originalPath);
   return { buffer: s3Buffer, source: 's3' };
 }
 
-async function downloadFromS3(s3Key: string): Promise<Buffer> {
+async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buffer> {
   try {
     // Validate bucket name before making the request
     if (!process.env.S3_BUCKET) {
@@ -157,6 +157,17 @@ async function downloadFromS3(s3Key: string): Promise<Buffer> {
 
     const buffer = Buffer.concat(chunks);
     console.log(`✅ Successfully downloaded ${s3Key} (${buffer.length} bytes)`);
+
+    // Save the file to its proper location
+    const photosRoot = process.env.PHOTOS_ROOT_PATH;
+    if (photosRoot) {
+      const localPath = path.join(photosRoot, originalPath);
+      console.log(`💾 Saving downloaded file to: ${localPath}`);
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(localPath, buffer);
+      console.log(`✅ File saved successfully`);
+    }
+
     return buffer;
   } catch (error) {
     console.error(`❌ Error downloading from S3 (${s3Key}):`, error);

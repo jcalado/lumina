@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { readFile } from 'fs/promises';
 import { isImageFile, isVideoFile, isMediaFile } from './utils';
-import exifr from 'exifr';
 
 export interface VideoMetadata {
   filename: string;
@@ -99,62 +98,10 @@ export class FileSystemScanner {
       const stats = await fs.stat(filePath);
       const filename = path.basename(filePath);
       
-      // Extract EXIF data
-      const exifData = await exifr.parse(filePath, {
-        pick: [
-          'DateTimeOriginal', 'CreateDate', 'ModifyDate',
-          'Make', 'Model', 'LensModel',
-          'ISO', 'FNumber', 'ExposureTime', 'FocalLength',
-          'GPSLatitude', 'GPSLongitude', 'Orientation'
-        ]
-      });
-      
       const metadata: PhotoMetadata = {
         filename,
         size: stats.size,
       };
-      
-      // Extract date taken
-      if (exifData?.DateTimeOriginal) {
-        metadata.takenAt = new Date(exifData.DateTimeOriginal);
-      } else if (exifData?.CreateDate) {
-        metadata.takenAt = new Date(exifData.CreateDate);
-      } else if (exifData?.ModifyDate) {
-        metadata.takenAt = new Date(exifData.ModifyDate);
-      }
-      
-      // Extract camera info
-      if (exifData?.Make && exifData?.Model) {
-        metadata.camera = `${exifData.Make} ${exifData.Model}`;
-      }
-      
-      if (exifData?.LensModel) {
-        metadata.lens = exifData.LensModel;
-      }
-      
-      // Extract orientation
-      if (exifData?.Orientation) {
-        metadata.orientation = exifData.Orientation;
-      }
-      
-      // Extract camera settings
-      metadata.settings = {};
-      if (exifData?.ISO) metadata.settings.iso = exifData.ISO;
-      if (exifData?.FNumber) metadata.settings.aperture = `f/${exifData.FNumber}`;
-      if (exifData?.ExposureTime) {
-        metadata.settings.shutter = exifData.ExposureTime < 1 
-          ? `1/${Math.round(1 / exifData.ExposureTime)}`
-          : `${exifData.ExposureTime}s`;
-      }
-      if (exifData?.FocalLength) metadata.settings.focalLength = `${exifData.FocalLength}mm`;
-      
-      // Extract GPS data
-      if (exifData?.GPSLatitude && exifData?.GPSLongitude) {
-        metadata.gps = {
-          latitude: exifData.GPSLatitude,
-          longitude: exifData.GPSLongitude,
-        };
-      }
       
       return metadata;
     } catch (error) {

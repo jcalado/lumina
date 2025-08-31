@@ -41,44 +41,101 @@ const s3Client = new S3Client({
 
 const S3_BUCKET = process.env.S3_BUCKET || '';
 
-async function getImageBuffer(originalPath: string, s3Key: string): Promise<{ buffer: Buffer, source: 'local' | 's3' }> {
-  // Try local file first
+async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
   try {
-    await fs.access(originalPath);
-    const buffer = await fs.readFile(originalPath);
-    return { buffer, source: 'local' };
-  } catch (error) {
-    // Fall back to S3
-    try {
-      const command = new GetObjectCommand({
-        Bucket: S3_BUCKET,
-        Key: s3Key,
-      });
-      
-      const response = await s3Client.send(command);
-      const chunks: Uint8Array[] = [];
-      
-      if (response.Body) {
-        const stream = response.Body as ReadableStream;
-        const reader = stream.getReader();
-        
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-          }
-        } finally {
-          reader.releaseLock();
-        }
-      }
-      
-      const buffer = Buffer.concat(chunks);
-      return { buffer, source: 's3' };
-    } catch (s3Error) {
-      throw new Error(`Failed to read image from both local and S3: ${error} | ${s3Error}`);
+    const photosRoot = process.env.PHOTOS_ROOT_PATH;
+    if (!photosRoot) {
+      console.log('PHOTOS_ROOT_PATH not configured, skipping local file check');
+      return null;
     }
+
+    let fullPath: string;
+    
+    // Check if originalPath is already absolute
+    if (path.isAbsolute(originalPath)) {
+      // Use the path as-is if it's already absolute
+      fullPath = originalPath;
+    } else {
+      // Join with PHOTOS_ROOT_PATH if it's relative
+      fullPath = path.join(photosRoot, originalPath);
+    }
+    
+    // Check if file exists
+    await fs.access(fullPath);
+    
+    // Read the file
+    const buffer = await fs.readFile(fullPath);
+    console.log(`✅ Read local file: ${fullPath} (${buffer.length} bytes)`);
+    return buffer;
+  } catch (error) {
+    // File doesn't exist locally or can't be read
+    console.log(`❌ Local file not available: ${originalPath}`);
+    return null;
   }
+}
+
+async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buffer> {
+  try {
+    if (!S3_BUCKET) {
+      throw new Error('S3_BUCKET environment variable is not set');
+    }
+
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: s3Key,
+    });
+
+    const response = await s3Client.send(command);
+    if (!response.Body) {
+      throw new Error('Empty response body from S3');
+    }
+
+    // Convert stream to buffer
+    const chunks: Buffer[] = [];
+    const reader = response.Body as any;
+    
+    if (reader.read) {
+      // Handle readable stream
+      for await (const chunk of reader) {
+        chunks.push(chunk);
+      }
+    } else {
+      // Handle buffer directly
+      chunks.push(Buffer.from(response.Body as any));
+    }
+
+    const buffer = Buffer.concat(chunks);
+
+    // Save the file to its proper location
+    const photosRoot = process.env.PHOTOS_ROOT_PATH;
+    if (photosRoot) {
+      const localPath = path.join(photosRoot, originalPath);
+      console.log(`💾 Saving downloaded file to: ${localPath}`);
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(localPath, buffer);
+      console.log(`✅ File saved successfully`);
+    }
+
+    return buffer;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`S3 download failed: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+async function getImageBuffer(originalPath: string, s3Key: string): Promise<{ buffer: Buffer, source: 'local' | 's3' }> {
+  // First try to read from local filesystem
+  const localBuffer = await readLocalPhoto(originalPath);
+  
+  if (localBuffer) {
+    return { buffer: localBuffer, source: 'local' };
+  }
+  
+  // Fall back to S3 download
+  const s3Buffer = await downloadFromS3(s3Key, originalPath);
+  return { buffer: s3Buffer, source: 's3' };
 }
 
 function generateS3Key(albumPath: string, filename: string, size: string): string {

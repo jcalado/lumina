@@ -27,7 +27,10 @@
     "setup:database-url": "bash scripts/construct-database-url.sh",
     "debug:env": "bash scripts/debug-env.sh",
     "worker:thumbnails:all": "tsx scripts/thumbnail-queue-worker-all.ts",
-    "worker:blurhash": "tsx scripts/blurhash-worker.ts"
+    "worker:blurhash": "tsx scripts/blurhash-worker.ts",
+    "worker:exif": "tsx scripts/exif-worker.ts",
+    "worker:uploads": "tsx scripts/upload-worker.ts",
+    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",
@@ -87,6 +90,7 @@
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
     "better-sqlite3": "^12.2.0",
+    "concurrently": "^8.2.2",
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.5.0",
     "postcss": "^8.5.2",

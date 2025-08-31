@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scanner } from '@/lib/filesystem';
 import { prisma } from '@/lib/prisma';
 import { s3 } from '@/lib/s3';
-import { enqueueThumbnailJob } from '@/lib/queues/thumbnailQueue';
+import { enqueueUploadJob } from '@/lib/queues/uploadQueue';
 import { getBatchProcessingSize } from '@/lib/settings';
 import { generateUniqueSlug } from '@/lib/slugs';
 import { 
@@ -584,40 +584,15 @@ async function syncAlbumPhotos(
     
     if (!existingFilenames.has(photoData.filename)) {
       try {
-        logger?.('info', `Uploading new photo: ${photoData.filename}`);
-        
-        // Upload photo to S3
-        const fileBuffer = await fs.readFile(photoPath);
-        const mimeType = getContentType(photoData.filename);
-        
-        await s3.uploadFile(s3Key, fileBuffer, mimeType);
-        
-        // Create database entry
-        const newPhoto = await prisma.photo.create({
-          data: {
-            albumId,
-            filename: photoData.filename,
-            originalPath: photoPath,
-            s3Key: s3Key,
-            metadata: JSON.stringify(photoData),
-            fileSize: photoData.size,
-            takenAt: photoData.takenAt || null,
-          },
-        });
-        
-        // Enqueue thumbnail generation for this photo (async)
-        await enqueueThumbnailJob({
-          photoId: newPhoto.id,
-          originalPath: photoPath,
-          s3Key,
+        await enqueueUploadJob({
+          albumId,
           albumPath,
-          filename: photoData.filename,
-        })
-        
-        filesUploaded++;
-        logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
+          photoData,
+        });
+        filesUploaded++; // We count this as "uploaded" from the sync perspective
+        logger?.('info', `Enqueued upload job for: ${photoData.filename}`);
       } catch (error) {
-        const errorMsg = `Failed to upload ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to enqueue upload for ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         logger?.('error', errorMsg);
         issues.push(errorMsg);
       }
@@ -778,51 +753,16 @@ async function syncAlbumPhotosConcurrent(
     logger?.('info', `Processing ${newPhotos.length} new photos in batches of ${batchSize}`);
     
     const processNewPhoto = async (photoData: any) => {
-      const photoPath = path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath, photoData.filename);
-      const s3Key = s3.generateKey(albumPath, photoData.filename);
-      
       try {
-        // Check if file already exists in S3 before uploading
-        const existsInS3 = await s3.objectExists(s3Key);
-        
-        if (existsInS3) {
-          logger?.('info', `Photo already exists in S3, skipping upload: ${photoData.filename}`);
-        } else {
-          logger?.('info', `Uploading new photo: ${photoData.filename}`);
-          
-          // Upload photo to S3
-          const fileBuffer = await fs.readFile(photoPath);
-          const mimeType = getContentType(photoData.filename);
-          
-          await s3.uploadFile(s3Key, fileBuffer, mimeType);
-        }
-        
-        // Create database entry
-        const newPhoto = await prisma.photo.create({
-          data: {
-            albumId,
-            filename: photoData.filename,
-            originalPath: photoPath,
-            s3Key: s3Key,
-            metadata: JSON.stringify(photoData),
-            fileSize: photoData.size,
-            takenAt: photoData.takenAt || null,
-          },
-        });
-        
-        // Queue thumbnail generation for this photo
-        await enqueueThumbnailJob({
-          photoId: newPhoto.id,
-          originalPath: photoPath,
-          s3Key,
+        await enqueueUploadJob({
+          albumId,
           albumPath,
-          filename: photoData.filename,
-        })
-        
-        logger?.('info', `Successfully uploaded and processed: ${photoData.filename}`);
+          photoData,
+        });
+        logger?.('info', `Enqueued upload job for: ${photoData.filename}`);
         return { success: true, filename: photoData.filename };
       } catch (error) {
-        const errorMsg = `Failed to upload ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Failed to enqueue upload for ${photoData.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         logger?.('error', errorMsg);
         issues.push(errorMsg);
         return { success: false, filename: photoData.filename, error: errorMsg };
@@ -833,14 +773,14 @@ async function syncAlbumPhotosConcurrent(
     const newPhotoResults = await processBatch(newPhotos, batchSize, processNewPhoto, async (processed, total, results) => {
       // Call progress callback after each batch
       if (progressCallback) {
-        const successfulUploads = results.filter((r: any) => r.success).length;
-        await progressCallback(filesProcessed + processed, filesUploaded + successfulUploads);
+        const successfulEnqueues = results.filter((r: any) => r.success).length;
+        await progressCallback(filesProcessed + processed, successfulEnqueues);
       }
     });
     
-    // Count successful uploads
-    const successfulUploads = newPhotoResults.filter(result => result.success).length;
-    filesUploaded += successfulUploads;
+    // Count successful enqueues
+    const successfulEnqueues = newPhotoResults.filter(result => result.success).length;
+    filesUploaded += successfulEnqueues;
     filesProcessed += newPhotos.length;
 
     // Update progress after new photos
@@ -1066,37 +1006,4 @@ async function syncAlbumVideosConcurrent(
   return { filesProcessed, filesUploaded, issues };
 }
 
-function getContentType(filename: string): string {
-  const ext = path.extname(filename).toLowerCase();
-  switch (ext) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    case '.png':
-      return 'image/png';
-    case '.webp':
-      return 'image/webp';
-    case '.gif':
-      return 'image/gif';
-    case '.mp4':
-      return 'video/mp4';
-    case '.mov':
-      return 'video/quicktime';
-    case '.avi':
-      return 'video/x-msvideo';
-    case '.mkv':
-      return 'video/x-matroska';
-    case '.webm':
-      return 'video/webm';
-    case '.m4v':
-      return 'video/x-m4v';
-    case '.3gp':
-      return 'video/3gpp';
-    case '.flv':
-      return 'video/x-flv';
-    case '.wmv':
-      return 'video/x-ms-wmv';
-    default:
-      return 'application/octet-stream';
-  }
-}
+
