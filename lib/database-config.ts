@@ -46,9 +46,9 @@ interface DatabaseConfig {
  */
 export function buildDatabaseUrl(): string {
   // During build time, return a placeholder URL
-  // if (process.env.NEXT_PHASE === 'phase-production-build') {
-  //   return 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
-  // }
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+  }
 
   // Check if DATABASE_URL is already set and is a valid PostgreSQL URL
   if (process.env.DATABASE_URL?.startsWith('postgresql://')) {

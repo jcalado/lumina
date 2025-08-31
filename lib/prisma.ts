@@ -8,15 +8,19 @@ if (!configValidation.valid) {
   throw new Error(`Invalid database configuration: ${configValidation.errors.join(', ')}`);
 }
 
-// Ensure DATABASE_URL is set
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = buildDatabaseUrl();
-}
+// Get the database URL (either from env or build it)
+const databaseUrl = process.env.DATABASE_URL || buildDatabaseUrl();
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  datasources: {
+    db: {
+      url: databaseUrl
+    }
+  }
+});
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
