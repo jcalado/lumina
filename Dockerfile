@@ -102,6 +102,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Ensure /app directory is owned by node user
+RUN chown -R node:node /app
+
 # Copy package files and install production dependencies only
 COPY --chown=node:node package.json package-lock.json* ./
 
