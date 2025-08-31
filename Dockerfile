@@ -29,6 +29,16 @@ RUN npx prisma generate
 FROM base AS builder
 WORKDIR /app
 
+# Accept build arguments for environment variables needed during build
+ARG DATABASE_URL
+ARG NEXTAUTH_SECRET
+ARG NEXTAUTH_URL
+
+# Set environment variables for the build process
+ENV DATABASE_URL=$DATABASE_URL
+ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
+ENV NEXTAUTH_URL=$NEXTAUTH_URL
+
 # Copy package files first for better caching
 COPY package.json package-lock.json* ./
 

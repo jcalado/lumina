@@ -39,6 +39,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+        NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+        NEXTAUTH_URL: ${NEXTAUTH_URL}
     env_file:
       - .env
     ports:

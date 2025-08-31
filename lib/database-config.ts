@@ -45,6 +45,11 @@ interface DatabaseConfig {
  * Constructs a PostgreSQL connection URL from environment variables
  */
 export function buildDatabaseUrl(): string {
+  // During build time, return a placeholder URL
+  // if (process.env.NEXT_PHASE === 'phase-production-build') {
+  //   return 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+  // }
+
   // Check if DATABASE_URL is already set and is a valid PostgreSQL URL
   if (process.env.DATABASE_URL?.startsWith('postgresql://')) {
     return process.env.DATABASE_URL;
@@ -93,6 +98,11 @@ export function getDatabaseConfig(): Omit<DatabaseConfig, 'password'> & { hasPas
  */
 export function validateDatabaseConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+
+  // Skip validation during build time (when NEXT_PHASE is defined)
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return { valid: true, errors: [] };
+  }
 
   if (!process.env.DATABASE_URL) {
     errors.push('DATABASE_URL environment variable must be set');
