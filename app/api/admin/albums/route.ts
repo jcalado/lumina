@@ -21,7 +21,7 @@ export async function GET() {
     const albums = await prisma.album.findMany({
       include: {
         _count: {
-          select: { photos: true }
+          select: { photos: true, videos: true }
         }
       },
       orderBy: [
@@ -34,6 +34,7 @@ export async function GET() {
     const formattedAlbums = albums.map((album: any) => ({
       ...album,
       photoCount: album._count.photos,
+      videoCount: album._count.videos,
       lastSyncAt: album.lastSyncAt?.toISOString() || null
     }))
 

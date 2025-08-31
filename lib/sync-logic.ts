@@ -861,10 +861,14 @@ export async function rebuildFromRemote(jobId: string, bullmqJob?: any) {
   try {
     addLog('info', 'Starting S3 rebuild process');
 
+    // Ensure PHOTOS_ROOT_PATH is set
+    const photosRootPath = process.env.PHOTOS_ROOT_PATH || 'C:\\fotos';
+    addLog('info', `Using photos root path: ${photosRootPath}`);
+
     const allS3Objects = await s3.listObjects('photos/');
     addLog('info', `Found ${allS3Objects.length} objects in S3 bucket.`);
 
-    const albumsMap = new Map<string, { name: string, photos: any[] }>();
+    const albumsMap = new Map<string, { name: string, photos: any[], videos: any[] }>();
 
     for (const s3Key of allS3Objects) {
       const parts = s3Key.split('/');
@@ -874,10 +878,18 @@ export async function rebuildFromRemote(jobId: string, bullmqJob?: any) {
       const filename = parts[parts.length - 1];
 
       if (!albumsMap.has(albumPath)) {
-        albumsMap.set(albumPath, { name: path.basename(albumPath), photos: [] });
+        albumsMap.set(albumPath, { name: path.basename(albumPath), photos: [], videos: [] });
       }
 
-      albumsMap.get(albumPath)!.photos.push({ s3Key, filename });
+      // Determine if it's a photo or video based on file extension
+      const isVideo = /\.(mp4|avi|mov|wmv|flv|mkv|webm)$/i.test(filename);
+      const isImage = /\.(jpg|jpeg|png|gif|bmp|tiff|webp)$/i.test(filename);
+
+      if (isVideo) {
+        albumsMap.get(albumPath)!.videos.push({ s3Key, filename });
+      } else if (isImage) {
+        albumsMap.get(albumPath)!.photos.push({ s3Key, filename });
+      }
     }
 
     const totalAlbums = albumsMap.size;
@@ -886,57 +898,174 @@ export async function rebuildFromRemote(jobId: string, bullmqJob?: any) {
     await updateProgress({ totalAlbums });
 
     let completedAlbums = 0;
+    let totalFilesProcessed = 0;
+
     for (const [albumPath, albumData] of albumsMap.entries()) {
-      addLog('info', `Processing album: ${albumPath}`);
+      addLog('info', `Processing album: ${albumPath} (${albumData.photos.length} photos, ${albumData.videos.length} videos)`);
 
       const album = await prisma.album.upsert({
         where: { path: albumPath },
-        update: { name: albumData.name },
+        update: { 
+          name: albumData.name,
+          syncedToS3: true,
+          lastSyncAt: new Date()
+        },
         create: {
           path: albumPath,
           slug: await generateUniqueSlug(albumData.name),
           name: albumData.name,
           status: 'PUBLIC',
           enabled: true,
+          syncedToS3: true,
+          lastSyncAt: new Date()
         },
       });
 
+      // Ensure local directory exists
+      const photosRootPath = process.env.PHOTOS_ROOT_PATH || 'C:\\fotos';
+      const localAlbumPath = path.join(photosRootPath, albumPath);
+      try {
+        await fs.mkdir(localAlbumPath, { recursive: true });
+        addLog('info', `Ensured local directory exists: ${localAlbumPath}`);
+      } catch (error) {
+        addLog('warn', `Could not create directory ${localAlbumPath}: ${error}`);
+      }
+
+      // Process photos
       for (const photoData of albumData.photos) {
+        const localFilePath = path.join(localAlbumPath, photoData.filename);
+        
+        // Check if file exists locally
+        let fileExistsLocally = false;
+        try {
+          await fs.access(localFilePath);
+          fileExistsLocally = true;
+          addLog('info', `Photo already exists locally: ${photoData.filename}`);
+        } catch {
+          // File doesn't exist, need to download
+          fileExistsLocally = false;
+        }
+
         const existingPhoto = await prisma.photo.findFirst({
           where: { albumId: album.id, filename: photoData.filename },
         });
 
+        if (!fileExistsLocally) {
+          // Download file from S3
+          try {
+            addLog('info', `Downloading photo from S3: ${photoData.filename}`);
+            const fileBuffer = await s3.getObject(photoData.s3Key);
+            await fs.writeFile(localFilePath, fileBuffer);
+            addLog('info', `Downloaded photo: ${photoData.filename}`);
+          } catch (error) {
+            addLog('error', `Failed to download photo ${photoData.filename}: ${error}`);
+            continue;
+          }
+        }
+
         if (!existingPhoto) {
-          const newPhoto = await prisma.photo.create({
+          // Get file size
+          let fileSize = 0;
+          try {
+            const stats = await fs.stat(localFilePath);
+            fileSize = stats.size;
+          } catch (error) {
+            addLog('warn', `Could not get file size for ${photoData.filename}: ${error}`);
+          }
+
+          await prisma.photo.create({
             data: {
               albumId: album.id,
               filename: photoData.filename,
               s3Key: photoData.s3Key,
-              originalPath: path.join(process.env.PHOTOS_ROOT_PATH || '', albumPath, photoData.filename),
-              fileSize: 0, 
+              originalPath: localFilePath,
+              fileSize: fileSize,
             },
           });
 
-          await enqueueUploadJob({
-            albumId: album.id,
-            albumPath: albumPath,
-            photoData: { filename: newPhoto.filename, size: 0 },
-          });
-
-          addLog('info', `Created photo ${photoData.filename} and enqueued jobs.`);
+          addLog('info', `Created photo record: ${photoData.filename}`);
+        } else {
+          addLog('info', `Photo record already exists: ${photoData.filename}`);
         }
       }
+
+      // Process videos
+      for (const videoData of albumData.videos) {
+        const localFilePath = path.join(localAlbumPath, videoData.filename);
+        
+        // Check if file exists locally
+        let fileExistsLocally = false;
+        try {
+          await fs.access(localFilePath);
+          fileExistsLocally = true;
+          addLog('info', `Video already exists locally: ${videoData.filename}`);
+        } catch {
+          // File doesn't exist, need to download
+          fileExistsLocally = false;
+        }
+
+        const existingVideo = await prisma.video.findFirst({
+          where: { albumId: album.id, filename: videoData.filename },
+        });
+
+        if (!fileExistsLocally) {
+          // Download file from S3
+          try {
+            addLog('info', `Downloading video from S3: ${videoData.filename}`);
+            const fileBuffer = await s3.getObject(videoData.s3Key);
+            await fs.writeFile(localFilePath, fileBuffer);
+            addLog('info', `Downloaded video: ${videoData.filename}`);
+          } catch (error) {
+            addLog('error', `Failed to download video ${videoData.filename}: ${error}`);
+            continue;
+          }
+        }
+
+        if (!existingVideo) {
+          // Get file size
+          let fileSize = 0;
+          try {
+            const stats = await fs.stat(localFilePath);
+            fileSize = stats.size;
+          } catch (error) {
+            addLog('warn', `Could not get file size for ${videoData.filename}: ${error}`);
+          }
+
+          await prisma.video.create({
+            data: {
+              albumId: album.id,
+              filename: videoData.filename,
+              s3Key: videoData.s3Key,
+              originalPath: localFilePath,
+              fileSize: fileSize,
+            },
+          });
+
+          addLog('info', `Created video record: ${videoData.filename}`);
+        } else {
+          addLog('info', `Video record already exists: ${videoData.filename}`);
+        }
+      }
+
+      const filesInAlbum = albumData.photos.length + albumData.videos.length;
+      totalFilesProcessed += filesInAlbum;
 
       completedAlbums++;
       const progress = Math.round((completedAlbums / totalAlbums) * 100);
 
       await updateProgress({
         progress,
-        completedAlbums
+        completedAlbums,
+        filesProcessed: totalFilesProcessed
       });
+
+      addLog('info', `✅ Completed album: ${albumPath} (${filesInAlbum} files)`);
     }
 
-    await updateProgress({ progress: 100 });
+    await updateProgress({ 
+      progress: 100,
+      filesProcessed: totalFilesProcessed
+    });
 
     // Mark job as completed in database
     await prisma.syncJob.update({
@@ -947,8 +1076,7 @@ export async function rebuildFromRemote(jobId: string, bullmqJob?: any) {
       },
     });
 
-    addLog('info', 'S3 rebuild completed successfully.');
-
+    addLog('info', `🎉 S3 rebuild completed successfully! Processed ${totalFilesProcessed} files across ${totalAlbums} albums`);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     addLog('error', 'S3 rebuild job failed', { error: errorMsg });

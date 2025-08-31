@@ -51,6 +51,9 @@ async function processUploadJob(job: any) {
     await enqueueThumbnailJob({
       photoId: newPhoto.id,
       s3Key,
+      albumPath,
+      filename: photoData.filename,
+      originalPath: photoPath,
     });
     console.log(`Enqueued thumbnail job for photoId: ${newPhoto.id}`);
 
@@ -62,7 +65,7 @@ async function processUploadJob(job: any) {
   } catch (error) {
     console.error(`Failed to process upload for photo: ${photoData.filename}`, error);
     // If the file doesn't exist locally anymore, don't retry.
-    if (error.code === 'ENOENT') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
       job.discard();
       return;
     }

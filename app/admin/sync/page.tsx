@@ -29,6 +29,7 @@ interface Album {
   localFilesSafeDelete: boolean
   lastSyncAt: string | null
   photoCount: number
+  videoCount: number
 }
 
 interface AlbumComparison {
@@ -133,6 +134,7 @@ export default function SyncPage() {
   const [uploadModal, setUploadModal] = useState<{ isOpen: boolean; albumId: string; albumName: string }>({ isOpen: false, albumId: '', albumName: '' })
   const [isUpdatingFingerprints, setIsUpdatingFingerprints] = useState(false)
   const [isCancellingSync, setIsCancellingSync] = useState(false)
+  const [isRestoringFromS3, setIsRestoringFromS3] = useState(false)
   const { toast } = useToast()
 
   const buildAlbumTree = (albums: Album[]): AlbumTreeNode[] => {
@@ -515,6 +517,35 @@ export default function SyncPage() {
     }
   }
 
+  const startRestoreFromS3 = async () => {
+    setIsRestoringFromS3(true)
+    try {
+      const response = await fetch('/api/sync', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'S3' })
+      })
+      if (response.ok) {
+        toast({
+          title: "Restore Started",
+          description: "Restoration from S3 has been initiated"
+        })
+        fetchData()
+      } else {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to start S3 restoration')
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to start S3 restoration",
+        variant: "destructive"
+      })
+    } finally {
+      setIsRestoringFromS3(false)
+    }
+  }
+
   // Build filesystem album tree nodes from path strings
   type FsNode = { path: string; name: string; depth: number; children: FsNode[]; counts?: { photos: number; videos: number; total: number } }
   const buildFsTree = (items: Array<{ path: string; name: string; counts?: { photos: number; videos: number; total: number } }>): FsNode[] => {
@@ -795,6 +826,7 @@ export default function SyncPage() {
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                     <span>{node.album!.photoCount} photos</span>
+                    <span>{node.album!.videoCount} videos</span>
                     <span className="truncate">{node.path}</span>
                     {node.album!.lastSyncAt && (
                       <span className="flex items-center gap-1">
@@ -897,6 +929,14 @@ export default function SyncPage() {
           >
             <FileText className={`h-4 w-4 mr-2 ${isUpdatingFingerprints ? 'animate-spin' : ''}`} />
             {isUpdatingFingerprints ? 'Updating...' : 'Update Fingerprints'}
+          </Button>
+          <Button 
+            onClick={startRestoreFromS3}
+            disabled={isSyncing || currentSync?.status === 'RUNNING' || isRestoringFromS3}
+            variant="outline"
+          >
+            <CloudDownload className={`h-4 w-4 mr-2 ${isRestoringFromS3 ? 'animate-spin' : ''}`} />
+            {isRestoringFromS3 ? 'Restoring...' : 'Restore from S3'}
           </Button>
           <Button 
             onClick={startSync} 
@@ -1341,6 +1381,12 @@ export default function SyncPage() {
                   {progress.photosTotal !== undefined && (
                     <div className="text-sm text-muted-foreground mb-2">
                       Photos: {progress.photosUploaded || 0}/{progress.photosTotal} uploaded
+                    </div>
+                  )}
+                  
+                  {progress.videosTotal !== undefined && (
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Videos: {progress.videosUploaded || 0}/{progress.videosTotal} uploaded
                     </div>
                   )}
                   
@@ -1793,7 +1839,7 @@ export default function SyncPage() {
             <div>
               <CardTitle className="text-xl">Albums</CardTitle>
               <CardDescription>
-                Hierarchical view of all photo albums. Expand folders to see nested albums.
+                Hierarchical view of all photo and video albums. Expand folders to see nested albums.
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -1930,6 +1976,9 @@ export default function SyncPage() {
                   </div>
                   <div className="text-sm text-red-700">
                     <strong>Photos:</strong> {deleteConfirmation.album.photoCount} files
+                  </div>
+                  <div className="text-sm text-red-700">
+                    <strong>Videos:</strong> {deleteConfirmation.album.videoCount} files
                   </div>
                 </div>
               </div>

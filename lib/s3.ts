@@ -136,6 +136,23 @@ export class S3Service {
     }
   }
 
+  async getObjectMetadata(key: string): Promise<{ size: number; lastModified?: Date; contentType?: string }> {
+    this.initializeBucket();
+    
+    const command = new HeadObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    const response = await getS3Client().send(command);
+    
+    return {
+      size: response.ContentLength || 0,
+      lastModified: response.LastModified,
+      contentType: response.ContentType,
+    };
+  }
+
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     this.initializeBucket();
     
@@ -148,6 +165,11 @@ export class S3Service {
   }
 
   generateKey(albumPath: string, filename: string, type: 'original' | 'thumbnail' = 'original'): string {
+    // Handle undefined or null parameters
+    if (!albumPath || !filename) {
+      throw new Error(`Invalid parameters: albumPath=${albumPath}, filename=${filename}`);
+    }
+    
     // Clean and encode the path and filename properly for S3
     const cleanPath = albumPath.replace(/^\/+|\/+$/g, '').replace(/[<>:"|?*]/g, '_');
     const cleanFilename = filename.replace(/[<>:"|?*]/g, '_');
