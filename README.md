@@ -214,15 +214,38 @@ npm run db:studio    # Open Prisma Studio
 3. Add environment variables
 4. Deploy!
 
-### Docker
+### Docker (Production Ready)
 
+Lumina supports both development and production Docker deployments with multi-stage builds.
+
+**Development (with hot reloading):**
 ```bash
-# Build image
-docker build -t lumina-gallery .
-
-# Run container
-docker run -p 3000:3000 lumina-gallery
+docker compose -f docker-compose.dev.yml up
 ```
+
+**Production:**
+```bash
+# Setup environment
+cp .env.docker .env
+# Edit .env with your configuration
+
+# Deploy all services
+docker-compose -f docker-compose.prod.yml up -d
+
+# Initialize database
+docker-compose -f docker-compose.prod.yml exec app npm run db:push
+```
+
+**📖 Complete Guide:** See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions, configuration options, and production deployment strategies.
+
+**Services Included:**
+- Next.js application (dev: hot reloading, prod: optimized standalone)
+- PostgreSQL database
+- Redis for queues
+- Thumbnail generation workers
+- Blurhash generation workers
+- EXIF extraction workers
+- Upload/sync workers
 
 ### Traditional Hosting
 

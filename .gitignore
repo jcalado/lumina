@@ -46,3 +46,6 @@ scripts/*-worker-only.js
 
 # OS
 Thumbs.db
+
+# Docker
+docker-compose.yml

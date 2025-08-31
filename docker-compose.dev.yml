@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   # PostgreSQL Database
   postgres:
@@ -35,6 +37,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
@@ -50,7 +53,7 @@ services:
       - PHOTOS_ROOT_PATH=/var/app/photos
       - SYNC_CRON=0 3 * * *
     ports:
-      - "3000:3000"
+      - "3010:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,7 +61,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -71,6 +74,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     command: npm run worker:thumbnails:all
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
@@ -88,7 +92,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     deploy:
       replicas: 1
 
@@ -97,6 +101,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     command: npm run worker:blurhash
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
@@ -114,7 +119,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     deploy:
       replicas: 1
 
@@ -123,6 +128,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     command: npm run worker:exif
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
@@ -140,7 +146,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     deploy:
       replicas: 1
 
@@ -149,6 +155,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     command: npm run worker:uploads
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
@@ -166,7 +173,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     deploy:
       replicas: 1
 
@@ -175,6 +182,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     command: npm run worker:sync
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
@@ -193,7 +201,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
+      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     deploy:
       replicas: 1
 

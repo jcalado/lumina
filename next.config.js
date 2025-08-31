@@ -7,6 +7,8 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+  // Enable standalone output for Docker
+  output: 'standalone',
   // Increase request size limits for file uploads
   serverRuntimeConfig: {
     maxRequestSize: '2gb',
