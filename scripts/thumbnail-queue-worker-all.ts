@@ -1,6 +1,17 @@
 #!/usr/bin/env tsx
 
 import 'dotenv/config'
+import { register } from 'tsconfig-paths'
+import { resolve } from 'path'
+
+// Register tsconfig paths
+register({
+  baseUrl: resolve(__dirname, '..'),
+  paths: {
+    '@/*': ['./*']
+  }
+})
+
 import os from 'os'
 import { Worker, QueueEvents } from 'bullmq'
 import { generateThumbnails } from '@/lib/thumbnails'

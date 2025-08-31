@@ -1,5 +1,16 @@
 #!/usr/bin/env tsx
 
+import { register } from 'tsconfig-paths'
+import { resolve } from 'path'
+
+// Register tsconfig paths
+register({
+  baseUrl: resolve(__dirname, '..'),
+  paths: {
+    '@/*': ['./*']
+  }
+})
+
 import { PrismaClient } from '@prisma/client';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
