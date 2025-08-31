@@ -45,20 +45,16 @@ model Photo {
   fileSize        Int
   takenAt         DateTime?   // from EXIF
   blurhash        String?     // BlurHash for loading placeholder
-  faceProcessedAt DateTime?   // Tracks when faces were last processed for this photo
   createdAt       DateTime    @default(now())
   album           Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
   thumbnails      Thumbnail[]
-  faces           Face[]
 
   // Existing indexes
   @@index([albumId])
-  @@index([faceProcessedAt])
 
   // Additional performance optimizations
   @@index([takenAt]) // For time-based photo queries
   @@index([albumId, takenAt]) // For album photos sorted by date
-  @@index([faceProcessedAt, albumId]) // For finding unprocessed photos by album
 
   @@map("photos")
 }
@@ -117,6 +113,7 @@ model Thumbnail {
 
 model SyncJob {
   id              String    @id @default(cuid())
+  type            SyncJobType @default(FILESYSTEM)
   status          JobStatus @default(PENDING)
   progress        Int       @default(0)
   albumProgress   String?   @db.Text // JSON with per-album progress
@@ -148,106 +145,7 @@ model BlurhashJob {
   @@map("blurhash_jobs")
 }
 
-model ThumbnailJob {
-  id                String    @id @default(cuid())
-  status            JobStatus @default(PENDING)
-  progress          Int       @default(0)
-  totalPhotos       Int       @default(0)
-  processedPhotos   Int       @default(0)
-  thumbnailsCreated Int       @default(0)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  errors            String?   @db.Text // JSON string for error details
-  logs              String?   @db.Text // JSON array of detailed log entries
-  createdAt         DateTime  @default(now())
-
-  @@map("thumbnail_jobs")
-}
-
-model Person {
-  id        String   @id @default(cuid())
-  name      String?  // Name given by admin, null for unnamed/grouped faces
-  confirmed Boolean  @default(false) // Admin confirmed this person grouping
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  faces     Face[]
-  centroidEmbedding String? @db.Text // Cached centroid (average) embedding for this person (legacy)
-  prototypes PersonPrototype[]
-
-  // Performance optimizations
-  @@index([confirmed]) // For filtering confirmed/unconfirmed people
-  @@index([name]) // For name-based searches
-  @@index([confirmed, updatedAt]) // For sorting confirmed people by recent updates
-
-  @@map("people")
-}
-
-model Face {
-  id           String  @id @default(cuid())
-  photoId      String
-  personId     String?
-  boundingBox  String  @db.Text // JSON: {x, y, width, height} coordinates for LARGE thumbnail
-  confidence   Float   // Detection confidence (0.0 - 1.0)
-  embedding    String? @db.Text // Face encoding for recognition (JSON array) (legacy)
-  hasEmbedding Boolean @default(false) // Efficiently indexable flag for embedding existence (legacy)
-  verified     Boolean @default(false) // Admin verified this face belongs to this person
-  ignored      Boolean @default(false) // New field: true if face should be ignored
-  createdAt    DateTime @default(now())
-  photo        Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
-  person       Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
-
-  // Existing indexes
-  @@index([photoId])
-  @@index([personId])
-
-  // Performance optimizations for face queries
-  @@index([personId, confidence]) // For sorting faces by confidence within a person
-  @@index([ignored, personId]) // For finding unassigned/ignored faces efficiently
-  @@index([verified]) // For filtering verified faces
-  @@index([confidence]) // For confidence-based filtering
-  @@index([createdAt]) // For time-based queries
-  @@index([personId, verified]) // For finding verified faces per person
-  @@index([photoId, ignored]) // For finding faces in a photo excluding ignored ones
-
-  @@index([personId], name: "idx_face_unassigned")
-  @@index([hasEmbedding], name: "idx_face_has_embedding") // Efficient boolean index for embedding existence
-  @@index([ignored], name: "idx_face_not_ignored")
-
-  @@map("faces")
-}
-
-// Person prototypes for pgvector-first matching (k≈3 per person typically)
-model PersonPrototype {
-  id        String  @id @default(cuid())
-  personId  String
-  person    Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
-  // pgvector(512) is not natively supported by Prisma; we’ll operate via raw SQL
-  embedding_vec Unsupported("vector(512)")
-  weight    Float? @default(1.0)
-  note      String?
-  createdAt DateTime @default(now())
-
-  @@index([personId])
-  @@map("person_prototypes")
-}
-
-model FaceRecognitionJob {
-  id                String    @id @default(cuid())
-  status            JobStatus @default(PENDING)
-  progress          Int       @default(0)
-  totalPhotos       Int       @default(0)
-  processedPhotos   Int       @default(0)
-  facesDetected     Int       @default(0)
-  facesMatched      Int       @default(0)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  pausedAt          DateTime?
-  errors            String?   @db.Text // JSON string for error details
-  logs              String?   @db.Text // JSON array of detailed log entries
-  createdAt         DateTime  @default(now())
-
-  @@map("face_recognition_jobs")
-}
+// ThumbnailJob removed (migrated to BullMQ queues)
 
 model SiteSettings {
   id        String   @id @default(cuid())
@@ -305,4 +203,9 @@ enum JobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum SyncJobType {
+  FILESYSTEM
+  S3
 }

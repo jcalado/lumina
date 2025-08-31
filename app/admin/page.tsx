@@ -296,45 +296,12 @@ async function DashboardStats() {
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex space-x-2">
-          <Button asChild>
-            <Link href="/admin/sync">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sync Management
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       <Suspense fallback={<DashboardStatsLoading />}>
         <DashboardStats />
       </Suspense>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common administrative tasks
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button asChild className="w-full justify-start border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
-              <Link href="/admin/albums">
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Manage Albums
-              </Link>
-            </Button>
-            <Button asChild className="w-full justify-start border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground">
-              <Link href="/admin/sync">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Sync Management
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+
 
         <Card>
           <CardHeader>

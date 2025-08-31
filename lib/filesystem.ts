@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { readFile } from 'fs/promises';
 import { isImageFile, isVideoFile, isMediaFile } from './utils';
-import exifr from 'exifr';
 
 export interface VideoMetadata {
   filename: string;
@@ -99,62 +98,10 @@ export class FileSystemScanner {
       const stats = await fs.stat(filePath);
       const filename = path.basename(filePath);
       
-      // Extract EXIF data
-      const exifData = await exifr.parse(filePath, {
-        pick: [
-          'DateTimeOriginal', 'CreateDate', 'ModifyDate',
-          'Make', 'Model', 'LensModel',
-          'ISO', 'FNumber', 'ExposureTime', 'FocalLength',
-          'GPSLatitude', 'GPSLongitude', 'Orientation'
-        ]
-      });
-      
       const metadata: PhotoMetadata = {
         filename,
         size: stats.size,
       };
-      
-      // Extract date taken
-      if (exifData?.DateTimeOriginal) {
-        metadata.takenAt = new Date(exifData.DateTimeOriginal);
-      } else if (exifData?.CreateDate) {
-        metadata.takenAt = new Date(exifData.CreateDate);
-      } else if (exifData?.ModifyDate) {
-        metadata.takenAt = new Date(exifData.ModifyDate);
-      }
-      
-      // Extract camera info
-      if (exifData?.Make && exifData?.Model) {
-        metadata.camera = `${exifData.Make} ${exifData.Model}`;
-      }
-      
-      if (exifData?.LensModel) {
-        metadata.lens = exifData.LensModel;
-      }
-      
-      // Extract orientation
-      if (exifData?.Orientation) {
-        metadata.orientation = exifData.Orientation;
-      }
-      
-      // Extract camera settings
-      metadata.settings = {};
-      if (exifData?.ISO) metadata.settings.iso = exifData.ISO;
-      if (exifData?.FNumber) metadata.settings.aperture = `f/${exifData.FNumber}`;
-      if (exifData?.ExposureTime) {
-        metadata.settings.shutter = exifData.ExposureTime < 1 
-          ? `1/${Math.round(1 / exifData.ExposureTime)}`
-          : `${exifData.ExposureTime}s`;
-      }
-      if (exifData?.FocalLength) metadata.settings.focalLength = `${exifData.FocalLength}mm`;
-      
-      // Extract GPS data
-      if (exifData?.GPSLatitude && exifData?.GPSLongitude) {
-        metadata.gps = {
-          latitude: exifData.GPSLatitude,
-          longitude: exifData.GPSLongitude,
-        };
-      }
       
       return metadata;
     } catch (error) {
@@ -204,11 +151,17 @@ export class FileSystemScanner {
   async getAllAlbums(): Promise<string[]> {
     const albums: string[] = [];
     
+    console.log(`[DEBUG] getAllAlbums called with rootPath: "${this.rootPath}"`);
+    
     const scanRecursive = async (currentPath: string) => {
       const fullPath = path.join(this.rootPath, currentPath);
       
+      console.log(`[DEBUG] Scanning directory: "${fullPath}"`);
+      
       try {
         const entries = await fs.readdir(fullPath, { withFileTypes: true });
+        
+        console.log(`[DEBUG] Found ${entries.length} entries in "${fullPath}"`);
         
         // Check if this directory contains photos/videos OR subdirectories
         const hasMedia = entries.some((entry: any) => 
@@ -217,9 +170,12 @@ export class FileSystemScanner {
         
         const hasSubdirectories = entries.some((entry: any) => entry.isDirectory());
         
+        console.log(`[DEBUG] Directory "${currentPath}": hasMedia=${hasMedia}, hasSubdirectories=${hasSubdirectories}`);
+        
         // Add this directory as an album if it has media OR if it's not the root and has subdirectories
         if (hasMedia || (currentPath && hasSubdirectories)) {
           albums.push(currentPath);
+          console.log(`[DEBUG] Added album: "${currentPath}"`);
         }
         
         // Always recurse into subdirectories to find nested albums
@@ -237,6 +193,32 @@ export class FileSystemScanner {
     await scanRecursive('');
     return albums.sort();
   }
+
+  // Lightweight media counter for a directory (recursive)
+  async countMedia(relativePath: string): Promise<{ photos: number; videos: number; total: number }> {
+    const fullPath = path.join(this.rootPath, relativePath);
+    let photos = 0;
+    let videos = 0;
+    try {
+      const entries = await fs.readdir(fullPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          if (isImageFile(entry.name)) photos++;
+          else if (isVideoFile(entry.name)) videos++;
+        } else if (entry.isDirectory()) {
+          const subPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+          const sub = await this.countMedia(subPath);
+          photos += sub.photos;
+          videos += sub.videos;
+        }
+      }
+    } catch (error) {
+      console.error(`Error counting media in ${fullPath}:`, error);
+    }
+    return { photos, videos, total: photos + videos };
+  }
 }
 
 export const scanner = new FileSystemScanner(process.env.PHOTOS_ROOT_PATH || '');
+
+console.log(`[DEBUG] FileSystemScanner initialized with rootPath: "${process.env.PHOTOS_ROOT_PATH || 'EMPTY'}"`);

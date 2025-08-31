@@ -18,16 +18,33 @@ interface ThumbnailJobData {
   s3Key: string;
   albumPath: string;
   filename: string;
+  reprocess?: boolean;
 }
 
 // Direct thumbnail generation function (synchronous approach for development)
 export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ thumbnailsCreated: number }> {
-  const { photoId, originalPath, s3Key, albumPath, filename } = jobData;
+  const { photoId, originalPath, s3Key, albumPath, filename, reprocess } = jobData;
   
   try {
     console.log(`Processing thumbnails for photo: ${filename}`);
     
     const s3Service = new S3Service();
+
+    // If reprocessing, delete existing thumbnails for this photo first
+    if (reprocess) {
+      try {
+        const existing = await prisma.thumbnail.findMany({ where: { photoId } });
+        for (const t of existing) {
+          try { await s3Service.deleteObject(t.s3Key); } catch {}
+        }
+        if (existing.length > 0) {
+          await prisma.thumbnail.deleteMany({ where: { photoId } });
+          console.log(`Deleted ${existing.length} existing thumbnails for ${filename}`);
+        }
+      } catch (e) {
+        console.warn('Failed to cleanup old thumbnails before reprocess', e);
+      }
+    }
     let imageBuffer: Buffer;
     
     // Try to read from local file first, fall back to S3
@@ -127,8 +144,21 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
   }
 }
 
-// Helper function to generate thumbnails for existing photos without them
+// Legacy-compatible stubs to keep older routes compiling while BullMQ handles processing
 export async function generateMissingThumbnails(): Promise<{ processed: number; total: number }> {
+  return { processed: 0, total: 0 }
+}
+
+export async function reprocessAllThumbnails(): Promise<{ processed: number; total: number; deleted: number }> {
+  return { processed: 0, total: 0, deleted: 0 }
+}
+
+// Helper function to generate thumbnails for existing photos without them
+/*
+ Legacy batch helpers removed in favor of BullMQ queue processing
+ Keeping function stubs commented for reference
+*/
+/* export async function old_generateMissingThumbnails(): Promise<{ processed: number; total: number }> {
   try {
     // Get batch size from settings
     const batchSize = await getBatchProcessingSize();
@@ -205,10 +235,10 @@ export async function generateMissingThumbnails(): Promise<{ processed: number; 
     console.error('Error generating missing thumbnails:', error);
     throw error;
   }
-}
+} */
 
 // Function to delete all existing thumbnails and regenerate them
-export async function reprocessAllThumbnails(): Promise<{ processed: number; total: number; deleted: number }> {
+/* export async function reprocessAllThumbnails(): Promise<{ processed: number; total: number; deleted: number }> {
   try {
     console.log('Starting reprocessing of all thumbnails...');
     const s3Service = new S3Service();
@@ -310,4 +340,4 @@ export async function reprocessAllThumbnails(): Promise<{ processed: number; tot
     console.error('Error reprocessing all thumbnails:', error);
     throw error;
   }
-}
+} */

@@ -99,7 +99,7 @@ export async function POST(
           console.log(`Local file not found or already deleted: ${photo.originalPath}`)
         }
 
-        // Delete from database (cascades to thumbnails and faces)
+        // Delete from database (cascades to thumbnails)
         await prisma.photo.delete({
           where: { id: photo.id }
         })

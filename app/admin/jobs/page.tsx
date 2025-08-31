@@ -71,6 +71,14 @@ export default function AdminJobsPage() {
   const [useParallelProcessing, setUseParallelProcessing] = useState(true)
   const [useThumbnailParallelProcessing, setUseThumbnailParallelProcessing] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [thumbQueue, setThumbQueue] = useState<{waiting:number;active:number;completed:number;failed:number;delayed:number;paused:number}|null>(null)
+  const isActiveThumb = (thumbQueue?.active || 0) > 0
+  const isPausedThumb = (thumbQueue?.paused || 0) === 1
+  const isThumbBusy = ((thumbQueue?.waiting || 0) + (thumbQueue?.active || 0)) > 0
+  const [blurQueue, setBlurQueue] = useState<{waiting:number;active:number;completed:number;failed:number;delayed:number;paused:number}|null>(null)
+  const isBlurActive = (blurQueue?.active || 0) > 0
+  const isBlurPaused = (blurQueue?.paused || 0) === 1
+  const isBlurBusy = ((blurQueue?.waiting || 0) + (blurQueue?.active || 0)) > 0
 
   useEffect(() => {
     fetchBlurhashJobs()
@@ -78,6 +86,7 @@ export default function AdminJobsPage() {
     fetchVideoThumbnailJobs()
     fetchJobStats()
     fetchThumbnailStats()
+    fetchThumbQueue()
     
     // Poll for job updates every 3 seconds if there's a running job
     const interval = setInterval(() => {
@@ -85,6 +94,7 @@ export default function AdminJobsPage() {
         fetchBlurhashJobs()
         fetchThumbnailJobs()
         fetchVideoThumbnailJobs()
+        fetchThumbQueue()
       }
     }, 3000)
 
@@ -96,14 +106,21 @@ export default function AdminJobsPage() {
       const response = await fetch("/api/admin/blurhash")
       if (response.ok) {
         const data = await response.json()
-        if (data.jobs && data.jobs.length > 0) {
-          setBlurhashJob(data.jobs[0]) // Get the latest job
-        }
+        if (data.queue) setBlurQueue(data.queue)
       }
     } catch (error) {
       console.error('Error fetching blurhash jobs:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchThumbQueue = async () => {
+    try {
+      const res = await fetch('/api/admin/jobs/thumbnail-queue')
+      if (res.ok) setThumbQueue(await res.json())
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -161,6 +178,13 @@ export default function AdminJobsPage() {
     }
   }
 
+  // Always poll thumb queue to keep UI in sync (including paused state)
+  useEffect(() => {
+    fetchThumbQueue()
+    const q = setInterval(fetchThumbQueue, 3000)
+    return () => clearInterval(q)
+  }, [])
+
   const handleStartBlurhashJob = async () => {
     setBlurhashJobLoading(true)
     try {
@@ -169,14 +193,13 @@ export default function AdminJobsPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "start", parallel: useParallelProcessing })
+        body: JSON.stringify({ action: "start" })
       })
 
       if (response.ok) {
-        const data = await response.json()
         toast({
           title: "Success",
-          description: `Blurhash processing started (${data.processingMode || 'serial'} mode)`
+          description: `Blurhash processing enqueued`
         })
         
         // Refresh job data immediately
@@ -213,7 +236,7 @@ export default function AdminJobsPage() {
       if (response.ok) {
         toast({
           title: "Success",
-          description: "Blurhash processing stop requested"
+          description: "Blurhash queue paused"
         })
         
         // Refresh job data immediately
@@ -236,15 +259,52 @@ export default function AdminJobsPage() {
     }
   }
 
-  const handleStartThumbnailJob = async () => {
-    setThumbnailJobLoading(true)
+  const handleDeleteAllBlurhashes = async () => {
+    setBlurhashJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/blurhash", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "start", parallel: useThumbnailParallelProcessing })
+        body: JSON.stringify({ action: "delete-all" })
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "All blurhashes have been deleted"
+        })
+        
+        // Refresh job data immediately
+        setTimeout(() => {
+          fetchBlurhashJobs()
+          fetchJobStats()
+        }, 1000)
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to delete blurhashes")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete blurhashes",
+        variant: "destructive"
+      })
+    } finally {
+      setBlurhashJobLoading(false)
+    }
+  }
+
+  const handleStartThumbnailJob = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails/enqueue-missing", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -277,12 +337,12 @@ export default function AdminJobsPage() {
   const handleStopThumbnailJob = async () => {
     setThumbnailJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/thumbnails/pause", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "stop" })
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -311,15 +371,37 @@ export default function AdminJobsPage() {
     }
   }
 
+  const handleResumeThumbnailJob = async () => {
+    setThumbnailJobLoading(true)
+    try {
+      const response = await fetch("/api/admin/thumbnails/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      })
+      if (response.ok) {
+        toast({ title: "Resumed", description: "Thumbnail queue resumed" })
+        fetchThumbQueue()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to resume queue")
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to resume queue", variant: "destructive" })
+    } finally {
+      setThumbnailJobLoading(false)
+    }
+  }
+
   const handleReprocessThumbnails = async () => {
     setThumbnailJobLoading(true)
     try {
-      const response = await fetch("/api/admin/thumbnails", {
+      const response = await fetch("/api/admin/thumbnails/enqueue-reprocess", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "reprocess" })
+        body: JSON.stringify({})
       })
 
       if (response.ok) {
@@ -582,13 +664,73 @@ export default function AdminJobsPage() {
                 <Save className="h-5 w-5" />
                 <span>Blurhash Processing</span>
               </div>
-              {blurhashJob && getStatusBadge(blurhashJob.status)}
+              {/* Status badge derived from queue */}
+              <span className={`text-xs px-2 py-1 rounded ${isBlurActive ? 'bg-blue-100 text-blue-800' : isBlurPaused ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
+                {isBlurActive ? 'RUNNING' : isBlurPaused ? 'PAUSED' : 'IDLE'}
+              </span>
             </CardTitle>
             <CardDescription>
               Generate blur placeholders for smooth image loading experience
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Blurhash Queue Dashboard */}
+            {blurQueue && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Status */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`p-2 rounded-full ${isBlurActive ? 'bg-blue-100 text-blue-600' : isBlurPaused ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-600'}`}>
+                        {isBlurActive ? <Activity className="h-4 w-4" /> : isBlurPaused ? <Pause className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Status</span>
+                    </div>
+                  </div>
+                  <div className={`mt-2 text-2xl font-bold ${isBlurActive ? 'text-blue-600' : isBlurPaused ? 'text-yellow-600' : 'text-gray-600'}`}>{isBlurActive ? 'Running' : isBlurPaused ? 'Paused' : 'Stopped'}</div>
+                </div>
+
+                {/* Jobs queued */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="p-2 rounded-full bg-orange-100 text-orange-600">
+                        <Clock className="h-4 w-4" />
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Queued</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold">{blurQueue.waiting}</div>
+                </div>
+
+                {/* Jobs processing */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="p-2 rounded-full bg-blue-100 text-blue-600">
+                        <Activity className="h-4 w-4" />
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Processing</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold">{blurQueue.active}</div>
+                </div>
+
+                {/* Jobs finished */}
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="p-2 rounded-full bg-green-100 text-green-600">
+                        <CheckCircle className="h-4 w-4" />
+                      </span>
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Finished</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-bold">{blurQueue.completed}</div>
+                </div>
+              </div>
+            )}
+
             {/* Job Statistics Overview */}
             {jobStats && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
@@ -603,141 +745,6 @@ export default function AdminJobsPage() {
                 <div className="text-center">
                   <div className="text-2xl font-bold text-orange-600">{jobStats.photosWithoutBlurhash}</div>
                   <div className="text-sm text-muted-foreground">Remaining</div>
-                </div>
-              </div>
-            )}
-
-            {/* Current Job Status */}
-            {blurhashJob ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Current Job Status</h4>
-                  <span className="text-sm text-muted-foreground">
-                    Started: {formatDate(blurhashJob.startedAt)}
-                  </span>
-                </div>
-                
-                {blurhashJob.status === 'RUNNING' && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span>Progress:</span>
-                      <span className="font-medium">{blurhashJob.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div 
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
-                        style={{ width: `${blurhashJob.progress}%` }}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">This Run:</span>
-                        <div className="font-medium">{blurhashJob.processedPhotos} / {blurhashJob.totalPhotos}</div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Remaining:</span>
-                        <div className="font-medium">{blurhashJob.totalPhotos - blurhashJob.processedPhotos}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">Duration:</span>
-                      <span className="ml-2 font-medium">
-                        {formatDuration(blurhashJob.startedAt, null)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {blurhashJob.status === 'COMPLETED' && (
-                  <div className="space-y-2 p-4 border rounded-lg bg-green-50">
-                    <div className="flex items-center text-green-700">
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      <span className="font-medium">Job Completed Successfully</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm text-green-700">
-                      <div>
-                        <span>Processed:</span>
-                        <span className="ml-2 font-medium">{blurhashJob.processedPhotos} photos</span>
-                      </div>
-                      <div>
-                        <span>Duration:</span>
-                        <span className="ml-2 font-medium">
-                          {formatDuration(blurhashJob.startedAt, blurhashJob.completedAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-green-700">
-                      <span>Completed:</span>
-                      <span className="ml-2">{formatDate(blurhashJob.completedAt)}</span>
-                    </div>
-                  </div>
-                )}
-                
-                {blurhashJob.status === 'FAILED' && (
-                  <div className="space-y-2 p-4 border rounded-lg bg-red-50">
-                    <div className="flex items-center text-red-700">
-                      <XCircle className="h-4 w-4 mr-2" />
-                      <span className="font-medium">Job Failed</span>
-                    </div>
-                    <div className="text-sm text-red-700">
-                      <span>Failed at:</span>
-                      <span className="ml-2">{formatDate(blurhashJob.completedAt)}</span>
-                    </div>
-                    {blurhashJob.errors && (
-                      <div className="text-sm text-red-700">
-                        <span>Errors:</span>
-                        <div className="mt-1 p-2 bg-red-100 rounded text-xs font-mono">
-                          {JSON.parse(blurhashJob.errors).slice(0, 3).map((error: string, index: number) => (
-                            <div key={index}>{error}</div>
-                          ))}
-                          {JSON.parse(blurhashJob.errors).length > 3 && (
-                            <div>... and {JSON.parse(blurhashJob.errors).length - 3} more errors</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {blurhashJob.status === 'PENDING' && (
-                  <div className="p-4 border rounded-lg bg-yellow-50">
-                    <div className="flex items-center text-yellow-700">
-                      <Clock className="h-4 w-4 mr-2" />
-                      <span className="font-medium">Job Pending</span>
-                    </div>
-                    <div className="text-sm text-yellow-700 mt-1">
-                      Waiting to start processing...
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No blurhash jobs found</p>
-                <p className="text-sm">Start a new job to generate blur placeholders</p>
-              </div>
-            )}
-
-            {/* Last Completed Job Summary */}
-            {jobStats?.lastCompletedJob && jobStats.lastCompletedJob.id !== blurhashJob?.id && (
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3">Last Completed Job</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <span className="text-muted-foreground">Processed:</span>
-                    <div className="font-medium">{jobStats.lastCompletedJob.processedPhotos} photos</div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Duration:</span>
-                    <div className="font-medium">
-                      {formatDuration(jobStats.lastCompletedJob.startedAt, jobStats.lastCompletedJob.completedAt)}
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Completed:</span>
-                    <span className="ml-2">{formatDate(jobStats.lastCompletedJob.completedAt)}</span>
-                  </div>
                 </div>
               </div>
             )}
@@ -765,21 +772,52 @@ export default function AdminJobsPage() {
             <div className="flex gap-3 pt-4 border-t">
               <Button
                 onClick={handleStartBlurhashJob}
-                disabled={blurhashJobLoading || blurhashJob?.status === 'RUNNING'}
+                disabled={blurhashJobLoading || isBlurActive || isBlurPaused}
                 className="flex items-center space-x-2"
               >
                 <Play className="h-4 w-4" />
                 <span>
-                  {blurhashJob?.status === 'RUNNING' 
-                    ? 'Processing...' 
-                    : jobStats?.photosWithoutBlurhash === 0
-                    ? 'Reprocess All Photos'
-                    : `Process ${jobStats?.photosWithoutBlurhash || 0} Remaining Photos`
-                  }
+                  {isBlurActive ? 'Processing...' : jobStats?.photosWithoutBlurhash === 0 ? 'Reprocess All Photos' : `Process ${jobStats?.photosWithoutBlurhash || 0} Remaining Photos`}
                 </span>
               </Button>
 
-              {blurhashJob?.status === 'RUNNING' && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    disabled={blurhashJobLoading || isBlurActive}
+                    className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete All Blurhashes</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete All Blurhashes</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete all blurhashes? This will:
+                      <br />
+                      • Remove blurhash data from all {jobStats?.totalPhotos || 0} photos
+                      <br />
+                      • Clear blurhash cache for faster loading
+                      <br />
+                      <br />
+                      This operation cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteAllBlurhashes}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete All Blurhashes
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {isBlurActive && (
                 <Button
                   onClick={handleStopBlurhashJob}
                   disabled={blurhashJobLoading}
@@ -1137,15 +1175,43 @@ export default function AdminJobsPage() {
               {/* Photo Thumbnails Section */}
               <div className="border rounded-lg p-4">
                 <h5 className="font-medium mb-3 text-sm text-muted-foreground">Photo Thumbnails</h5>
+                {thumbQueue && (
+                  <div className="mb-4 grid grid-cols-2 md:grid-cols-6 gap-2 text-center">
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Waiting</div>
+                      <div className="text-lg font-semibold">{thumbQueue.waiting}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Active</div>
+                      <div className="text-lg font-semibold">{thumbQueue.active}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Completed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.completed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Failed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.failed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Delayed</div>
+                      <div className="text-lg font-semibold">{thumbQueue.delayed}</div>
+                    </div>
+                    <div className="p-2 rounded border bg-white">
+                      <div className="text-xs text-muted-foreground">Paused</div>
+                      <div className="text-lg font-semibold">{thumbQueue.paused}</div>
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-3 flex-wrap">
                   <Button
                     onClick={handleStartThumbnailJob}
-                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING'}
+                    disabled={thumbnailJobLoading || videoThumbnailJobLoading || isActiveThumb || videoThumbnailJob?.status === 'RUNNING' || isPausedThumb}
                     className="flex items-center space-x-2"
                   >
                     <Play className="h-4 w-4" />
                     <span>
-                      {thumbnailJob?.status === 'RUNNING' 
+                      {isActiveThumb 
                         ? 'Processing Photos...' 
                         : thumbnailStats?.photosWithoutThumbnails === 0
                         ? 'Reprocess All Photos'
@@ -1154,7 +1220,7 @@ export default function AdminJobsPage() {
                     </span>
                   </Button>
 
-                  {thumbnailJob?.status === 'RUNNING' && (
+                  {isActiveThumb && (
                     <Button
                       onClick={handleStopThumbnailJob}
                       disabled={thumbnailJobLoading}
@@ -1162,6 +1228,17 @@ export default function AdminJobsPage() {
                     >
                       <Pause className="h-4 w-4" />
                       <span>Stop Photos</span>
+                    </Button>
+                  )}
+
+                  {isPausedThumb && (
+                    <Button
+                      onClick={handleResumeThumbnailJob}
+                      disabled={thumbnailJobLoading}
+                      className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Play className="h-4 w-4" />
+                      <span>Resume Photos</span>
                     </Button>
                   )}
 
