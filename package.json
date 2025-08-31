@@ -32,7 +32,7 @@
     "worker:sync": "tsx scripts/sync-worker.ts",
     "docker:up": "docker compose up",
     "worker:uploads": "tsx scripts/upload-worker.ts",
-    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:sync\"",
+    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:sync\" \"npm:worker:blurhash\"",
     "seed:admin": "tsx scripts/create-initial-admin.ts"
   },
   "dependencies": {

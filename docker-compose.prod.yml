@@ -61,101 +61,13 @@ services:
       retries: 3
       start_period: 40s
 
-  # Worker services
-  worker-thumbnails:
+  # Worker service (consolidated)
+  worker:
     build:
       context: .
       dockerfile: Dockerfile
       target: runner
-    command: npm run worker:thumbnails:all
-    env_file:
-      - .env
-    networks:
-      - lumina-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
-    restart: unless-stopped
-    deploy:
-      replicas: 2
-
-  worker-blurhash:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runner
-    command: npm run worker:blurhash
-    env_file:
-      - .env
-    networks:
-      - lumina-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
-    restart: unless-stopped
-    deploy:
-      replicas: 1
-
-  worker-exif:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runner
-    command: npm run worker:exif
-    env_file:
-      - .env
-    networks:
-      - lumina-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
-    restart: unless-stopped
-    deploy:
-      replicas: 1
-
-  worker-uploads:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runner
-    command: npm run worker:uploads
-    env_file:
-      - .env
-    networks:
-      - lumina-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
-    restart: unless-stopped
-    deploy:
-      replicas: 1
-
-  worker-sync:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runner
-    command: npm run worker:sync
+    command: npm run worker:all
     env_file:
       - .env
     networks:
