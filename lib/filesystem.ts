@@ -151,11 +151,17 @@ export class FileSystemScanner {
   async getAllAlbums(): Promise<string[]> {
     const albums: string[] = [];
     
+    console.log(`[DEBUG] getAllAlbums called with rootPath: "${this.rootPath}"`);
+    
     const scanRecursive = async (currentPath: string) => {
       const fullPath = path.join(this.rootPath, currentPath);
       
+      console.log(`[DEBUG] Scanning directory: "${fullPath}"`);
+      
       try {
         const entries = await fs.readdir(fullPath, { withFileTypes: true });
+        
+        console.log(`[DEBUG] Found ${entries.length} entries in "${fullPath}"`);
         
         // Check if this directory contains photos/videos OR subdirectories
         const hasMedia = entries.some((entry: any) => 
@@ -164,9 +170,12 @@ export class FileSystemScanner {
         
         const hasSubdirectories = entries.some((entry: any) => entry.isDirectory());
         
+        console.log(`[DEBUG] Directory "${currentPath}": hasMedia=${hasMedia}, hasSubdirectories=${hasSubdirectories}`);
+        
         // Add this directory as an album if it has media OR if it's not the root and has subdirectories
         if (hasMedia || (currentPath && hasSubdirectories)) {
           albums.push(currentPath);
+          console.log(`[DEBUG] Added album: "${currentPath}"`);
         }
         
         // Always recurse into subdirectories to find nested albums
@@ -211,3 +220,5 @@ export class FileSystemScanner {
 }
 
 export const scanner = new FileSystemScanner(process.env.PHOTOS_ROOT_PATH || '');
+
+console.log(`[DEBUG] FileSystemScanner initialized with rootPath: "${process.env.PHOTOS_ROOT_PATH || 'EMPTY'}"`);

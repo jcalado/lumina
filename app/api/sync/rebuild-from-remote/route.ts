@@ -4,19 +4,10 @@ import { enqueueSyncJob } from '@/lib/queues/syncQueue';
 
 export async function POST(request: NextRequest) {
   try {
-    let selectedPaths: string[] | null = null;
-    try {
-      const body = await request.json().catch(() => null);
-      if (body && Array.isArray(body.paths)) {
-        selectedPaths = body.paths.filter((p: any) => typeof p === 'string');
-      }
-    } catch {
-      // ignore body parse errors; default to full sync
-    }
     // Create a new sync job
     const syncJob = await prisma.syncJob.create({
       data: {
-        type: 'FILESYSTEM',
+        type: 'S3',
         status: 'PENDING',
         startedAt: new Date(),
       },
@@ -25,8 +16,7 @@ export async function POST(request: NextRequest) {
     // Enqueue the sync job
     await enqueueSyncJob({
       jobId: syncJob.id,
-      type: 'FILESYSTEM',
-      selectedPaths: selectedPaths,
+      type: 'S3',
     });
 
     return NextResponse.json({
@@ -34,12 +24,10 @@ export async function POST(request: NextRequest) {
       status: 'started',
     });
   } catch (error) {
-    console.error('Error starting sync:', error);
+    console.error('Error starting S3 rebuild:', error);
     return NextResponse.json(
-      { error: 'Failed to start sync' },
+      { error: 'Failed to start S3 rebuild' },
       { status: 500 }
     );
   }
 }
-
-

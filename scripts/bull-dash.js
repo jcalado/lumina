@@ -6,13 +6,19 @@ const { BullAdapter } = require('@bull-board/api/bullAdapter');
 const { BullMQAdapter } = require('@bull-board/api/bullMQAdapter');
 const { ExpressAdapter } = require('@bull-board/express');
 
-const thumbnailsQueue = new QueueMQ('thumbnails');
+const queues = [
+  new BullMQAdapter(new QueueMQ('uploads')),
+  new BullMQAdapter(new QueueMQ('thumbnails')),
+  new BullMQAdapter(new QueueMQ('blurhash')),
+  new BullMQAdapter(new QueueMQ('exif')),
+  new BullMQAdapter(new QueueMQ('sync'))
+];
 
 const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath('/admin/queues');
 
 const { addQueue, removeQueue, setQueues, replaceQueues } = createBullBoard({
-  queues: [new BullMQAdapter(thumbnailsQueue)],
+  queues,
   serverAdapter: serverAdapter,
 });
 

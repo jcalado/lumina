@@ -28,9 +28,11 @@
     "debug:env": "bash scripts/debug-env.sh",
     "worker:thumbnails:all": "tsx scripts/thumbnail-queue-worker-all.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
+    "worker:exif": "tsx scripts/exif-worker.ts",
+    "worker:sync": "tsx scripts/sync-worker.ts",
     "docker:up": "docker compose up",
     "worker:uploads": "tsx scripts/upload-worker.ts",
-    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\""
+    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:sync\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.696.0",

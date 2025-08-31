@@ -113,6 +113,7 @@ model Thumbnail {
 
 model SyncJob {
   id              String    @id @default(cuid())
+  type            SyncJobType @default(FILESYSTEM)
   status          JobStatus @default(PENDING)
   progress        Int       @default(0)
   albumProgress   String?   @db.Text // JSON with per-album progress
@@ -202,4 +203,9 @@ enum JobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum SyncJobType {
+  FILESYSTEM
+  S3
 }

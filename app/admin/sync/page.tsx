@@ -382,7 +382,41 @@ export default function SyncPage() {
       const syncData = await syncRes.json()
       
       setAlbums(albumsData.albums || [])
-      setCurrentSync(syncData.currentJob)
+      
+      // Use BullMQ job progress if available, otherwise fall back to database
+      const dbJob = syncData.currentJob
+      const bullmqJob = syncData.bullmqJob
+      
+      if (dbJob) {
+        const enhancedJob = { ...dbJob }
+        
+        // If BullMQ job has more recent progress info, use it
+        if (bullmqJob && bullmqJob.state === 'active' && typeof bullmqJob.progress === 'number') {
+          enhancedJob.progress = bullmqJob.progress
+        }
+        
+        // Update status based on BullMQ state if more accurate
+        if (bullmqJob) {
+          switch (bullmqJob.state) {
+            case 'active':
+              enhancedJob.status = 'RUNNING'
+              break
+            case 'completed':
+              enhancedJob.status = 'COMPLETED'
+              break
+            case 'failed':
+              enhancedJob.status = 'FAILED'
+              break
+            case 'delayed':
+              enhancedJob.status = 'PENDING'
+              break
+          }
+        }
+        
+        setCurrentSync(enhancedJob)
+      } else {
+        setCurrentSync(null)
+      }
       
       if (reconciliationRes.ok) {
         const reconciliationData = await reconciliationRes.json()
