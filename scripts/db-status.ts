@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 
 /**
- * Database Status Utility
+ * Database Status Utility (PostgreSQL)
  * 
- * Shows the current database configuration and tests the connection
+ * Shows the current PostgreSQL database configuration and tests the connection
  */
 
 import { getDatabaseConfig, validateDatabaseConfig, buildDatabaseUrl } from '../lib/database-config';
@@ -19,14 +19,12 @@ async function main() {
   // Show configuration
   const config = getDatabaseConfig();
   console.log('📋 Current Configuration:');
-  console.log(`   Provider: MariaDB/MySQL`);
+  console.log(`   Provider: PostgreSQL`);
   console.log(`   Host: ${config.host}`);
   console.log(`   Port: ${config.port}`);
   console.log(`   Database: ${config.database}`);
   console.log(`   Username: ${config.username}`);
   console.log(`   Password: ${config.hasPassword ? '✅ Set' : '❌ Not set'}`);
-  console.log(`   Charset: ${config.charset}`);
-  console.log(`   Collation: ${config.collation}`);
   console.log('');
 
   // Validate configuration
