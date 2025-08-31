@@ -8,16 +8,16 @@ const globalForPrisma = globalThis as unknown as {
 let prismaInstance: PrismaClient;
 
 // During build time, skip database validation and use a minimal setup
-if (process.env.NEXT_PHASE === 'phase-production-build') {
-  // Use a mock PrismaClient during build that won't try to connect
-  prismaInstance = globalForPrisma.prisma ?? new PrismaClient({
-    datasources: {
-      db: {
-        url: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
-      }
-    }
-  });
-} else {
+// if (process.env.NEXT_PHASE === 'phase-production-build') {
+//   // Use a mock PrismaClient during build that won't try to connect
+//   prismaInstance = globalForPrisma.prisma ?? new PrismaClient({
+//     datasources: {
+//       db: {
+//         url: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+//       }
+//     }
+//   });
+// } else {
   // Runtime initialization with proper validation
   const configValidation = validateDatabaseConfig();
   if (!configValidation.valid) {
@@ -35,7 +35,7 @@ if (process.env.NEXT_PHASE === 'phase-production-build') {
       }
     }
   });
-}
+// }
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prismaInstance;
 
