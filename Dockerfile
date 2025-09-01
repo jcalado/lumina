@@ -1,15 +1,25 @@
 # Use Node.js 20 Alpine for smaller image size
-FROM node:20-alpine AS base
+FROM node:20-alpine AS build-base
 
-# Install system dependencies needed for native modules
-RUN apk add --no-cache libc6-compat python3 make g++ pkgconfig pixman-dev cairo-dev jpeg-dev giflib-dev librsvg-dev pango-dev ffmpeg
+# Toolchain and headers for building native modules (build only)
+RUN apk add --no-cache \
+  libc6-compat \
+  python3 make g++ pkgconfig \
+  pixman-dev cairo-dev jpeg-dev giflib-dev librsvg-dev pango-dev
 
 # Set Python path for node-gyp and create symlink
 ENV PYTHON=/usr/bin/python3
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
+# Runtime-only base (no compilers, only shared libs)
+FROM node:20-alpine AS runtime-base
+RUN apk add --no-cache \
+  libc6-compat \
+  pixman cairo jpeg giflib librsvg pango \
+  ffmpeg
+
 # Install dependencies only when needed
-FROM base AS deps
+FROM build-base AS deps
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
@@ -26,7 +36,7 @@ COPY prisma/schema.prisma ./prisma/
 RUN npx prisma generate
 
 # Rebuild the source code only when needed
-FROM base AS builder
+FROM build-base AS builder
 WORKDIR /app
 
 # Accept build arguments for environment variables needed during build
@@ -39,15 +49,14 @@ ENV DATABASE_URL=$DATABASE_URL
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXTAUTH_URL=$NEXTAUTH_URL
 
-# Copy package files first for better caching
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy minimal files first to leverage caching of Prisma generate
+COPY prisma/schema.prisma ./prisma/
+RUN npx prisma generate
+
+# Copy project files
 COPY package.json package-lock.json* ./
-
-# Install all dependencies (including dev dependencies for build)
-RUN npm ci
-
-# Copy Prisma generated files from prisma-builder stage
-COPY --from=prisma-builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=prisma-builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy source code in layers for better caching
 COPY tsconfig.json ./
@@ -76,7 +85,7 @@ COPY app-logo.png ./
 RUN npm run build
 
 # Development stage
-FROM base AS dev
+FROM build-base AS dev
 WORKDIR /app
 
 # Install all dependencies for development
@@ -96,39 +105,19 @@ EXPOSE 3000
 # Use development server
 CMD ["npm", "run", "dev"]
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# Production app image (Next.js standalone, no compilers)
+FROM runtime-base AS runner-app
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Ensure /app directory is owned by node user
-RUN chown -R node:node /app
-
-# Copy package files and install production dependencies only
-COPY --chown=node:node package.json package-lock.json* ./
-
-# Switch to node user before installing dependencies
 USER node
-RUN npm ci --only=production && npm cache clean --force
 
-# Copy Prisma generated client and schema (as node user)
-COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy the built application (as node user)
+# Copy only the Next.js standalone output and public assets
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-
-# Copy runtime files needed for workers (as node user)
-COPY --from=builder --chown=node:node /app/scripts ./scripts
-COPY --from=builder --chown=node:node /app/lib ./lib
-COPY --from=builder --chown=node:node /app/prisma ./prisma
-COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
-COPY --from=builder --chown=node:node /app/package.json ./package.json
-
-USER node
 
 EXPOSE 3000
 
@@ -138,3 +127,29 @@ ENV HOSTNAME="0.0.0.0"
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/next-config-js/output
 CMD ["node", "server.js"]
+
+# Production worker image (with prod node_modules and prisma client)
+FROM build-base AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM runtime-base AS runner-worker
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy production dependencies
+COPY --from=prod-deps /app/node_modules ./node_modules
+
+# Copy generated Prisma client from builder (ensures correct engines are present)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy runtime files needed by workers
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
+
+USER node

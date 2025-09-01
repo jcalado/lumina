@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runner
+      target: runner-app
       args:
         DATABASE_URL: ${DATABASE_URL}
         NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
@@ -55,6 +55,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_DATA:-photos_data}:/var/app/photos
@@ -65,10 +67,40 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
-  # Worker service (consolidated)
+  # Prisma migrations (one-off job)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-worker
+    image: lumina-worker:latest
+    command: npx prisma migrate deploy
+    env_file:
+      - .env
+    networks:
+      - lumina-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    init: true
+
+  # Worker service (production workers)
   worker:
-    image: lumina-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-worker
+    image: lumina-worker:latest
     command: npm run worker:all
     env_file:
       - .env
@@ -87,9 +119,21 @@ services:
     restart: unless-stopped
     deploy:
       replicas: 1
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   bull-dash:
-    image: lumina-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner-worker
+    image: lumina-worker:latest
     command: node scripts/bull-dash.js
     env_file:
       - .env
@@ -107,6 +151,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 networks:
   lumina-network:
