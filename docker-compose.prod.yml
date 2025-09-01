@@ -83,7 +83,7 @@ services:
       dockerfile: Dockerfile
       target: runner-migrate
     image: lumina-migrate:latest
-    command: sh -lc "if [ -d prisma/migrations ] && [ \"$(ls -A prisma/migrations 2>/dev/null)\" ]; then ./node_modules/.bin/prisma migrate deploy; else echo 'No migrations found; running prisma db push'; ./node_modules/.bin/prisma db push; fi"
+    command: sh -lc "if [ -d prisma/migrations ] && [ \"$(ls -A prisma/migrations 2>/dev/null)\" ]; then ./node_modules/.bin/prisma migrate deploy --skip-generate; else echo 'No migrations found; running prisma db push'; ./node_modules/.bin/prisma db push --skip-generate; fi"
     env_file:
       - .env
     networks:
