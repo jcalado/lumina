@@ -2,7 +2,7 @@
 FROM node:20-alpine AS base
 
 # Install system dependencies needed for native modules
-RUN apk add --no-cache libc6-compat python3 make g++ pkgconfig pixman-dev cairo-dev jpeg-dev giflib-dev librsvg-dev pango-dev
+RUN apk add --no-cache libc6-compat python3 make g++ pkgconfig pixman-dev cairo-dev jpeg-dev giflib-dev librsvg-dev pango-dev ffmpeg
 
 # Set Python path for node-gyp and create symlink
 ENV PYTHON=/usr/bin/python3

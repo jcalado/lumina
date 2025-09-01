@@ -47,7 +47,7 @@ services:
     env_file:
       - .env
     ports:
-      - "3000:3000"
+      - "4567:3000"
     networks:
       - lumina-network
     depends_on:
@@ -57,7 +57,7 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+      - ${PHOTOS_DATA:-photos_data}:/var/app/photos
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
@@ -83,10 +83,30 @@ services:
         condition: service_started
     volumes:
       - ./temp:/app/temp
-      - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
+      - ${PHOTOS_DATA:-photos_data}:/var/app/photos
     restart: unless-stopped
     deploy:
       replicas: 1
+
+  bull-dash:
+    image: lumina-app:latest
+    command: node scripts/bull-dash.js
+    env_file:
+      - .env
+    ports:
+      - "4568:3001"
+    networks:
+      - lumina-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/admin/queues"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   lumina-network:
