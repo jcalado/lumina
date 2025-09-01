@@ -60,6 +60,7 @@ services:
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_DATA:-photos_data}:/var/app/photos
+      - next_cache:/app/.next/cache
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
@@ -168,3 +169,4 @@ volumes:
   postgres_data:
   redis_data:
   photos_data:
+  next_cache:
