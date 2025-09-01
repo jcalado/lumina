@@ -81,9 +81,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runner-worker
-    image: lumina-worker:latest
-    command: npx prisma migrate deploy
+      target: runner-migrate
+    image: lumina-migrate:latest
+    command: sh -lc "if [ -d prisma/migrations ] && [ \"$(ls -A prisma/migrations 2>/dev/null)\" ]; then ./node_modules/.bin/prisma migrate deploy; else echo 'No migrations found; running prisma db push'; ./node_modules/.bin/prisma db push; fi"
     env_file:
       - .env
     networks:

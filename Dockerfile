@@ -153,3 +153,18 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
 USER node
+
+# Production migration runner (includes dev deps for prisma CLI only)
+FROM runtime-base AS runner-migrate
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Bring in dev dependencies so prisma CLI is available
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy schema and package for potential prisma resolution
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
+
+USER node
