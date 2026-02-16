@@ -9,6 +9,8 @@ RUN apk add --no-cache \
 
 # Set Python path for node-gyp and create symlink
 ENV PYTHON=/usr/bin/python3
+# Fix canvas@3.x compilation on Alpine with newer GCC (missing <cstdint>)
+ENV CXXFLAGS="-include cstdint"
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Runtime-only base (no compilers, only shared libs)
@@ -61,6 +63,7 @@ COPY package.json package-lock.json* ./
 # Copy source code in layers for better caching
 COPY tsconfig.json ./
 COPY next.config.js ./
+COPY middleware.ts ./
 COPY tailwind.config.ts ./
 COPY postcss.config.js ./
 COPY components.json ./
