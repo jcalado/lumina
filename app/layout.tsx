@@ -14,8 +14,6 @@ import SettingsFallback from '@/components/SettingsFallback';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const dynamic = 'force-dynamic';
-
 export async function generateMetadata(): Promise<Metadata> {
   // Avoid hard build-time DB dependency; resolve at runtime with fallback
   try {
