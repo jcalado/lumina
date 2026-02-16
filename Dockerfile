@@ -42,9 +42,12 @@ FROM build-base AS builder
 WORKDIR /app
 
 # Accept build arguments for environment variables needed during build
-ARG DATABASE_URL
-ARG NEXTAUTH_SECRET
-ARG NEXTAUTH_URL
+# Defaults are safe placeholders so services that don't pass build args
+# (migrate, worker, bull-dash) can still complete `next build` prerendering.
+# Actual runtime values come from env_file in docker-compose.
+ARG DATABASE_URL=postgresql://build:build@localhost:5432/build
+ARG NEXTAUTH_SECRET=build-time-placeholder
+ARG NEXTAUTH_URL=http://localhost:3000
 
 # Set environment variables for the build process
 ENV DATABASE_URL=$DATABASE_URL
