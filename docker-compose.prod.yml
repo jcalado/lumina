@@ -18,6 +18,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Redis for queues and caching
   redis:
@@ -32,6 +37,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Main Next.js application
   app:
@@ -76,6 +86,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
 
   # Prisma migrations (one-off job)
   migrate:
@@ -94,6 +109,11 @@ services:
         condition: service_healthy
     restart: "no"
     init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Worker service (production workers)
   worker:
@@ -128,6 +148,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "10"
 
   bull-dash:
     build:
@@ -160,6 +185,11 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 networks:
   lumina-network:
