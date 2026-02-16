@@ -43,21 +43,21 @@ function formatBytes(bytes: number): string {
 // Helper function to get S3 storage usage
 async function getS3StorageUsage(): Promise<{ totalSize: number; objectCount: number }> {
   try {
-    // Get all photos from database to calculate S3 usage
-    const photos = await prisma.photo.findMany({
-      select: {
-        fileSize: true,
-        s3Key: true
-      },
-      where: {
-        s3Key: { not: '' }
-      }
-    })
+    const [photos, videos] = await Promise.all([
+      prisma.photo.findMany({
+        select: { fileSize: true },
+        where: { s3Key: { not: '' } },
+      }),
+      prisma.video.findMany({
+        select: { fileSize: true },
+        where: { s3Key: { not: '' } },
+      }),
+    ])
 
-    const totalSize = photos.reduce((sum: number, photo: { fileSize: number | null }) => sum + (photo.fileSize || 0), 0)
-    const objectCount = photos.length
+    const photoSize = photos.reduce((sum: number, p: { fileSize: number | null }) => sum + (p.fileSize || 0), 0)
+    const videoSize = videos.reduce((sum: number, v: { fileSize: number | null }) => sum + (v.fileSize || 0), 0)
 
-    return { totalSize, objectCount }
+    return { totalSize: photoSize + videoSize, objectCount: photos.length + videos.length }
   } catch (error) {
     console.error('Error calculating S3 storage usage:', error)
     return { totalSize: 0, objectCount: 0 }
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
               
               if (entry.isDirectory()) {
                 count += await countFiles(fullPath)
-              } else if (entry.isFile() && /\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/i.test(entry.name)) {
+              } else if (entry.isFile() && /\.(jpg|jpeg|png|gif|bmp|webp|tiff|mp4|mov|avi|mkv|webm)$/i.test(entry.name)) {
                 count++
               }
             }

@@ -207,9 +207,6 @@ export default function SyncPage() {
     setRestoreProgress(prev => new Map(prev.set(albumId, { current: 0, total: missingFiles.length, message: 'Starting...' })))
 
     try {
-      console.log(`[FRONTEND] Starting restore request for album ID: ${albumId}`)
-      console.log(`[FRONTEND] Files to restore: ${missingFiles.length}`)
-      
       const response = await fetch(`/api/admin/albums/${albumId}/restore-progress`, {
         method: 'POST',
         headers: {
@@ -217,8 +214,6 @@ export default function SyncPage() {
         },
         body: JSON.stringify({ missingFiles })
       })
-      
-      console.log(`[FRONTEND] Restore response status: ${response.status}`)
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
@@ -260,8 +255,6 @@ export default function SyncPage() {
                   break
                   
                 case 'complete':
-                  console.log(`[FRONTEND] Restore complete:`, data)
-                  
                   toast({
                     title: "Success",
                     description: data.message || `Restored ${data.stats?.restored || 0} files successfully`
@@ -329,8 +322,6 @@ export default function SyncPage() {
     setIsCreatingAlbum(true)
     
     try {
-      console.log(`[FRONTEND] Creating album:`, albumData)
-      
       const response = await fetch('/api/admin/albums/create', {
         method: 'POST',
         headers: {
@@ -672,9 +663,6 @@ export default function SyncPage() {
     setIsDeletingLocal(true)
 
     try {
-      console.log(`[FRONTEND] Starting delete request for album ID: ${album.id}`)
-      console.log(`[FRONTEND] Album: ${album.name} (${album.path})`)
-      
       const response = await fetch(`/api/admin/albums/${album.id}/delete-local`, {
         method: 'POST',
         headers: {
@@ -682,12 +670,8 @@ export default function SyncPage() {
         }
       })
       
-      console.log(`[FRONTEND] Delete response status: ${response.status}`)
-      
       if (response.ok) {
         const data = await response.json()
-        console.log(`[FRONTEND] Delete response data:`, data)
-        
         toast({
           title: "Success",
           description: data.message || "Local files deleted successfully"

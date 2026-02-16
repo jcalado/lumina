@@ -3,8 +3,7 @@ export const dynamic = 'force-dynamic';
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import AdminSidebar from "@/components/Admin/AdminSidebar"
-import AdminHeader from "@/components/Admin/AdminHeader"
+import AdminShell from "@/components/Admin/AdminShell"
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -17,15 +16,5 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     redirect("/login")
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <AdminHeader session={session} />
-      <div className="flex">
-        <AdminSidebar />
-        <main className="flex-1 p-6">
-          {children}
-        </main>
-      </div>
-    </div>
-  )
+  return <AdminShell session={session}>{children}</AdminShell>
 }
