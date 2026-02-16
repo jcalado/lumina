@@ -9,11 +9,13 @@ interface MediaThumbnail {
   mediaId: string;
   filename: string;
   mediaType: 'photo' | 'video';
+  thumbnailUrl?: string;
 }
 
 interface PhotoThumbnail {
   photoId: string;
   filename: string;
+  thumbnailUrl?: string;
 }
 
 interface ScrubThumbnailProps {
@@ -76,6 +78,7 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
           size="medium"
           className="w-full h-full object-cover transition-transform group-hover:scale-105"
           alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
+          src={mediaThumbnail.thumbnailUrl}
         />
       );
     } else {
@@ -88,6 +91,7 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
           size="medium"
           className="w-full h-full object-cover transition-transform group-hover:scale-105"
           alt={`Thumbnail ${currentIndex + 1} for ${albumName}`}
+          src={photoThumbnail.thumbnailUrl}
         />
       );
     }

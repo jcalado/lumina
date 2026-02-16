@@ -11,6 +11,7 @@ export interface MediaItem {
   filename: string;
   orientation?: number;
   blurhash?: string | null;
+  thumbnailUrl?: string;
 }
 
 interface MediaImageProps {
@@ -19,14 +20,16 @@ interface MediaImageProps {
   alt?: string;
   size?: 'small' | 'medium' | 'large';
   lazy?: boolean;
+  src?: string;
 }
 
-export function MediaImage({ 
-  media, 
-  className = '', 
-  alt, 
+export function MediaImage({
+  media,
+  className = '',
+  alt,
   size = 'small',
-  lazy = true
+  lazy = true,
+  src
 }: MediaImageProps) {
   if (media.type === 'video') {
     return (
@@ -37,6 +40,7 @@ export function MediaImage({
         alt={alt}
         size={size}
         lazy={lazy}
+        src={src || media.thumbnailUrl}
       />
     );
   }
@@ -51,6 +55,7 @@ export function MediaImage({
       lazy={lazy}
       blurhash={media.blurhash}
       orientation={media.orientation}
+      src={src || media.thumbnailUrl}
     />
   );
 }

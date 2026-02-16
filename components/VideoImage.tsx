@@ -5,23 +5,25 @@ import Image from 'next/image';
 import { PlayCircle, Video } from 'lucide-react';
 
 interface VideoImageProps {
-  videoId: string;
+  videoId?: string;
   filename: string;
   className?: string;
   alt?: string;
   size?: 'small' | 'medium' | 'large';
   lazy?: boolean;
   showPlayIcon?: boolean;
+  src?: string;
 }
 
-export function VideoImage({ 
-  videoId, 
-  filename, 
-  className = '', 
-  alt, 
+export function VideoImage({
+  videoId,
+  filename,
+  className = '',
+  alt,
   size = 'small',
   lazy = true,
-  showPlayIcon = true
+  showPlayIcon = true,
+  src
 }: VideoImageProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,13 +61,15 @@ export function VideoImage({
     const loadThumbnail = () => {
       setLoading(true);
       setError(false);
-      // For now, use the video serve endpoint with size parameter
-      // Later this will serve the video thumbnail
-      setThumbnailUrl(`/api/videos/${videoId}/serve?size=${size}`);
+      if (src) {
+        setThumbnailUrl(src);
+      } else if (videoId) {
+        setThumbnailUrl(`/api/videos/${videoId}/serve?size=${size}`);
+      }
     };
 
     loadThumbnail();
-  }, [videoId, size, inView]);
+  }, [videoId, size, inView, src]);
 
   const handleImageLoad = () => {
     setLoading(false);

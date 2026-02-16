@@ -7,7 +7,7 @@ import { Blurhash } from 'react-blurhash';
 import { getOrientationTransform, requiresDimensionSwap } from '@/lib/photo-orientation';
 
 interface PhotoImageProps {
-  photoId: string;
+  photoId?: string;
   filename: string;
   className?: string;
   alt?: string;
@@ -15,17 +15,19 @@ interface PhotoImageProps {
   lazy?: boolean;
   blurhash?: string | null;
   orientation?: number;
+  src?: string;
 }
 
-export function PhotoImage({ 
-  photoId, 
-  filename, 
-  className = '', 
-  alt, 
+export function PhotoImage({
+  photoId,
+  filename,
+  className = '',
+  alt,
   size = 'small',
   lazy = true,
   blurhash = null,
-  orientation = 1
+  orientation = 1,
+  src
 }: PhotoImageProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,11 +65,15 @@ export function PhotoImage({
     const loadImage = () => {
       setLoading(true);
       setError(false);
-      setImageUrl(`/api/photos/${photoId}/serve?size=${size}`);
+      if (src) {
+        setImageUrl(src);
+      } else if (photoId) {
+        setImageUrl(`/api/photos/${photoId}/serve?size=${size}`);
+      }
     };
 
     loadImage();
-  }, [photoId, size, inView]);
+  }, [photoId, size, inView, src]);
 
   const handleImageLoad = () => {
     setLoading(false);

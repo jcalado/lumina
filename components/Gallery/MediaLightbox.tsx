@@ -35,6 +35,8 @@ interface Media {
   duration?: number;
   width?: number;
   height?: number;
+  thumbnailUrl?: string;
+  originalUrl?: string;
 }
 
 interface MediaLightboxProps {
@@ -294,7 +296,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
           <div className="relative">
             <video
               ref={videoRef}
-              src={`/api/videos/${currentMedia.id}/serve?size=original`}
+              src={currentMedia.originalUrl || `/api/videos/${currentMedia.id}/serve?size=original`}
               className="max-w-full max-h-full object-contain"
               onLoadedData={handleVideoLoad}
               onPlay={handleVideoPlay}
@@ -343,7 +345,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
           </div>
         ) : (
           <img
-            src={`/api/photos/${currentMedia.id}/serve?size=large`}
+            src={currentMedia.originalUrl || `/api/photos/${currentMedia.id}/serve?size=large`}
             alt={currentMedia.filename}
             className="max-w-full max-h-full object-contain"
             onLoad={() => setMediaLoading(false)}
