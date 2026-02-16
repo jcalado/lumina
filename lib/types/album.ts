@@ -51,6 +51,7 @@ export interface SubAlbumData {
     mediaId: string;
     filename: string;
     mediaType: 'photo' | 'video';
+    thumbnailUrl?: string;
   }[];
   dateRange?: {
     earliest: string | null;

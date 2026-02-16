@@ -300,7 +300,17 @@ export async function getAlbumPageData(
       // 5: Sample photos (all media from descendants + direct children for thumbnails)
       prisma.photo.findMany({
         where: { albumId: { in: allDescendantIds } },
-        select: { id: true, albumId: true, filename: true, takenAt: true },
+        select: {
+          id: true,
+          albumId: true,
+          filename: true,
+          takenAt: true,
+          thumbnails: {
+            where: { size: 'MEDIUM' },
+            select: { s3Key: true },
+            take: 1,
+          },
+        },
         orderBy: { takenAt: 'asc' },
       }),
 
@@ -308,7 +318,17 @@ export async function getAlbumPageData(
       prisma.video
         .findMany({
           where: { albumId: { in: allDescendantIds } },
-          select: { id: true, albumId: true, filename: true, takenAt: true },
+          select: {
+            id: true,
+            albumId: true,
+            filename: true,
+            takenAt: true,
+            thumbnails: {
+              where: { size: 'MEDIUM' },
+              select: { s3Key: true },
+              take: 1,
+            },
+          },
           orderBy: { takenAt: 'asc' },
         })
         .catch(() => [] as any[]),
@@ -464,25 +484,39 @@ export async function getAlbumPageData(
       filename: string;
       takenAt: Date | null;
       type: 'photo';
+      thumbnailS3Key?: string;
     }> = [];
     const subtreeVideos: Array<{
       id: string;
       filename: string;
       takenAt: Date | null;
       type: 'video';
+      thumbnailS3Key?: string;
     }> = [];
 
     for (const sid of subtreeIds) {
       const ps = photosByAlbum.get(sid);
       if (ps) {
         for (const p of ps) {
-          subtreePhotos.push({ id: p.id, filename: p.filename, takenAt: p.takenAt, type: 'photo' });
+          subtreePhotos.push({
+            id: p.id,
+            filename: p.filename,
+            takenAt: p.takenAt,
+            type: 'photo',
+            thumbnailS3Key: (p as any).thumbnails?.[0]?.s3Key,
+          });
         }
       }
       const vs = videosByAlbum.get(sid);
       if (vs) {
         for (const v of vs) {
-          subtreeVideos.push({ id: v.id, filename: v.filename, takenAt: v.takenAt, type: 'video' });
+          subtreeVideos.push({
+            id: v.id,
+            filename: v.filename,
+            takenAt: v.takenAt,
+            type: 'video',
+            thumbnailS3Key: (v as any).thumbnails?.[0]?.s3Key,
+          });
         }
       }
     }
@@ -500,6 +534,7 @@ export async function getAlbumPageData(
       mediaId: s.id,
       filename: s.filename,
       mediaType: s.type,
+      thumbnailUrl: s.thumbnailS3Key ? s3.getPublicUrl(s.thumbnailS3Key) : undefined,
     }));
 
     return {

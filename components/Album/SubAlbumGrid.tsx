@@ -43,6 +43,7 @@ export function SubAlbumGrid({ subAlbums }: SubAlbumGridProps) {
                         mediaId: t.mediaId,
                         filename: t.filename,
                         mediaType: t.mediaType,
+                        thumbnailUrl: t.thumbnailUrl,
                       }))}
                       albumName={subAlbum.name}
                     />
