@@ -53,6 +53,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
+    "@tanstack/react-virtual": "^3.13.18",
     "@types/adm-zip": "^0.5.7",
     "@types/fluent-ffmpeg": "^2.1.27",
     "adm-zip": "^0.5.16",
