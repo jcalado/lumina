@@ -164,6 +164,14 @@ export class S3Service {
     return await getSignedUrl(getS3Client(), command, { expiresIn });
   }
 
+  /**
+   * Build a direct public URL for an S3 object.
+   */
+  getPublicUrl(key: string): string {
+    this.initializeBucket();
+    return `${process.env.S3_ENDPOINT}/${this.bucket}/${key}`;
+  }
+
   generateKey(albumPath: string, filename: string, type: 'original' | 'thumbnail' = 'original'): string {
     // Handle undefined or null parameters
     if (!albumPath || !filename) {
