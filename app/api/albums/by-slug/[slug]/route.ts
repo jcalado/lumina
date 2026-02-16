@@ -46,7 +46,6 @@ export async function GET(
 
     return NextResponse.json({ album: albumData });
   } catch (error) {
-    console.error("Error fetching album by slug:", error);
     return NextResponse.json(
       { error: "Failed to fetch album" },
       { status: 500 }

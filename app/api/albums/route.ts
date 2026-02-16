@@ -3,8 +3,6 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
-    console.log('Fetching albums...');
-    
     // Single comprehensive query to get everything at once
     const result = await prisma.$queryRaw`
       WITH AlbumStats AS (
@@ -87,8 +85,6 @@ export async function GET() {
       ORDER BY COALESCE(a."displayOrder", 0) ASC, a.name ASC
     ` as any[];
 
-    console.log(`Found ${result.length} albums`);
-
     // Process the results
     const albums = result.map((album: any) => {
       // Parse thumbnails from GROUP_CONCAT format
@@ -123,7 +119,6 @@ export async function GET() {
       headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     });
   } catch (error) {
-    console.error('Detailed error fetching albums:', error);
     return NextResponse.json(
       { error: 'Failed to fetch albums', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

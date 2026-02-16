@@ -13,7 +13,7 @@ async function readPhotoData(photo: { filename: string; s3Key: string; originalP
     try {
       const photosRoot = process.env.PHOTOS_ROOT_PATH;
       let fullPath: string;
-      
+
       // Check if originalPath is already absolute
       if (path.isAbsolute(photo.originalPath)) {
         fullPath = photo.originalPath;
@@ -21,24 +21,20 @@ async function readPhotoData(photo: { filename: string; s3Key: string; originalP
         fullPath = path.join(photosRoot, photo.originalPath);
       } else {
         // No PHOTOS_ROOT_PATH configured, fall back to S3
-        console.log(`No PHOTOS_ROOT_PATH configured for ${photo.filename}, using S3`);
         return await s3Service.getObject(photo.s3Key);
       }
-      
+
       // Check if file exists and read it
       await fs.access(fullPath);
       const buffer = await fs.readFile(fullPath);
-      console.log(`✅ Read local file: ${photo.filename} (${buffer.length} bytes)`);
       return buffer;
-      
+
     } catch (localError) {
-      console.log(`❌ Local file not available for ${photo.filename}: ${localError instanceof Error ? localError.message : 'Unknown error'}`);
-      console.log(`🔄 Falling back to S3 for ${photo.filename}`);
+      // Local file not available, falling back to S3
     }
   }
-  
+
   // Fall back to S3 if local file is not available
-  console.log(`📥 Reading from S3: ${photo.filename}`);
   return await s3Service.getObject(photo.s3Key);
 }
 
@@ -50,15 +46,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Album path is required' }, { status: 400 });
     }
 
-    console.log('Download request for album path (slug path):', albumPath);
-
     // Convert slug path to filesystem path
     const filesystemPath = await slugPathToPath(albumPath);
     if (filesystemPath === null) {
       return NextResponse.json({ error: 'Invalid album path' }, { status: 404 });
     }
-
-    console.log('Converted filesystem path:', filesystemPath);
 
     // Get album and its photos
     const album = await prisma.album.findFirst({
@@ -76,8 +68,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    console.log('Found album:', album ? album.name : 'null');
-
     if (!album) {
       return NextResponse.json({ error: 'Album not found' }, { status: 404 });
     }
@@ -86,14 +76,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Album has no photos' }, { status: 400 });
     }
 
-    console.log('Album has', album.photos.length, 'photos');
-
     const s3Service = new S3Service();
 
     // Set response headers for file download
     const albumName = album.name.replace(/[^a-zA-Z0-9\-_\s]/g, ''); // Sanitize filename
     const filename = `${albumName}-photos.zip`;
-    
+
     const headers = new Headers({
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${filename}"`,
@@ -122,68 +110,61 @@ export async function POST(request: NextRequest) {
 
           // Handle archive completion
           archive.on('end', () => {
-            console.log('Archive streaming completed');
             controller.close();
           });
 
           // Handle archive errors
           archive.on('error', (err) => {
-            console.error('Archive error:', err);
             controller.error(err);
           });
 
           // Start downloading and adding photos immediately
           // This approach processes photos one by one to start streaming ASAP
           let processedCount = 0;
-          
+
           const processPhotos = async () => {
             // Process photos with limited concurrency to avoid memory issues
             const CONCURRENT_DOWNLOADS = 2;
-            
+
             for (let i = 0; i < album.photos.length; i += CONCURRENT_DOWNLOADS) {
               const batch = album.photos.slice(i, i + CONCURRENT_DOWNLOADS);
-              
+
               // Download batch concurrently
               const downloadPromises = batch.map(async (photo) => {
                 try {
-                  console.log(`Processing photo: ${photo.filename}`);
                   const imageBuffer = await readPhotoData(photo, s3Service);
                   return { photo, imageBuffer };
                 } catch (photoError) {
-                  console.error(`Error processing photo ${photo.filename}:`, photoError);
                   return null;
                 }
               });
 
               const results = await Promise.allSettled(downloadPromises);
-              
+
               // Add successfully downloaded photos to archive immediately
               for (const result of results) {
                 if (result.status === 'fulfilled' && result.value) {
                   const { photo, imageBuffer } = result.value;
-                  console.log(`Adding photo to archive: ${photo.filename} (${++processedCount}/${album.photos.length})`);
+                  processedCount++;
                   archive.append(imageBuffer, { name: photo.filename });
                 }
               }
-              
+
               // Small delay to prevent overwhelming the system
               if (i + CONCURRENT_DOWNLOADS < album.photos.length) {
                 await new Promise(resolve => setImmediate(resolve));
               }
             }
-            
-            console.log('All photos processed, finalizing archive...');
+
             archive.finalize();
           };
 
           // Start processing photos immediately
           processPhotos().catch((error) => {
-            console.error('Error processing photos:', error);
             controller.error(error);
           });
 
         } catch (error) {
-          console.error('Error setting up archive stream:', error);
           controller.error(error);
         }
       }
@@ -192,7 +173,6 @@ export async function POST(request: NextRequest) {
     return new NextResponse(stream, { headers });
 
   } catch (error) {
-    console.error('Error downloading album:', error);
     return NextResponse.json(
       { error: `Failed to download album: ${error instanceof Error ? error.message : 'Unknown error'}` },
       { status: 500 }

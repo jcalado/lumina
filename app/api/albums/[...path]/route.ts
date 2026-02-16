@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { slugPathToPath, pathToSlugPath } from '@/lib/slug-paths';
 import { getPhotoOrientation } from '@/lib/photo-orientation';
+import { getS3Service } from '@/lib/s3';
 
 interface Params {
   path: string[];
@@ -36,14 +37,13 @@ export async function GET(
   let albumPath = '';
   try {
     const { path } = await context.params;
-    console.log('Raw path segments:', path);
-    
+
     // Get query parameters for sorting and pagination
     const { searchParams } = new URL(request.url);
     const sortBy = searchParams.get('sortBy') || 'asc'; // 'asc' or 'desc'
     const page = parseInt(searchParams.get('page') || '1');
     const limitParam = searchParams.get('limit');
-    
+
     // Get photos per page setting from database, default to 32
     let photosPerPage = 32;
     try {
@@ -54,17 +54,17 @@ export async function GET(
         photosPerPage = parseInt(setting.value);
       }
     } catch (error) {
-      console.log('Using default photos per page value');
+      // Using default photos per page value
     }
-    
+
     // Allow override via query param (for admin/testing)
     const limit = limitParam ? parseInt(limitParam) : photosPerPage;
     const offset = (page - 1) * limit;
-    
+
     // Decode each path segment to handle URL encoding
     const decodedPath = path.map((segment: string) => decodeURIComponent(segment));
     const slugPath = decodedPath.join('/');
-    
+
     // Convert slug path back to filesystem path for database query
     const convertedPath = await slugPathToPath(slugPath);
     if (convertedPath === null) {
@@ -74,16 +74,10 @@ export async function GET(
       );
     }
     albumPath = convertedPath;
-    
-    console.log('Slug path segments:', decodedPath);
-    console.log('Slug path:', slugPath);
-    console.log('Converted filesystem path:', albumPath);
-    console.log('Sort order:', sortBy);
-    console.log('Pagination:', { page, limit, offset });
-    
+
     let album;
     let albumVideos: any[] = [];
-    
+
     try {
       // Try to include videos in the main query
       album = await prisma.album.findUnique({
@@ -119,13 +113,11 @@ export async function GET(
           },
         },
       });
-      
+
       if (album && (album as any).videos) {
         albumVideos = (album as any).videos;
       }
     } catch (error) {
-      console.log('Failed to include videos in main query, falling back to separate query:', error);
-      
       // Fallback: query without videos
       album = await prisma.album.findUnique({
         where: {
@@ -149,7 +141,7 @@ export async function GET(
           },
         },
       });
-      
+
       // Try to get videos separately
       if (album) {
         try {
@@ -166,10 +158,9 @@ export async function GET(
             skip: offset,
             take: limit,
           });
-          
+
           albumVideos = videos;
         } catch (videoError) {
-          console.log('Video query failed (videos table may not exist yet):', videoError);
           // Continue without videos if the table doesn't exist yet
         }
       }
@@ -192,8 +183,6 @@ export async function GET(
     // Get sub-albums (albums whose path starts with this album's path + '/')
     let subAlbums: SubAlbumWithMedia[] = [];
     try {
-      console.log('Searching for sub-albums of:', albumPath);
-      
       // Find direct sub-albums only (not nested deeper)
       const allSubAlbums = await prisma.album.findMany({
         where: {
@@ -222,7 +211,7 @@ export async function GET(
           { name: 'asc' }
         ]
       });
-      
+
       // Filter to get only direct children and add video counts
       subAlbums = allSubAlbums.filter((album: any) => {
         if (albumPath === '') {
@@ -246,9 +235,7 @@ export async function GET(
         if (ao !== bo) return ao - bo;
         return a.name.localeCompare(b.name);
       });
-      
-      console.log('Found direct sub-albums:', subAlbums.length);
-      
+
       // Add video counts to sub-albums (workaround for TypeScript limitations)
       for (const subAlbum of subAlbums) {
         try {
@@ -259,18 +246,17 @@ export async function GET(
           });
           (subAlbum as any)._count.videos = videoCount;
         } catch (error) {
-          console.log('Video count failed for album:', subAlbum.id, 'assuming 0');
           (subAlbum as any)._count.videos = 0;
         }
       }
-      
+
       // Slug already selected above; fallback if missing
       for (const subAlbum of subAlbums as any[]) {
         if (!subAlbum.slug) {
           subAlbum.slug = subAlbum.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         }
       }
-      
+
       // Get thumbnail photos for sub-albums
       for (const subAlbum of subAlbums) {
         try {
@@ -286,10 +272,10 @@ export async function GET(
           });
 
           let media: { id: string; filename: string; takenAt: Date | null; type: 'photo' | 'video' }[] = [];
-          
+
           if (subAlbumHasChildren > 0) {
             // This sub-album has children, so get media from its sub-albums instead
-            
+
             const subAlbumPhotos = await prisma.photo.findMany({
               where: {
                 album: {
@@ -356,7 +342,7 @@ export async function GET(
             }
           } else if (subAlbum._count.photos > 0 || (subAlbum._count as any).videos > 0) {
             // No children, get media from this album directly
-            
+
             const directPhotos = await prisma.photo.findMany({
               where: {
                 albumId: subAlbum.id,
@@ -411,7 +397,7 @@ export async function GET(
 
           // Store the media for scrubbing
           (subAlbum as SubAlbumWithMedia).media = media;
-          
+
           // Calculate total media count including sub-albums
           const totalPhotoCount = subAlbum._count.photos + (subAlbumHasChildren > 0 ? await prisma.photo.count({
             where: {
@@ -502,22 +488,21 @@ export async function GET(
             earliest: new Date(Math.min(...allDates.map(d => new Date(d!).getTime()))),
             latest: new Date(Math.max(...allDates.map(d => new Date(d!).getTime()))),
           } : null;
-          
+
           // Update the counts to include videos
           (subAlbum as SubAlbumWithMedia)._count.photos = totalPhotoCount;
           (subAlbum as SubAlbumWithMedia)._count.videos = totalVideoCount;
         } catch (photoError) {
-          console.error('Error fetching photos for sub-album:', subAlbum.id, photoError);
           (subAlbum as SubAlbumWithMedia).media = [];
         }
       }
     } catch (subAlbumError) {
-      console.error('Error fetching sub-albums:', subAlbumError);
       subAlbums = [];
     }
 
     // Transform the response to match the expected frontend interface
     const albumWithIncludes = album as any;
+    const s3 = getS3Service();
     const response = {
       album: {
         id: album.id,
@@ -531,7 +516,7 @@ export async function GET(
       subAlbums: await Promise.all(subAlbums.map(async (subAlbum: SubAlbumWithMedia) => {
         // Return all media for scrubbing effect (up to 5)
         const media = subAlbum.media || [];
-        
+
         // Calculate subAlbumsCount for this sub-album
         const subAlbumsCount = await prisma.album.count({
           where: {
@@ -542,7 +527,7 @@ export async function GET(
             },
           },
         });
-        
+
         return {
           id: subAlbum.id,
           path: subAlbum.path,
@@ -567,22 +552,38 @@ export async function GET(
       photos: (albumWithIncludes.photos || []).map((photo: any) => ({
         ...photo,
         type: 'photo' as const,
-        orientation: getPhotoOrientation(photo.metadata)
+        orientation: getPhotoOrientation(photo.metadata),
+        thumbnails: (photo.thumbnails || []).map((t: any) => ({
+          ...t,
+          url: s3.getPublicUrl(t.s3Key),
+        })),
       })),
       videos: albumVideos.map((video: any) => ({
         ...video,
         type: 'video' as const,
+        thumbnails: (video.thumbnails || []).map((t: any) => ({
+          ...t,
+          url: s3.getPublicUrl(t.s3Key),
+        })),
       })),
       // Combined media array for easier frontend handling
       media: [
         ...(albumWithIncludes.photos || []).map((photo: any) => ({
           ...photo,
           type: 'photo' as const,
-          orientation: getPhotoOrientation(photo.metadata)
+          orientation: getPhotoOrientation(photo.metadata),
+          thumbnails: (photo.thumbnails || []).map((t: any) => ({
+            ...t,
+            url: s3.getPublicUrl(t.s3Key),
+          })),
         })),
         ...albumVideos.map((video: any) => ({
           ...video,
           type: 'video' as const,
+          thumbnails: (video.thumbnails || []).map((t: any) => ({
+            ...t,
+            url: s3.getPublicUrl(t.s3Key),
+          })),
         }))
       ].sort((a, b) => {
         // Sort by takenAt date, maintaining the sort order from the query
@@ -603,12 +604,6 @@ export async function GET(
       headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     });
   } catch (error) {
-    console.error('Error fetching album:', error);
-    console.error('Album path that failed:', albumPath);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-    });
     return NextResponse.json(
       { error: 'Failed to fetch album', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
