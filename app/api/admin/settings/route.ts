@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
+import { clearSettingsCache } from "@/lib/settings"
+import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import * as os from "os"
 
@@ -156,6 +158,10 @@ export async function PUT(request: NextRequest) {
       })
     }
 
+    // Clear in-memory cache and revalidate layout so changes appear immediately
+    clearSettingsCache()
+    revalidatePath('/', 'layout')
+
     // Return updated settings
     const settings = await prisma.siteSettings.findMany()
     const settingsObj = settings.reduce((acc: Record<string, string>, setting: any) => {
@@ -163,9 +169,9 @@ export async function PUT(request: NextRequest) {
       return acc
     }, {} as Record<string, string>)
 
-    return NextResponse.json({ 
-      success: true, 
-      settings: settingsObj 
+    return NextResponse.json({
+      success: true,
+      settings: settingsObj
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

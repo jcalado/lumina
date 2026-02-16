@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { ThemeCustomizer } from '@/components/ThemeCustomizer';
 import { Footer } from '@/components/Footer';
 import { Header } from '@/components/Header';
@@ -8,6 +9,7 @@ export default async function SettingsShell({
 }: {
   children: React.ReactNode;
 }) {
+  await connection();
   const siteSettings = await getSiteSettings();
 
   return (

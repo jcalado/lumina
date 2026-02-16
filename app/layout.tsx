@@ -17,6 +17,8 @@ const inter = Inter({ subsets: ['latin'] });
 export async function generateMetadata(): Promise<Metadata> {
   // Avoid hard build-time DB dependency; resolve at runtime with fallback
   try {
+    const { connection } = await import('next/server');
+    await connection();
     const { getSiteSettings } = await import('@/lib/settings');
     const siteSettings = await getSiteSettings();
     return {
