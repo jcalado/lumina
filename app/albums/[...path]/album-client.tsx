@@ -24,9 +24,9 @@ function toLightboxMedia(items: MediaItem[]) {
     ...item,
     takenAt: item.takenAt,
     createdAt: item.createdAt,
-    duration: item.type === 'video' ? item.duration : undefined,
-    width: item.type === 'video' ? item.width : undefined,
-    height: item.type === 'video' ? item.height : undefined,
+    duration: item.type === 'video' ? (item.duration ?? undefined) : undefined,
+    width: item.type === 'video' ? (item.width ?? undefined) : undefined,
+    height: item.type === 'video' ? (item.height ?? undefined) : undefined,
     originalUrl: item.thumbnails?.find(t => t.size === 'LARGE')?.url,
   }));
 }
