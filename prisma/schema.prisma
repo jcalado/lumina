@@ -80,6 +80,7 @@ model Video {
   thumbnails   VideoThumbnail[]
 
   @@index([albumId])
+  @@index([albumId, takenAt])
   @@map("videos")
 }
 
