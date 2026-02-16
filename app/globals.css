@@ -75,4 +75,13 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  .animation-delay-75 { animation-delay: 75ms; }
+  .animation-delay-150 { animation-delay: 150ms; }
+  .animation-delay-225 { animation-delay: 225ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-375 { animation-delay: 375ms; }
+  .animation-delay-450 { animation-delay: 450ms; }
+  .animation-delay-525 { animation-delay: 525ms; }
+  .animation-delay-600 { animation-delay: 600ms; }
 }

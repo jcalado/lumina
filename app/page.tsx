@@ -1,17 +1,11 @@
-"use client";
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Folder, Image, Images } from 'lucide-react';
+import { RefreshCw, Folder, Image } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
-
-
 
 interface Album {
   id: string;
@@ -72,48 +66,65 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="space-y-10">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">{t('loading_albums')} </p>
+          <div className="h-10 w-48 bg-muted animate-pulse rounded mx-auto" />
+          <div className="h-5 w-72 bg-muted animate-pulse rounded mx-auto mt-3" />
+          <div className="h-4 w-20 bg-muted animate-pulse rounded mx-auto mt-2" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-xl overflow-hidden bg-card ring-1 ring-border/50">
+              <div className="aspect-[4/3] bg-muted animate-pulse" />
+              <div className="p-4 space-y-3">
+                <div className="h-4 bg-muted animate-pulse rounded w-3/4" />
+                <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">{t('photo_albums')}</h1>
-          <p className="text-muted-foreground">
-            {t('description')}
+    <div className="space-y-10">
+      {/* Header */}
+      <div className="text-center">
+        <h1 className="text-4xl font-bold tracking-tight">{t('photo_albums')}</h1>
+        <p className="text-lg text-muted-foreground mt-2">
+          {t('description')}
+        </p>
+        {albums.length > 0 && (
+          <p className="text-sm text-muted-foreground mt-1">
+            {albums.length} {albums.length === 1 ? 'album' : 'albums'}
           </p>
-        </div>
+        )}
       </div>
 
       {albums.length === 0 ? (
-        <Card className="text-center py-16">
-          <CardContent>
-            <Folder className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-            <CardTitle className="mb-2">No Albums Found</CardTitle>
-            <CardDescription className="mb-4">
-              No photo albums have been found. Make sure your photos are properly organized in folders
-              and click "Sync Photos" to scan for new content.
-            </CardDescription>
-            <Button onClick={handleSync} disabled={syncing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync Photos'}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center py-16">
+          <Folder className="h-16 w-16 mx-auto text-muted-foreground/40 mb-4" />
+          <h2 className="text-xl font-semibold mb-2">No Albums Found</h2>
+          <p className="text-muted-foreground max-w-md mx-auto mb-4">
+            No photo albums have been found. Make sure your photos are properly organized in folders
+            and click &ldquo;Sync Photos&rdquo; to scan for new content.
+          </p>
+          <Button onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Photos'}
+          </Button>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {albums.map((album) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {albums.map((album, index) => (
             <Link key={album.id} href={`/albums/${album.slugPath || album.slug}`}>
-              <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+              <div
+                className="h-full rounded-xl overflow-hidden bg-card ring-1 ring-border/50 hover:-translate-y-1 hover:shadow-xl hover:ring-border transition-all duration-300 ease-out cursor-pointer group animate-fade-in-up opacity-0"
+                style={{ animationDelay: `${Math.min(index * 75, 600)}ms` }}
+              >
                 {/* Thumbnail Image */}
-                <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
+                <div className="aspect-[4/3] bg-muted relative overflow-hidden">
                   {album.thumbnails && album.thumbnails.length > 0 ? (
                     <ScrubThumbnail
                       thumbnails={album.thumbnails}
@@ -125,25 +136,20 @@ export default function HomePage() {
                     </div>
                   )}
 
-                  {/* Overlay with folder icon and badges - pointer-events-none to allow scrubbing */}
+                  {/* Badges - bottom-left with frosted glass */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
-                    <div className="absolute top-2 left-2 pointer-events-auto">
-                      <div className="bg-black/60 rounded-full p-1.5">
-                        <Images className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                    <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
+                    <div className="absolute bottom-2 left-2 flex gap-1 pointer-events-auto">
                       {album.totalPhotoCount && album.totalPhotoCount > 0 && (
-                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                        <span className="inline-flex items-center backdrop-blur-sm bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
                           <Image className="w-3 h-3 mr-1" />
                           {album.totalPhotoCount}
-                        </Badge>
+                        </span>
                       )}
                       {album.subAlbumsCount && album.subAlbumsCount > 0 && (
-                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                        <span className="inline-flex items-center backdrop-blur-sm bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
                           <Folder className="w-3 h-3 mr-1" />
                           {album.subAlbumsCount}
-                        </Badge>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -151,24 +157,21 @@ export default function HomePage() {
 
                 {/* Album Details */}
                 <div className="p-4">
-                  <div className="flex items-start justify-between mb-1">
-                    <h3 className="font-medium text-sm line-clamp-2 flex-1">
-                      {album.name}
-                    </h3>
-                  </div>
+                  <h3 className="font-semibold text-base line-clamp-2 mb-1">
+                    {album.name}
+                  </h3>
                   {album.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
                       {album.description}
                     </p>
                   )}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-
+                  <div className="text-xs text-muted-foreground">
                     <span>
                       {new Date(album.updatedAt).toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                 </div>
-              </Card>
+              </div>
             </Link>
           ))}
         </div>
