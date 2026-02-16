@@ -3,8 +3,6 @@
 import { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { Folder, Heart, Home } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-
 import { AlbumHeader } from '@/components/Album/AlbumHeader';
 import { SortFilterControls } from '@/components/Album/SortFilterControls';
 import { SubAlbumGrid } from '@/components/Album/SubAlbumGrid';
@@ -26,15 +24,14 @@ function toLightboxMedia(items: MediaItem[]) {
     ...item,
     takenAt: item.takenAt,
     createdAt: item.createdAt,
-    duration: item.type === 'video' ? (item as any).duration : undefined,
-    width: item.type === 'video' ? (item as any).width : undefined,
-    height: item.type === 'video' ? (item as any).height : undefined,
+    duration: item.type === 'video' ? item.duration : undefined,
+    width: item.type === 'video' ? item.width : undefined,
+    height: item.type === 'video' ? item.height : undefined,
     originalUrl: item.thumbnails?.find(t => t.size === 'LARGE')?.url,
   }));
 }
 
 export function AlbumClient({ initialData, slugPath }: AlbumClientProps) {
-  const t = useTranslations('albums');
   const { isFavorite } = useFavorites();
 
   // --------------- State ---------------
