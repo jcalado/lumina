@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 
 interface FavoritesContextType {
   favorites: string[];
@@ -53,41 +53,42 @@ export function FavoritesProvider({ children }: FavoritesProviderProps) {
     }
   }, [favorites, isLoaded]);
 
-  const addFavorite = (photoId: string) => {
+  const addFavorite = useCallback((photoId: string) => {
     setFavorites(prev => {
       if (!prev.includes(photoId)) {
         return [...prev, photoId];
       }
       return prev;
     });
-  };
+  }, []);
 
-  const removeFavorite = (photoId: string) => {
+  const removeFavorite = useCallback((photoId: string) => {
     setFavorites(prev => prev.filter(id => id !== photoId));
-  };
+  }, []);
 
-  const isFavorite = (photoId: string) => {
+  const isFavorite = useCallback((photoId: string) => {
     return favorites.includes(photoId);
-  };
+  }, [favorites]);
 
-  const toggleFavorite = (photoId: string) => {
-    if (isFavorite(photoId)) {
-      removeFavorite(photoId);
-    } else {
-      addFavorite(photoId);
-    }
-  };
+  const toggleFavorite = useCallback((photoId: string) => {
+    setFavorites(prev => {
+      if (prev.includes(photoId)) {
+        return prev.filter(id => id !== photoId);
+      }
+      return [...prev, photoId];
+    });
+  }, []);
+
+  const value = useMemo(() => ({
+    favorites,
+    addFavorite,
+    removeFavorite,
+    isFavorite,
+    toggleFavorite,
+  }), [favorites, addFavorite, removeFavorite, isFavorite, toggleFavorite]);
 
   return (
-    <FavoritesContext.Provider
-      value={{
-        favorites,
-        addFavorite,
-        removeFavorite,
-        isFavorite,
-        toggleFavorite,
-      }}
-    >
+    <FavoritesContext.Provider value={value}>
       {children}
     </FavoritesContext.Provider>
   );
