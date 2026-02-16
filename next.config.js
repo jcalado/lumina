@@ -4,8 +4,20 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
+  reactStrictMode: true,
+  serverExternalPackages: [
+    'sharp',
+    '@prisma/client',
+    'bullmq',
+    'ioredis',
+    'canvas',
+    'fluent-ffmpeg',
+    '@aws-sdk/client-s3',
+    '@aws-sdk/lib-storage',
+  ],
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'date-fns', '@radix-ui/react-icons'],
   },
   // Enable standalone output for Docker
   output: 'standalone',
@@ -14,6 +26,7 @@ const nextConfig = {
     maxRequestSize: '2gb',
   },
   images: {
+    minimumCacheTTL: 31536000, // 1 year - photos are immutable
     remotePatterns: [
       {
         protocol: 'https',
@@ -28,18 +41,6 @@ const nextConfig = {
       'bufferutil': 'commonjs bufferutil',
     });
     return config;
-  },
-  env: {
-    DATABASE_URL: process.env.DATABASE_URL,
-    REDIS_URL: process.env.REDIS_URL,
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
-    S3_ENDPOINT: process.env.S3_ENDPOINT,
-    S3_BUCKET: process.env.S3_BUCKET,
-    S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
-    S3_SECRET_KEY: process.env.S3_SECRET_KEY,
-    S3_REGION: process.env.S3_REGION,
-    PHOTOS_ROOT_PATH: process.env.PHOTOS_ROOT_PATH,
   },
 };
 
