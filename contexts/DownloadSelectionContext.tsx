@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 
 interface DownloadSelectionContextType {
   selectedPhotos: string[];
@@ -49,51 +49,52 @@ export function DownloadSelectionProvider({ children }: DownloadSelectionProvide
     localStorage.setItem('download-selected-photos', JSON.stringify(selectedPhotos));
   }, [selectedPhotos]);
 
-  const addToDownload = (photoId: string) => {
+  const addToDownload = useCallback((photoId: string) => {
     setSelectedPhotos(prev => {
       if (prev.includes(photoId)) {
         return prev;
       }
       return [...prev, photoId];
     });
-  };
+  }, []);
 
-  const removeFromDownload = (photoId: string) => {
+  const removeFromDownload = useCallback((photoId: string) => {
     setSelectedPhotos(prev => prev.filter(id => id !== photoId));
-  };
+  }, []);
 
-  const isSelectedForDownload = (photoId: string) => {
+  const isSelectedForDownload = useCallback((photoId: string) => {
     return selectedPhotos.includes(photoId);
-  };
+  }, [selectedPhotos]);
 
-  const toggleDownloadSelection = (photoId: string) => {
-    if (isSelectedForDownload(photoId)) {
-      removeFromDownload(photoId);
-    } else {
-      addToDownload(photoId);
-    }
-  };
+  const toggleDownloadSelection = useCallback((photoId: string) => {
+    setSelectedPhotos(prev => {
+      if (prev.includes(photoId)) {
+        return prev.filter(id => id !== photoId);
+      }
+      return [...prev, photoId];
+    });
+  }, []);
 
-  const clearAllDownloadSelections = () => {
+  const clearAllDownloadSelections = useCallback(() => {
     setSelectedPhotos([]);
-  };
+  }, []);
 
-  const getSelectedCount = () => {
+  const getSelectedCount = useCallback(() => {
     return selectedPhotos.length;
-  };
+  }, [selectedPhotos]);
+
+  const value = useMemo(() => ({
+    selectedPhotos,
+    addToDownload,
+    removeFromDownload,
+    isSelectedForDownload,
+    toggleDownloadSelection,
+    clearAllDownloadSelections,
+    getSelectedCount,
+  }), [selectedPhotos, addToDownload, removeFromDownload, isSelectedForDownload, toggleDownloadSelection, clearAllDownloadSelections, getSelectedCount]);
 
   return (
-    <DownloadSelectionContext.Provider
-      value={{
-        selectedPhotos,
-        addToDownload,
-        removeFromDownload,
-        isSelectedForDownload,
-        toggleDownloadSelection,
-        clearAllDownloadSelections,
-        getSelectedCount,
-      }}
-    >
+    <DownloadSelectionContext.Provider value={value}>
       {children}
     </DownloadSelectionContext.Provider>
   );
