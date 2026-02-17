@@ -11,6 +11,7 @@ import { Save, Globe, Palette, FileText, Gauge, Plus, Trash2 } from "lucide-reac
 import { toast } from "@/hooks/use-toast"
 import { LiveAccentPreview } from "@/components/LiveAccentPreview"
 import { cn } from "@/lib/utils"
+import { useTranslations } from "next-intl"
 
 interface FooterLink {
   name: string
@@ -30,14 +31,8 @@ interface SystemInfo {
   maxBatchProcessingSize: number
 }
 
-const sidebarItems = [
-  { id: "general", label: "General", icon: Globe },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "footer", label: "Footer", icon: FileText },
-  { id: "performance", label: "Performance", icon: Gauge },
-]
-
 export default function AdminSettingsPage() {
+  const t = useTranslations("adminSettings")
   const [activeSection, setActiveSection] = useState("general")
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: "Lumina Gallery",
@@ -52,6 +47,13 @@ export default function AdminSettingsPage() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  const sidebarItems = [
+    { id: "general", label: t("general"), icon: Globe },
+    { id: "appearance", label: t("appearance"), icon: Palette },
+    { id: "footer", label: t("footer"), icon: FileText },
+    { id: "performance", label: t("performance"), icon: Gauge },
+  ]
 
   useEffect(() => {
     fetchSettings()
@@ -87,10 +89,10 @@ export default function AdminSettingsPage() {
           maxBatchProcessingSize: fetchedSystemInfo?.maxBatchProcessingSize || 4
         })
       } else {
-        toast({ title: "Error", description: "Failed to fetch settings", variant: "destructive" })
+        toast({ title: t("toastError"), description: t("toastFetchFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to fetch settings", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastFetchFailed"), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -107,7 +109,7 @@ export default function AdminSettingsPage() {
       })
 
       if (response.ok) {
-        toast({ title: "Success", description: "Settings saved successfully" })
+        toast({ title: t("toastSuccess"), description: t("toastSettingsSaved") })
         window.location.reload()
       } else {
         const data = await response.json()
@@ -115,8 +117,8 @@ export default function AdminSettingsPage() {
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save settings",
+        title: t("toastError"),
+        description: error instanceof Error ? error.message : t("toastSaveFailed"),
         variant: "destructive"
       })
     } finally {
@@ -154,7 +156,7 @@ export default function AdminSettingsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <Card className="animate-pulse">
           <CardHeader>
             <div className="h-6 bg-muted rounded w-1/3" />
@@ -176,8 +178,8 @@ export default function AdminSettingsPage() {
       <LiveAccentPreview accentColor={settings.accentColor} />
 
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your gallery configuration</p>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("description")}</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6">
@@ -241,7 +243,7 @@ export default function AdminSettingsPage() {
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving}>
               <Save className="h-4 w-4" />
-              {saving ? "Saving..." : "Save Settings"}
+              {saving ? t("saving") : t("saveSettings")}
             </Button>
           </div>
         </div>
@@ -257,28 +259,29 @@ function GeneralSection({
   settings: SiteSettings
   onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
 }) {
+  const t = useTranslations("adminSettings")
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">General</h2>
-        <p className="text-sm text-muted-foreground">Basic site settings that appear throughout the application</p>
+        <h2 className="text-lg font-semibold">{t("general")}</h2>
+        <p className="text-sm text-muted-foreground">{t("generalDescription")}</p>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="siteName">Site Name</Label>
+            <Label htmlFor="siteName">{t("siteName")}</Label>
             <Input
               id="siteName"
               value={settings.siteName}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 onInputChange("siteName", e.target.value)
               }
-              placeholder="Enter site name"
+              placeholder={t("siteNamePlaceholder")}
               maxLength={100}
             />
             <p className="text-xs text-muted-foreground">
-              This name appears in the top navigation bar and browser title
+              {t("siteNameHelp")}
             </p>
           </div>
         </CardContent>
@@ -294,6 +297,7 @@ function AppearanceSection({
   settings: SiteSettings
   onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
 }) {
+  const t = useTranslations("adminSettings")
   const presetColors = [
     "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
     "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
@@ -302,14 +306,14 @@ function AppearanceSection({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Appearance</h2>
-        <p className="text-sm text-muted-foreground">Customize the visual style of your gallery</p>
+        <h2 className="text-lg font-semibold">{t("appearance")}</h2>
+        <p className="text-sm text-muted-foreground">{t("appearanceDescription")}</p>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-6">
           <div className="space-y-3">
-            <Label htmlFor="accentColor">Accent Color</Label>
+            <Label htmlFor="accentColor">{t("accentColor")}</Label>
             <div className="flex items-center gap-3">
               <input
                 id="accentColor"
@@ -349,7 +353,7 @@ function AppearanceSection({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              The primary accent color used for buttons, links, and highlights
+              {t("accentColorHelp")}
             </p>
           </div>
 
@@ -357,7 +361,7 @@ function AppearanceSection({
 
           {/* Live Preview */}
           <div className="space-y-3">
-            <Label>Preview</Label>
+            <Label>{t("preview")}</Label>
             <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-lg font-bold" style={{ color: settings.accentColor }}>
@@ -373,18 +377,18 @@ function AppearanceSection({
                   className="px-4 py-1.5 rounded-md text-white text-sm font-medium"
                   style={{ backgroundColor: settings.accentColor }}
                 >
-                  Primary Button
+                  {t("primaryButton")}
                 </button>
                 <button
                   className="px-4 py-1.5 rounded-md border text-sm font-medium"
                   style={{ borderColor: settings.accentColor, color: settings.accentColor }}
                 >
-                  Outline Button
+                  {t("outlineButton")}
                 </button>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Live preview of header and buttons with accent color
+              {t("previewHelp")}
             </p>
           </div>
         </CardContent>
@@ -406,29 +410,30 @@ function FooterSection({
   onRemoveLink: (index: number) => void
   onUpdateLink: (index: number, field: keyof FooterLink, value: string) => void
 }) {
+  const t = useTranslations("adminSettings")
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Footer</h2>
-        <p className="text-sm text-muted-foreground">Configure the footer that appears at the bottom of every page</p>
+        <h2 className="text-lg font-semibold">{t("footer")}</h2>
+        <p className="text-sm text-muted-foreground">{t("footerDescription")}</p>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="footerCopyright">Copyright Text</Label>
+            <Label htmlFor="footerCopyright">{t("footerCopyright")}</Label>
             <Textarea
               id="footerCopyright"
               value={settings.footerCopyright}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                 onInputChange("footerCopyright", e.target.value)
               }
-              placeholder="© 2024 Your Company. All rights reserved."
+              placeholder={t("copyrightPlaceholder")}
               maxLength={500}
               rows={2}
             />
             <p className="text-xs text-muted-foreground">
-              The copyright text that appears in the footer
+              {t("copyrightHelp")}
             </p>
           </div>
 
@@ -436,31 +441,31 @@ function FooterSection({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Footer Links</Label>
+              <Label>{t("footerLinks")}</Label>
               <Button type="button" variant="outline" size="sm" onClick={onAddLink}>
                 <Plus className="h-4 w-4" />
-                Add Link
+                {t("addLink")}
               </Button>
             </div>
 
             {settings.footerLinks.length > 0 ? (
               <div className="rounded-lg border overflow-hidden">
                 <div className="grid grid-cols-[1fr_1fr_40px] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  <span>Name</span>
-                  <span>URL</span>
+                  <span>{t("columnName")}</span>
+                  <span>{t("columnUrl")}</span>
                   <span />
                 </div>
                 {settings.footerLinks.map((link, index) => (
                   <div key={index} className="grid grid-cols-[1fr_1fr_40px] gap-0 items-center border-t">
                     <Input
-                      placeholder="Link name"
+                      placeholder={t("linkNamePlaceholder")}
                       value={link.name}
                       onChange={(e) => onUpdateLink(index, "name", e.target.value)}
                       maxLength={100}
                       className="border-0 rounded-none shadow-none focus-visible:ring-0 h-9 text-sm"
                     />
                     <Input
-                      placeholder="/path or https://..."
+                      placeholder={t("linkUrlPlaceholder")}
                       value={link.url}
                       onChange={(e) => onUpdateLink(index, "url", e.target.value)}
                       maxLength={500}
@@ -478,7 +483,7 @@ function FooterSection({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4 border-2 border-dashed rounded-lg">
-                No footer links configured
+                {t("noFooterLinks")}
               </p>
             )}
           </div>
@@ -487,7 +492,7 @@ function FooterSection({
 
           {/* Footer Preview */}
           <div className="space-y-3">
-            <Label>Preview</Label>
+            <Label>{t("footerPreview")}</Label>
             <div className="rounded-lg border bg-muted/30 p-4">
               <div className="flex flex-col md:flex-row justify-between items-center gap-3">
                 <span className="text-sm text-muted-foreground">{settings.footerCopyright}</span>
@@ -495,7 +500,7 @@ function FooterSection({
                   <div className="flex flex-wrap gap-4">
                     {settings.footerLinks.map((link, index) => (
                       <span key={index} className="text-sm text-muted-foreground hover:text-foreground">
-                        {link.name || "Link Name"}
+                        {link.name || t("linkNamePlaceholder")}
                       </span>
                     ))}
                   </div>
@@ -518,17 +523,18 @@ function PerformanceSection({
   systemInfo: SystemInfo
   onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
 }) {
+  const t = useTranslations("adminSettings")
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Performance</h2>
-        <p className="text-sm text-muted-foreground">Gallery display and processing settings</p>
+        <h2 className="text-lg font-semibold">{t("performance")}</h2>
+        <p className="text-sm text-muted-foreground">{t("performanceDescription")}</p>
       </div>
 
       <Card>
         <CardContent className="p-6 space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="photosPerPage">Photos Per Page</Label>
+            <Label htmlFor="photosPerPage">{t("photosPerPage")}</Label>
             <Input
               id="photosPerPage"
               type="number"
@@ -542,14 +548,14 @@ function PerformanceSection({
               className="max-w-32"
             />
             <p className="text-xs text-muted-foreground">
-              Photos loaded initially when viewing an album. More load automatically as users scroll.
+              {t("photosPerPageHelp")}
             </p>
           </div>
 
           <Separator />
 
           <div className="space-y-2">
-            <Label htmlFor="batchProcessingSize">Batch Processing Size</Label>
+            <Label htmlFor="batchProcessingSize">{t("batchProcessingSize")}</Label>
             <Input
               id="batchProcessingSize"
               type="number"
@@ -562,7 +568,7 @@ function PerformanceSection({
               className="max-w-32"
             />
             <p className="text-xs text-muted-foreground">
-              Photos processed simultaneously during sync. Higher values are faster but use more resources. Max: {systemInfo.maxBatchProcessingSize} threads.
+              {t("batchProcessingSizeHelp", { max: systemInfo.maxBatchProcessingSize })}
             </p>
           </div>
         </CardContent>
