@@ -109,20 +109,34 @@ async function DashboardStats() {
       value: stats.albumCount,
       description: "All albums in system",
       icon: FolderOpen,
+      iconBg: "bg-amber-100 dark:bg-amber-900",
+      iconColor: "text-amber-600 dark:text-amber-400",
+      accent: "",
     },
     {
       title: "Public Albums",
       value: stats.publicAlbumCount,
       description: "Visible to visitors",
       icon: Eye,
+      iconBg: "bg-emerald-100 dark:bg-emerald-900",
+      iconColor: "text-emerald-600 dark:text-emerald-400",
+      accent: "",
     },
     {
       title: "Total Media",
       value: totalMedia.toLocaleString(),
       description: `${stats.photoCount.toLocaleString()} photos, ${stats.videoCount.toLocaleString()} videos`,
       icon: Image,
+      iconBg: "bg-sky-100 dark:bg-sky-900",
+      iconColor: "text-sky-600 dark:text-sky-400",
+      accent: "",
     },
   ]
+
+  const storageValue = stats.storageUsage ? stats.storageUsage.remote.sizeFormatted : "--"
+  const storageDesc = stats.storageUsage
+    ? `${stats.storageUsage.remote.objectCount.toLocaleString()} objects in S3`
+    : "Loading storage data..."
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -130,38 +144,34 @@ async function DashboardStats() {
         const Icon = stat.icon
         return (
           <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">{stat.description}</p>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{stat.title}</p>
+                  <div className="text-3xl font-bold tabular-nums">{stat.value}</div>
+                  <p className="text-xs text-muted-foreground">{stat.description}</p>
+                </div>
+                <div className={`flex-shrink-0 rounded-lg p-2.5 ${stat.iconBg} ${stat.iconColor}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
             </CardContent>
           </Card>
         )
       })}
 
-      {/* Storage Usage Card */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Storage Usage</CardTitle>
-          <HardDrive className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {stats.storageUsage ? (
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <div className="text-2xl font-bold">{stats.storageUsage.remote.sizeFormatted}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.storageUsage.remote.objectCount.toLocaleString()} objects in S3
-              </p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Storage Usage</p>
+              <div className="text-3xl font-bold tabular-nums">{storageValue}</div>
+              <p className="text-xs text-muted-foreground">{storageDesc}</p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-2xl font-bold">--</div>
-              <p className="text-xs text-muted-foreground">Loading storage data...</p>
+            <div className="flex-shrink-0 rounded-lg p-2.5 bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400">
+              <HardDrive className="h-5 w-5" />
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
     </div>
