@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FolderOpen, Image, HardDrive, Eye, Video, Settings, Activity, Upload } from "lucide-react"
+import { FolderOpen, Image, HardDrive, Eye, Video, Settings, Activity, Upload, ArrowRight } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { getAllHealthChecks, type HealthCheckResult } from "@/lib/health"
 import { formatDistanceToNow } from "date-fns"
@@ -250,10 +250,46 @@ async function SystemStatus() {
 
 function QuickActions() {
   const actions = [
-    { label: 'Upload Photos', href: '/admin/albums', icon: Upload },
-    { label: 'Manage Albums', href: '/admin/albums', icon: FolderOpen },
-    { label: 'View Jobs', href: '/admin/jobs', icon: Activity },
-    { label: 'Settings', href: '/admin/settings', icon: Settings },
+    {
+      label: 'Upload Photos',
+      description: 'Add new photos to albums',
+      href: '/admin/albums',
+      icon: Upload,
+      iconBg: 'bg-sky-100 dark:bg-sky-900',
+      iconColor: 'text-sky-600 dark:text-sky-400',
+      hoverBorder: 'hover:border-sky-300 dark:hover:border-sky-700',
+      hoverBg: 'hover:bg-sky-50/50 dark:hover:bg-sky-950/20',
+    },
+    {
+      label: 'Manage Albums',
+      description: 'Organize and edit albums',
+      href: '/admin/albums',
+      icon: FolderOpen,
+      iconBg: 'bg-amber-100 dark:bg-amber-900',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      hoverBorder: 'hover:border-amber-300 dark:hover:border-amber-700',
+      hoverBg: 'hover:bg-amber-50/50 dark:hover:bg-amber-950/20',
+    },
+    {
+      label: 'View Jobs',
+      description: 'Monitor background tasks',
+      href: '/admin/jobs',
+      icon: Activity,
+      iconBg: 'bg-violet-100 dark:bg-violet-900',
+      iconColor: 'text-violet-600 dark:text-violet-400',
+      hoverBorder: 'hover:border-violet-300 dark:hover:border-violet-700',
+      hoverBg: 'hover:bg-violet-50/50 dark:hover:bg-violet-950/20',
+    },
+    {
+      label: 'Settings',
+      description: 'Configure your gallery',
+      href: '/admin/settings',
+      icon: Settings,
+      iconBg: 'bg-slate-100 dark:bg-slate-800',
+      iconColor: 'text-slate-600 dark:text-slate-400',
+      hoverBorder: 'hover:border-slate-300 dark:hover:border-slate-600',
+      hoverBg: 'hover:bg-slate-50/50 dark:hover:bg-slate-950/20',
+    },
   ]
 
   return (
@@ -263,16 +299,26 @@ function QuickActions() {
         <CardDescription>Common admin tasks</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           {actions.map((action) => {
             const Icon = action.icon
             return (
-              <Button key={action.label} variant="outline" className="h-auto py-3 flex flex-col gap-1" asChild>
-                <Link href={action.href}>
-                  <Icon className="h-4 w-4" />
-                  <span className="text-xs">{action.label}</span>
-                </Link>
-              </Button>
+              <Link
+                key={action.label}
+                href={action.href}
+                className={`group relative rounded-lg border p-3 transition-all duration-150 ${action.hoverBorder} ${action.hoverBg}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 rounded-md p-2 ${action.iconBg} ${action.iconColor}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-tight">{action.label}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{action.description}</p>
+                  </div>
+                </div>
+                <ArrowRight className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/0 transition-all duration-150 group-hover:text-muted-foreground group-hover:translate-x-0.5" />
+              </Link>
             )
           })}
         </div>
