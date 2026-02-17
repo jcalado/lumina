@@ -1,27 +1,18 @@
 "use client"
 
 import type { Session } from "next-auth"
-import { AdminSidebarProvider } from "./AdminSidebarContext"
-import AdminHeader from "./AdminHeader"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import AdminSidebar from "./AdminSidebar"
+import AdminHeader from "./AdminHeader"
 
-interface AdminShellProps {
-  session: Session
-  children: React.ReactNode
-}
-
-export default function AdminShell({ session, children }: AdminShellProps) {
+export default function AdminShell({ session, children }: { session: Session; children: React.ReactNode }) {
   return (
-    <AdminSidebarProvider>
-      <div className="min-h-screen bg-background">
-        <AdminHeader session={session} />
-        <div className="flex">
-          <AdminSidebar />
-          <main className="flex-1 p-4 md:p-6 min-w-0">
-            {children}
-          </main>
-        </div>
-      </div>
-    </AdminSidebarProvider>
+    <SidebarProvider>
+      <AdminSidebar session={session} />
+      <SidebarInset>
+        <AdminHeader />
+        <div className="flex-1 p-4 md:p-6">{children}</div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
