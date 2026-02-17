@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Plus, Trash2, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus, Check, X, ShieldCheck } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useTranslations } from "next-intl"
 
@@ -160,10 +160,42 @@ export default function GroupDetailPage() {
   )
 
   const permissionsList = [
-    { key: "canUpload", label: t("permUploadPhotos"), icon: Upload, enabled: group.canUpload },
-    { key: "canEdit", label: t("permEditAlbumSettings"), icon: Pencil, enabled: group.canEdit },
-    { key: "canDelete", label: t("permDeleteAlbumsPhotos"), icon: TrashIcon, enabled: group.canDelete },
-    { key: "canCreateSubalbums", label: t("permCreateSubalbumsLabel"), icon: FolderPlus, enabled: group.canCreateSubalbums },
+    {
+      key: "canUpload",
+      label: t("permUploadPhotos"),
+      icon: Upload,
+      enabled: group.canUpload,
+      activeClasses: "bg-sky-50 border-sky-200 dark:bg-sky-950/40 dark:border-sky-800",
+      iconBg: "bg-sky-100 text-sky-600 dark:bg-sky-900 dark:text-sky-400",
+      badgeClasses: "bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300",
+    },
+    {
+      key: "canEdit",
+      label: t("permEditAlbumSettings"),
+      icon: Pencil,
+      enabled: group.canEdit,
+      activeClasses: "bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800",
+      iconBg: "bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-400",
+      badgeClasses: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    },
+    {
+      key: "canDelete",
+      label: t("permDeleteAlbumsPhotos"),
+      icon: TrashIcon,
+      enabled: group.canDelete,
+      activeClasses: "bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:border-rose-800",
+      iconBg: "bg-rose-100 text-rose-600 dark:bg-rose-900 dark:text-rose-400",
+      badgeClasses: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
+    },
+    {
+      key: "canCreateSubalbums",
+      label: t("permCreateSubalbumsLabel"),
+      icon: FolderPlus,
+      enabled: group.canCreateSubalbums,
+      activeClasses: "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800",
+      iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400",
+      badgeClasses: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+    },
   ]
 
   return (
@@ -210,17 +242,51 @@ export default function GroupDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("permissions")}</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              {t("permissions")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-3">
               {permissionsList.map((p) => (
-                <div key={p.key} className="flex items-center gap-2 text-sm">
-                  <p.icon className={`h-3.5 w-3.5 ${p.enabled ? "text-foreground" : "text-muted-foreground/40"}`} />
-                  <span className={p.enabled ? "" : "text-muted-foreground/60 line-through"}>
-                    {p.label}
-                  </span>
-                  {p.enabled && <Badge variant="secondary" className="text-xs ml-auto">{t("enabled")}</Badge>}
+                <div
+                  key={p.key}
+                  className={`relative rounded-lg border p-3 transition-colors ${
+                    p.enabled
+                      ? p.activeClasses
+                      : "bg-muted/30 border-border opacity-60"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 rounded-md p-2 ${
+                      p.enabled
+                        ? p.iconBg
+                        : "bg-muted text-muted-foreground/50"
+                    }`}>
+                      <p.icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-medium leading-tight ${
+                        p.enabled ? "text-foreground" : "text-muted-foreground"
+                      }`}>
+                        {p.label}
+                      </p>
+                      <div className="mt-1.5">
+                        {p.enabled ? (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${p.badgeClasses}`}>
+                            <Check className="h-3 w-3" />
+                            {t("enabled")}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            <X className="h-3 w-3" />
+                            {t("disabled")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>

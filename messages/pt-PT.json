@@ -193,6 +193,7 @@
         "deleting": "A eliminar...",
         "delete": "Eliminar",
         "enabled": "Ativo",
+        "disabled": "Inativo",
         "toastError": "Erro",
         "toastSuccess": "Sucesso",
         "toastFetchFailed": "Falha ao carregar dados",

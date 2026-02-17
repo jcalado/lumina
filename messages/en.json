@@ -123,6 +123,7 @@
     "deleting": "Deleting...",
     "delete": "Delete",
     "enabled": "Enabled",
+    "disabled": "Disabled",
     "toastError": "Error",
     "toastSuccess": "Success",
     "toastFetchFailed": "Failed to load data",
