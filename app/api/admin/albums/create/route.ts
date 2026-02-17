@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate unique slug for the album
-    const slug = await generateUniqueSlug(sanitizedName)
+    const slug = await generateUniqueSlug(sanitizedName, parentPath || '')
 
     // Create album in database
     const album = await prisma.album.create({

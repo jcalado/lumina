@@ -26,8 +26,6 @@ model Album {
   videos                Video[]
   groupAlbums           GroupAlbum[]
 
-  // Composite unique constraint for path-based uniqueness
-  @@unique([path, slug])
   @@map("albums")
 }
 

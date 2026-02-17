@@ -1,4 +1,13 @@
 /**
+ * Extract the parent path from an album path.
+ * Returns '' for root-level albums.
+ */
+export function getParentPath(albumPath: string): string {
+  const lastSlash = albumPath.lastIndexOf('/')
+  return lastSlash === -1 ? '' : albumPath.substring(0, lastSlash)
+}
+
+/**
  * Generate a URL-friendly slug from a string
  */
 export function generateSlug(text: string): string {
@@ -16,27 +25,46 @@ export function generateSlug(text: string): string {
 }
 
 /**
- * Generate a unique slug for an album
+ * Generate a unique slug for an album, scoped to siblings (same parent path).
+ * @param name - Album name to generate slug from
+ * @param parentPath - Parent path ('' for root-level albums)
+ * @param albumId - Exclude this album from uniqueness check (for updates)
  */
-export async function generateUniqueSlug(name: string, albumId?: string): Promise<string> {
+export async function generateUniqueSlug(name: string, parentPath: string, albumId?: string): Promise<string> {
   const { prisma } = await import('@/lib/prisma');
-  
+
   const baseSlug = generateSlug(name);
   let slug = baseSlug;
   let counter = 1;
 
   while (true) {
-    // Check if slug exists using raw query to avoid TypeScript issues
+    // Check if slug exists among sibling albums (same parent) using raw query
     let existing: any[];
-    
-    if (albumId) {
-      existing = await prisma.$queryRaw`
-        SELECT id FROM albums WHERE slug = ${slug} AND id != ${albumId}
-      `;
+
+    if (parentPath === '') {
+      // Root-level: siblings are albums whose path contains no '/'
+      if (albumId) {
+        existing = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${slug} AND path NOT LIKE '%/%' AND id != ${albumId}
+        `;
+      } else {
+        existing = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${slug} AND path NOT LIKE '%/%'
+        `;
+      }
     } else {
-      existing = await prisma.$queryRaw`
-        SELECT id FROM albums WHERE slug = ${slug}
-      `;
+      // Non-root: siblings are direct children of parentPath
+      const likePrefix = `${parentPath}/%`;
+      const likeNested = `${parentPath}/%/%`;
+      if (albumId) {
+        existing = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${slug} AND path LIKE ${likePrefix} AND path NOT LIKE ${likeNested} AND id != ${albumId}
+        `;
+      } else {
+        existing = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${slug} AND path LIKE ${likePrefix} AND path NOT LIKE ${likeNested}
+        `;
+      }
     }
 
     if (existing.length === 0) {

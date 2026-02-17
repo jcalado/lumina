@@ -31,7 +31,7 @@ async function main() {
     await prisma.album.create({
       data: {
         path: 'sample-album',
-        slug: await generateUniqueSlug('Sample Album'),
+        slug: await generateUniqueSlug('Sample Album', ''),
         name: 'Sample Album',
         description: 'This is a sample album to demonstrate the photo gallery functionality.',
         status: 'PUBLIC',

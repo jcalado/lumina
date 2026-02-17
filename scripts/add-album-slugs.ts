@@ -1,47 +1,50 @@
 import { PrismaClient } from '@prisma/client';
-import { generateSlug } from '../lib/slugs';
+import { generateSlug, getParentPath } from '../lib/slugs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Populating slugs for all albums...');
+  console.log('Populating slugs for all albums (parent-scoped)...');
 
-  // Get all albums
   const albums = await prisma.album.findMany();
-
   console.log(`Found ${albums.length} albums`);
 
-  // Generate slugs for all albums
+  // Group albums by parent path
+  const byParent = new Map<string, typeof albums>();
   for (const album of albums) {
-    let baseSlug = generateSlug(album.name);
-    let slug = baseSlug;
-    let counter = 1;
+    const pp = getParentPath(album.path);
+    if (!byParent.has(pp)) byParent.set(pp, []);
+    byParent.get(pp)!.push(album);
+  }
 
-    // Ensure uniqueness by checking against our generated slugs
+  let updated = 0;
+
+  for (const [parentPath, siblings] of byParent) {
     const usedSlugs = new Set<string>();
-    
-    // Simple check - if this is a duplicate base slug, add counter
-    let attempts = 0;
-    while (attempts < 100) { // Safety limit
-      try {
-        // Try to update with this slug
-        await prisma.$executeRaw`UPDATE albums SET slug = ${slug} WHERE id = ${album.id}`;
-        console.log(`Generated slug "${slug}" for album "${album.name}"`);
-        break;
-      } catch (error) {
-        // If unique constraint error, try next slug
+
+    for (const album of siblings) {
+      const baseSlug = generateSlug(album.name);
+      let slug = baseSlug;
+      let counter = 1;
+
+      while (usedSlugs.has(slug)) {
         slug = `${baseSlug}-${counter}`;
         counter++;
-        attempts++;
       }
-    }
-    
-    if (attempts >= 100) {
-      console.error(`Failed to generate unique slug for album "${album.name}"`);
+
+      usedSlugs.add(slug);
+
+      if (album.slug !== slug) {
+        await prisma.$executeRaw`UPDATE albums SET slug = ${slug} WHERE id = ${album.id}`;
+        console.log(`[${parentPath || 'root'}] "${album.name}" slug: "${album.slug}" -> "${slug}"`);
+        updated++;
+      } else {
+        console.log(`[${parentPath || 'root'}] "${album.name}" slug: "${slug}" (unchanged)`);
+      }
     }
   }
 
-  console.log('Migration completed!');
+  console.log(`\nMigration completed! Updated ${updated} album(s).`);
 }
 
 main()

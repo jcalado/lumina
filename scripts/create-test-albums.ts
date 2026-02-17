@@ -16,7 +16,7 @@ async function main() {
 
   for (const albumData of testAlbums) {
     try {
-      const slug = await generateUniqueSlug(albumData.name);
+      const slug = await generateUniqueSlug(albumData.name, '');
       
       await prisma.$executeRaw`
         INSERT INTO albums (id, path, slug, name, description, status, enabled, createdAt, updatedAt)

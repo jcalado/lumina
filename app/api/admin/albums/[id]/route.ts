@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAlbumRead, requireAlbumAccess } from "@/lib/album-auth"
 import { prisma } from "@/lib/prisma"
-import { generateUniqueSlug, isValidSlug } from "@/lib/slugs"
+import { generateUniqueSlug, getParentPath, isValidSlug } from "@/lib/slugs"
 import { z } from "zod"
 
 const updateAlbumSchema = z.object({
@@ -71,6 +71,21 @@ export async function PUT(
     const body = await request.json()
     const validatedData = updateAlbumSchema.parse(body)
 
+    // Fetch the album to derive its parent path for sibling-scoped slug checks
+    const currentAlbum = await prisma.album.findUnique({
+      where: { id },
+      select: { path: true },
+    })
+
+    if (!currentAlbum) {
+      return NextResponse.json(
+        { error: "Album not found" },
+        { status: 404 }
+      )
+    }
+
+    const albumParentPath = getParentPath(currentAlbum.path)
+
     // Handle slug validation and generation
     let slugToUpdate = validatedData.slug;
 
@@ -82,14 +97,23 @@ export async function PUT(
         )
       }
 
-      // Check if slug is unique using raw query
-      const existingAlbum = await prisma.$queryRaw`
-        SELECT id FROM albums WHERE slug = ${validatedData.slug} AND id != ${id}
-      ` as any[];
+      // Check if slug is unique among siblings (same parent) using raw query
+      let existingAlbum: any[];
+      if (albumParentPath === '') {
+        existingAlbum = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${validatedData.slug} AND path NOT LIKE '%/%' AND id != ${id}
+        `;
+      } else {
+        const likePrefix = `${albumParentPath}/%`;
+        const likeNested = `${albumParentPath}/%/%`;
+        existingAlbum = await prisma.$queryRaw`
+          SELECT id FROM albums WHERE slug = ${validatedData.slug} AND path LIKE ${likePrefix} AND path NOT LIKE ${likeNested} AND id != ${id}
+        `;
+      }
 
       if (existingAlbum.length > 0) {
         return NextResponse.json(
-          { error: "Slug already exists. Please choose a different slug." },
+          { error: "Slug already exists among sibling albums. Please choose a different slug." },
           { status: 400 }
         )
       }
@@ -97,7 +121,7 @@ export async function PUT(
 
     // If name is being updated but slug is not provided, generate new slug
     if (validatedData.name && !validatedData.slug) {
-      slugToUpdate = await generateUniqueSlug(validatedData.name, id);
+      slugToUpdate = await generateUniqueSlug(validatedData.name, albumParentPath, id);
     }
 
     // Enforce single-featured constraint
