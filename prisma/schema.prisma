@@ -19,6 +19,7 @@ model Album {
   description           String?  // from project.md
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
   enabled               Boolean  @default(true)
+  featured              Boolean  @default(false) // Showcased on landing page
   syncedToS3            Boolean  @default(false) // All photos uploaded to S3
   localFilesSafeDelete  Boolean  @default(false) // Safe to delete local files
   lastSyncAt            DateTime? // Last successful sync

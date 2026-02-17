@@ -6,7 +6,8 @@
     "title": "Lumina Gallery",
     "description": "Browse your photo collection organized in albums",
     "photo_albums": "Photo Albums",
-    "loading_albums": "Loading albums..."
+    "loading_albums": "Loading albums...",
+    "featured": "Featured"
   },
   "nav": {
     "albums": "Albums",

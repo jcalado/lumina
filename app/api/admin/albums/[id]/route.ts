@@ -10,6 +10,7 @@ const updateAlbumSchema = z.object({
   slug: z.string().min(1).optional(),
   status: z.enum(["PUBLIC", "PRIVATE"]).optional(),
   enabled: z.boolean().optional(),
+  featured: z.boolean().optional(),
 })
 
 // GET /api/admin/albums/[id] - Get album details
@@ -96,6 +97,14 @@ export async function PUT(
     // If name is being updated but slug is not provided, generate new slug
     if (validatedData.name && !validatedData.slug) {
       slugToUpdate = await generateUniqueSlug(validatedData.name, id);
+    }
+
+    // Enforce single-featured constraint
+    if (validatedData.featured === true) {
+      await prisma.album.updateMany({
+        where: { featured: true, id: { not: id } },
+        data: { featured: false },
+      });
     }
 
     const updateData = {

@@ -22,8 +22,18 @@ interface Album {
   updatedAt: string;
 }
 
+interface FeaturedAlbum {
+  id: string;
+  name: string;
+  description: string | null;
+  slug: string;
+  slugPath: string;
+  coverThumbnailUrl: string | null;
+}
+
 export default function HomePage() {
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [featuredAlbum, setFeaturedAlbum] = useState<FeaturedAlbum | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
@@ -39,6 +49,7 @@ export default function HomePage() {
       if (response.ok) {
         const data = await response.json();
         setAlbums(data.albums);
+        setFeaturedAlbum(data.featuredAlbum ?? null);
       }
     } catch (error) {
       console.error('Error fetching albums:', error);
@@ -72,6 +83,7 @@ export default function HomePage() {
           <div className="h-5 w-72 bg-muted animate-pulse rounded mx-auto mt-3" />
           <div className="h-4 w-20 bg-muted animate-pulse rounded mx-auto mt-2" />
         </div>
+        <div className="rounded-2xl aspect-[21/9] bg-muted animate-pulse" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-xl overflow-hidden bg-card ring-1 ring-border/50">
@@ -101,6 +113,44 @@ export default function HomePage() {
           </p>
         )}
       </div>
+
+      {/* Featured Album Banner */}
+      {featuredAlbum && (
+        <Link
+          href={`/albums/${featuredAlbum.slugPath || featuredAlbum.slug}`}
+          className="block group animate-fade-in-up opacity-0 mb-2"
+        >
+          <div className="relative rounded-2xl overflow-hidden hover:shadow-2xl transition-shadow duration-300">
+            <div className="aspect-[21/9] bg-muted relative overflow-hidden">
+              {featuredAlbum.coverThumbnailUrl ? (
+                <img
+                  src={featuredAlbum.coverThumbnailUrl}
+                  alt={featuredAlbum.name}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+                  <Folder className="w-16 h-16 text-muted-foreground/50" />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+              <div className="absolute bottom-0 left-0 p-6 sm:p-8">
+                <span className="text-xs uppercase tracking-widest text-white/80">
+                  {t('featured')}
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-1">
+                  {featuredAlbum.name}
+                </h2>
+                {featuredAlbum.description && (
+                  <p className="text-sm sm:text-base text-white/80 line-clamp-2 max-w-2xl mt-1">
+                    {featuredAlbum.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {albums.length === 0 ? (
         <div className="text-center py-16">

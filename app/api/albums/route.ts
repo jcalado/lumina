@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { S3Service } from '@/lib/s3';
 
 export async function GET() {
   try {
+    // Fetch the featured album separately (may not be a root album)
+    const featuredAlbumRaw = await prisma.album.findFirst({
+      where: { featured: true, status: 'PUBLIC', enabled: true },
+      include: {
+        photos: {
+          take: 1,
+          orderBy: { takenAt: 'asc' },
+          include: { thumbnails: { where: { size: 'MEDIUM' } } },
+        },
+      },
+    });
+
+    const s3 = new S3Service();
+    const coverS3Key = featuredAlbumRaw?.photos[0]?.thumbnails[0]?.s3Key;
+    const featuredAlbum = featuredAlbumRaw
+      ? {
+          id: featuredAlbumRaw.id,
+          name: featuredAlbumRaw.name,
+          description: featuredAlbumRaw.description,
+          slug: featuredAlbumRaw.slug,
+          slugPath: featuredAlbumRaw.slug,
+          coverThumbnailUrl: coverS3Key ? s3.getPublicUrl(coverS3Key) : null,
+        }
+      : null;
+
     // Single comprehensive query to get everything at once
     const result = await prisma.$queryRaw`
       WITH AlbumStats AS (
@@ -115,6 +141,7 @@ export async function GET() {
 
     return NextResponse.json({
       albums,
+      featuredAlbum,
     }, {
       headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     });

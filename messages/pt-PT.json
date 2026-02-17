@@ -14,7 +14,8 @@
         "title": "Galeria Lumina",
         "description": "Navegue pela sua coleção de fotos organizada em álbuns",
         "photo_albums": "Álbuns de Fotos",
-        "loading_albums": "Carregando álbuns..."
+        "loading_albums": "Carregando álbuns...",
+        "featured": "Destaque"
     },
     "nav": {
         "albums": "Álbuns",
