@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from "react"
+import React, { useMemo, useEffect } from "react"
 import { useTree } from "@headless-tree/react"
 import {
   syncDataLoaderFeature,
@@ -228,6 +228,11 @@ export function AlbumTree({
     },
     features: [syncDataLoaderFeature, dragAndDropFeature, hotkeysCoreFeature],
   })
+
+  // Rebuild tree when the underlying album data changes
+  useEffect(() => {
+    tree.rebuildTree()
+  }, [dataMap, tree])
 
   return (
     <div className="relative" ref={tree.registerElement}>
