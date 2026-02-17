@@ -104,6 +104,9 @@ COPY --chown=node:node . .
 # Generate Prisma client for development
 RUN npx prisma generate
 
+# Ensure /app is writable by node user (Next.js needs to create .next/)
+RUN chown node:node /app
+
 USER node
 
 EXPOSE 3000

@@ -32,6 +32,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # Prisma migrations (one-off job)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    command: sh -c "npx prisma db push --skip-generate"
+    environment:
+      - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   # Main Next.js application
   app:
     build:
@@ -59,6 +73,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
@@ -90,6 +106,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
@@ -117,6 +135,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
@@ -144,6 +164,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
@@ -171,6 +193,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
@@ -199,6 +223,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
