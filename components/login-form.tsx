@@ -14,7 +14,9 @@ import {
   FieldError,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Loader2 } from "lucide-react"
+import { Loader2, Zap } from "lucide-react"
+
+const isDev = process.env.NODE_ENV === "development"
 
 export function LoginForm({
   className,
@@ -27,15 +29,14 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const doLogin = async (loginEmail: string, loginPassword: string) => {
     setIsLoading(true)
     setError("")
 
     try {
       const result = await signIn("credentials", {
-        email,
-        password,
+        email: loginEmail,
+        password: loginPassword,
         redirect: false,
       })
 
@@ -55,6 +56,19 @@ export function LoginForm({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await doLogin(email, password)
+  }
+
+  const handleDevLogin = async () => {
+    const devEmail = process.env.NEXT_PUBLIC_DEV_ADMIN_EMAIL ?? ""
+    const devPassword = process.env.NEXT_PUBLIC_DEV_ADMIN_PASSWORD ?? ""
+    setEmail(devEmail)
+    setPassword(devPassword)
+    await doLogin(devEmail, devPassword)
   }
 
   return (
@@ -107,6 +121,20 @@ export function LoginForm({
                   )}
                 </Button>
               </Field>
+              {isDev && (
+                <Field>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed"
+                    disabled={isLoading}
+                    onClick={handleDevLogin}
+                  >
+                    <Zap className="h-4 w-4" />
+                    Dev Auto-Login
+                  </Button>
+                </Field>
+              )}
             </FieldGroup>
           </form>
           <div className="bg-muted relative hidden md:block">
