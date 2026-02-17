@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -12,18 +11,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty"
-import { FolderOpen, Folder, Image, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, CheckCircle2, GripVertical, MoreHorizontal, Settings, ExternalLink, Video, Plus } from "lucide-react"
+import { FolderOpen, Image, Eye, EyeOff, CheckCircle2, Video, Plus } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useTranslations } from "next-intl"
+import { AlbumTree } from "@/components/Admin/AlbumTree"
 
 interface Album {
   id: string
@@ -42,13 +34,6 @@ interface Album {
   }
 }
 
-interface AlbumTreeNode {
-  album: Album
-  children: AlbumTreeNode[]
-  level: number
-  isExpanded: boolean
-}
-
 type AlbumPerms = { canUpload: boolean; canEdit: boolean; canDelete: boolean; canCreateSubalbums: boolean }
 type PermissionsMap = Record<string, AlbumPerms> | null // null = full access (admin/superadmin)
 
@@ -57,11 +42,7 @@ export default function AdminAlbumsPage() {
   const { data: session } = useSession()
   const isFullAccess = session?.user?.role === "admin" || session?.user?.role === "superadmin"
   const [albums, setAlbums] = useState<Album[]>([])
-  const [albumTree, setAlbumTree] = useState<AlbumTreeNode[]>([])
   const [permissions, setPermissions] = useState<PermissionsMap>(null)
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
-  type DragInfo = { id: string; parentPath: string; level: number } | null
-  const [dragging, setDragging] = useState<DragInfo>(null)
   const [loading, setLoading] = useState(true)
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null)
   const [deletingAlbum, setDeletingAlbum] = useState<Album | null>(null)
@@ -80,329 +61,6 @@ export default function AdminAlbumsPage() {
   useEffect(() => {
     fetchAlbums()
   }, [])
-
-  useEffect(() => {
-    if (albums.length > 0) {
-      buildAlbumTree()
-    }
-  }, [albums, expandedNodes])
-
-  const getParentPath = (path: string) => {
-    const idx = path.lastIndexOf('/')
-    return idx === -1 ? '' : path.substring(0, idx)
-  }
-
-  const sortNodesRecursively = (nodes: AlbumTreeNode[]): AlbumTreeNode[] => {
-    const sorted = [...nodes]
-    sorted.sort((a, b) => {
-      const ao = a.album.displayOrder ?? 0
-      const bo = b.album.displayOrder ?? 0
-      if (ao !== bo) return ao - bo
-      return a.album.name.localeCompare(b.album.name)
-    })
-    for (const n of sorted) {
-      if (n.children && n.children.length) {
-        n.children = sortNodesRecursively(n.children)
-      }
-    }
-    return sorted
-  }
-
-  const buildAlbumTree = () => {
-    const tree: AlbumTreeNode[] = []
-    const nodeMap = new Map<string, AlbumTreeNode>()
-
-    const sortedAlbums = [...albums].sort((a, b) => {
-      const aDepth = a.path.split('/').length
-      const bDepth = b.path.split('/').length
-      if (aDepth !== bDepth) return aDepth - bDepth
-      return a.path.localeCompare(b.path)
-    })
-
-    for (const album of sortedAlbums) {
-      const level = album.path.split('/').length - 1
-      const node: AlbumTreeNode = {
-        album,
-        children: [],
-        level,
-        isExpanded: expandedNodes.has(album.id)
-      }
-
-      nodeMap.set(album.id, node)
-
-      if (level === 0) {
-        tree.push(node)
-      } else {
-        let parentNode: AlbumTreeNode | null = null
-        let maxParentPathLength = 0
-
-        for (const [, potentialParent] of nodeMap) {
-          if (potentialParent.album.path !== album.path &&
-              album.path.startsWith(potentialParent.album.path + '/') &&
-              potentialParent.album.path.length > maxParentPathLength) {
-            parentNode = potentialParent
-            maxParentPathLength = potentialParent.album.path.length
-          }
-        }
-
-        if (parentNode) {
-          parentNode.children.push(node)
-        } else {
-          tree.push(node)
-        }
-      }
-    }
-
-    setAlbumTree(sortNodesRecursively(tree))
-  }
-
-  const reorderSiblingsInTree = (
-    prevTree: AlbumTreeNode[],
-    parentPath: string,
-    fromId: string,
-    toId: string
-  ): AlbumTreeNode[] => {
-    const reorderArray = (arr: AlbumTreeNode[], fromId: string, toId: string) => {
-      const fromIdx = arr.findIndex(n => n.album.id === fromId)
-      const toIdx = arr.findIndex(n => n.album.id === toId)
-      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return arr
-      const next = [...arr]
-      const [moved] = next.splice(fromIdx, 1)
-      next.splice(toIdx, 0, moved)
-      return next
-    }
-
-    if (parentPath === '') {
-      return reorderArray(prevTree, fromId, toId)
-    }
-
-    const dfs = (nodes: AlbumTreeNode[]): AlbumTreeNode[] => {
-      return nodes.map(n => {
-        if (n.album.path === parentPath) {
-          return { ...n, children: reorderArray(n.children, fromId, toId) }
-        }
-        if (n.children && n.children.length) {
-          return { ...n, children: dfs(n.children) }
-        }
-        return n
-      })
-    }
-    return dfs(prevTree)
-  }
-
-  const toggleNode = (nodeId: string) => {
-    const newExpanded = new Set(expandedNodes)
-    if (newExpanded.has(nodeId)) {
-      newExpanded.delete(nodeId)
-    } else {
-      newExpanded.add(nodeId)
-    }
-    setExpandedNodes(newExpanded)
-  }
-
-  const getRecursiveMediaCount = (node: AlbumTreeNode): { photos: number; videos: number } => {
-    let photos = node.album._count?.photos || 0
-    let videos = node.album._count?.videos || 0
-    for (const child of node.children) {
-      const childCounts = getRecursiveMediaCount(child)
-      photos += childCounts.photos
-      videos += childCounts.videos
-    }
-    return { photos, videos }
-  }
-
-  const renderAlbumNode = (node: AlbumTreeNode): React.ReactElement => {
-    const { album, children, level, isExpanded } = node
-    const hasChildren = children.length > 0
-    const indentStyle = { paddingLeft: `${level * 24 + 12}px` }
-    const parentPath = getParentPath(album.path)
-    const directCount = (album._count?.photos || 0) + (album._count?.videos || 0)
-    const recursive = getRecursiveMediaCount(node)
-    const totalCount = recursive.photos + recursive.videos
-
-    return (
-      <div key={album.id}>
-        <div
-          className="grid grid-cols-12 gap-2 md:gap-4 py-3 px-3 border-b border-border/40 hover:bg-muted/30 transition-colors items-center text-sm"
-          style={indentStyle}
-          draggable={isFullAccess}
-          data-node-id={album.id}
-          data-node-level={level}
-          data-parent-path={parentPath}
-          onDragStart={(e) => {
-            setDragging({ id: album.id, parentPath, level })
-            e.dataTransfer.effectAllowed = 'move'
-          }}
-          onDragOver={(e) => {
-            e.preventDefault()
-            const targetId = e.currentTarget.getAttribute('data-node-id') || ''
-            const targetLevel = Number(e.currentTarget.getAttribute('data-node-level') || '0')
-            const targetParentPath = e.currentTarget.getAttribute('data-parent-path') || ''
-            if (!dragging) return
-            if (dragging.id === targetId) return
-            if (dragging.level !== targetLevel) return
-            if (dragging.parentPath !== targetParentPath) return
-            setAlbumTree(prev => reorderSiblingsInTree(prev, targetParentPath, dragging.id, targetId))
-          }}
-          onDragEnd={async () => {
-            if (!dragging) return
-            const currentParent = dragging.parentPath
-            let order: string[] = []
-            if (currentParent === '') {
-              order = albumTree.map(n => n.album.id)
-            } else {
-              const findParent = (nodes: AlbumTreeNode[]): AlbumTreeNode | null => {
-                for (const n of nodes) {
-                  if (n.album.path === currentParent) return n
-                  const found = findParent(n.children)
-                  if (found) return found
-                }
-                return null
-              }
-              const parentNode = findParent(albumTree)
-              if (parentNode) {
-                order = parentNode.children.map(c => c.album.id)
-              }
-            }
-            setDragging(null)
-            try {
-              const res = await fetch('/api/admin/albums/reorder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order }),
-              })
-              if (!res.ok) throw new Error('Failed to save order')
-              toast({ title: t('toastOrderUpdated'), description: t('toastOrderSaved') })
-              fetchAlbums()
-            } catch {
-              toast({ title: t('toastError'), description: t('toastOrderFailed'), variant: 'destructive' })
-            }
-          }}
-        >
-          {/* Album Name & Path */}
-          <div className="col-span-5 md:col-span-4 flex items-center gap-2 min-w-0">
-            {isFullAccess ? (
-              <GripVertical className="h-3 w-3 text-muted-foreground cursor-grab shrink-0" />
-            ) : (
-              <div className="w-3 shrink-0" />
-            )}
-            {hasChildren ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 hover:bg-accent shrink-0"
-                onClick={() => toggleNode(album.id)}
-              >
-                {isExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-              </Button>
-            ) : (
-              <div className="w-6 shrink-0" />
-            )}
-
-            <Folder className="h-4 w-4 text-blue-600 shrink-0" />
-
-            <div className="min-w-0 flex-1">
-              <div className="font-medium truncate">{album.name}</div>
-              <div className="text-xs text-muted-foreground truncate">{album.path}</div>
-            </div>
-          </div>
-
-          {/* Media Count */}
-          <div className="col-span-1 hidden md:flex items-center justify-center">
-            <div className="flex items-center gap-1 text-muted-foreground" title={hasChildren && directCount !== totalCount ? t('mediaDirect', { direct: directCount, total: totalCount }) : undefined}>
-              <Image className="h-3 w-3" />
-              <span className="font-medium text-foreground">{totalCount}</span>
-            </div>
-          </div>
-
-          {/* Status Badges */}
-          <div className="col-span-3 md:col-span-2 flex items-center gap-1.5 flex-wrap">
-            <Badge variant={album.status === "PUBLIC" ? "default" : "secondary"} className="text-xs">
-              {album.status === "PUBLIC" ? t("public") : t("private")}
-            </Badge>
-            {!album.enabled && (
-              <Badge variant="destructive" className="text-xs">Off</Badge>
-            )}
-            {album.featured && (
-              <Badge className="bg-yellow-500/15 text-yellow-600 border-yellow-500/30 text-xs">{t("featuredToggle")}</Badge>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="col-span-4 md:col-span-5 flex items-center justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">{t("actions")}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => window.open(`/admin/albums/${album.id}/photos`, '_blank')}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  {t("browsePhotos")}
-                </DropdownMenuItem>
-                {albumCan(album.id, "canEdit") && (
-                  <DropdownMenuItem onClick={() => handleEdit(album)}>
-                    <Settings className="h-4 w-4 mr-2" />
-                    {t("editSettings")}
-                  </DropdownMenuItem>
-                )}
-                {albumCan(album.id, "canCreateSubalbums") && (
-                  <DropdownMenuItem onClick={() => { setCreateForm({ name: "", description: "", parentPath: album.path }); setCreatingAlbum(true) }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("createSubAlbum")}
-                  </DropdownMenuItem>
-                )}
-                {isFullAccess && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                      checked={album.enabled}
-                      onCheckedChange={() => toggleAlbumStatus(album)}
-                    >
-                      {t("enabledToggle")}
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={album.featured}
-                      onCheckedChange={() => toggleFeatured(album)}
-                    >
-                      {t("featuredToggle")}
-                    </DropdownMenuCheckboxItem>
-                  </>
-                )}
-                {albumCan(album.id, "canDelete") && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setDeletingAlbum(album)}
-                      className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      {t("deleteAlbum")}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Children */}
-        {hasChildren && isExpanded && (
-          <div>
-            {children.map(child => renderAlbumNode(child))}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const albumCan = (albumId: string, perm: keyof AlbumPerms): boolean => {
     if (permissions === null) return true // full access
@@ -549,6 +207,21 @@ export default function AdminAlbumsPage() {
     }
   }
 
+  const handleReorder = async (orderedIds: string[]) => {
+    try {
+      const res = await fetch('/api/admin/albums/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: orderedIds }),
+      })
+      if (!res.ok) throw new Error('Failed to save order')
+      toast({ title: t('toastOrderUpdated'), description: t('toastOrderSaved') })
+      fetchAlbums()
+    } catch {
+      toast({ title: t('toastError'), description: t('toastOrderFailed'), variant: 'destructive' })
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -647,7 +320,17 @@ export default function AdminAlbumsPage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="max-h-[70vh] overflow-y-auto">
-              {albumTree.map(node => renderAlbumNode(node))}
+              <AlbumTree
+                albums={albums}
+                isFullAccess={isFullAccess}
+                albumCan={albumCan}
+                onEdit={handleEdit}
+                onDelete={setDeletingAlbum}
+                onCreate={(parentPath) => { setCreateForm({ name: "", description: "", parentPath }); setCreatingAlbum(true) }}
+                onToggleStatus={toggleAlbumStatus}
+                onToggleFeatured={toggleFeatured}
+                onReorder={handleReorder}
+              />
             </div>
           </CardContent>
         </Card>
