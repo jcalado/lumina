@@ -6,7 +6,7 @@ import { z } from "zod"
 const createGroupSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().max(500).optional(),
-  albumId: z.string().min(1, "Album is required"),
+  albumIds: z.array(z.string().min(1)).min(1, "At least one album is required"),
   canUpload: z.boolean().default(false),
   canEdit: z.boolean().default(false),
   canDelete: z.boolean().default(false),
@@ -21,7 +21,7 @@ export async function GET() {
   try {
     const groups = await prisma.group.findMany({
       include: {
-        album: { select: { id: true, name: true, path: true } },
+        albums: { include: { album: { select: { id: true, name: true, path: true } } } },
         _count: { select: { members: true } },
       },
       orderBy: { name: "asc" },
@@ -46,15 +46,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = createGroupSchema.parse(body)
 
-    // Verify album exists
-    const album = await prisma.album.findUnique({
-      where: { id: data.albumId },
+    // Verify all albums exist
+    const albums = await prisma.album.findMany({
+      where: { id: { in: data.albumIds } },
       select: { id: true },
     })
 
-    if (!album) {
+    if (albums.length !== data.albumIds.length) {
       return NextResponse.json(
-        { error: "Album not found" },
+        { error: "One or more albums not found" },
         { status: 404 }
       )
     }
@@ -63,14 +63,16 @@ export async function POST(request: NextRequest) {
       data: {
         name: data.name,
         description: data.description || null,
-        albumId: data.albumId,
         canUpload: data.canUpload,
         canEdit: data.canEdit,
         canDelete: data.canDelete,
         canCreateSubalbums: data.canCreateSubalbums,
+        albums: {
+          create: data.albumIds.map((albumId) => ({ albumId })),
+        },
       },
       include: {
-        album: { select: { id: true, name: true, path: true } },
+        albums: { include: { album: { select: { id: true, name: true, path: true } } } },
         _count: { select: { members: true } },
       },
     })

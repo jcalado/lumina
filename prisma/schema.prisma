@@ -24,7 +24,7 @@ model Album {
   updatedAt             DateTime @updatedAt
   photos                Photo[]
   videos                Video[]
-  groups                Group[]
+  groupAlbums           GroupAlbum[]
 
   // Composite unique constraint for path-based uniqueness
   @@unique([path, slug])
@@ -184,17 +184,29 @@ model Group {
   id                String      @id @default(cuid())
   name              String
   description       String?
-  albumId           String
-  album             Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
   canUpload         Boolean     @default(false)
   canEdit           Boolean     @default(false)
   canDelete         Boolean     @default(false)
   canCreateSubalbums Boolean    @default(false)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+  albums            GroupAlbum[]
   members           UserGroup[]
 
   @@map("groups")
+}
+
+model GroupAlbum {
+  id      String @id @default(cuid())
+  groupId String
+  albumId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  album   Album  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, albumId])
+  @@index([groupId])
+  @@index([albumId])
+  @@map("group_albums")
 }
 
 model UserGroup {

@@ -23,12 +23,11 @@ interface GroupDetail {
   id: string
   name: string
   description: string | null
-  albumId: string
   canUpload: boolean
   canEdit: boolean
   canDelete: boolean
   canCreateSubalbums: boolean
-  album: { id: string; name: string; path: string }
+  albums: { album: { id: string; name: string; path: string } }[]
   members: GroupMember[]
 }
 
@@ -192,11 +191,17 @@ export default function GroupDetailPage() {
             <CardTitle className="text-base">{t("albumAccess")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{group.album.name}</span>
+            <div className="space-y-2">
+              {group.albums.map((ga) => (
+                <div key={ga.album.id}>
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{ga.album.name}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground ml-6">{ga.album.path}</p>
+                </div>
+              ))}
             </div>
-            <p className="text-sm text-muted-foreground mt-1">{group.album.path}</p>
             <p className="text-xs text-muted-foreground mt-2">
               {t("albumAccessSubtext")}
             </p>

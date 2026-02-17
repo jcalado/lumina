@@ -6,7 +6,7 @@ import { z } from "zod"
 const updateGroupSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
-  albumId: z.string().min(1).optional(),
+  albumIds: z.array(z.string().min(1)).min(1).optional(),
   canUpload: z.boolean().optional(),
   canEdit: z.boolean().optional(),
   canDelete: z.boolean().optional(),
@@ -31,7 +31,7 @@ export async function GET(
     const group = await prisma.group.findUnique({
       where: { id },
       include: {
-        album: { select: { id: true, name: true, path: true } },
+        albums: { include: { album: { select: { id: true, name: true, path: true } } } },
         members: {
           include: {
             user: {
@@ -73,27 +73,39 @@ export async function PUT(
     const body = await request.json()
     const data = updateGroupSchema.parse(body)
 
-    // If albumId is being changed, verify the new album exists
-    if (data.albumId) {
-      const album = await prisma.album.findUnique({
-        where: { id: data.albumId },
+    // If albumIds are being changed, verify all albums exist
+    if (data.albumIds) {
+      const albums = await prisma.album.findMany({
+        where: { id: { in: data.albumIds } },
         select: { id: true },
       })
-      if (!album) {
+      if (albums.length !== data.albumIds.length) {
         return NextResponse.json(
-          { error: "Album not found" },
+          { error: "One or more albums not found" },
           { status: 404 }
         )
       }
     }
 
-    const group = await prisma.group.update({
-      where: { id },
-      data,
-      include: {
-        album: { select: { id: true, name: true, path: true } },
-        _count: { select: { members: true } },
-      },
+    const { albumIds, ...groupData } = data
+
+    const group = await prisma.$transaction(async (tx) => {
+      // Replace album associations if provided
+      if (albumIds) {
+        await tx.groupAlbum.deleteMany({ where: { groupId: id } })
+        await tx.groupAlbum.createMany({
+          data: albumIds.map((albumId) => ({ groupId: id, albumId })),
+        })
+      }
+
+      return tx.group.update({
+        where: { id },
+        data: groupData,
+        include: {
+          albums: { include: { album: { select: { id: true, name: true, path: true } } } },
+          _count: { select: { members: true } },
+        },
+      })
     })
 
     return NextResponse.json({ group })

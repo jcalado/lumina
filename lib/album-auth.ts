@@ -70,22 +70,24 @@ export async function requireAlbumAccess(albumId: string, permission: Permission
     where: { userId: session.user.id },
     include: {
       group: {
-        include: { album: { select: { path: true } } },
+        include: { albums: { include: { album: { select: { path: true } } } } },
       },
     },
   })
 
-  const hasAccess = userGroups.some((ug) => {
-    const groupAlbumPath = ug.group.album.path
-    const isPathMatch =
-      album.path === groupAlbumPath ||
-      album.path.startsWith(groupAlbumPath + "/")
+  const hasAccess = userGroups.some((ug) =>
+    ug.group.albums.some((ga) => {
+      const groupAlbumPath = ga.album.path
+      const isPathMatch =
+        album.path === groupAlbumPath ||
+        album.path.startsWith(groupAlbumPath + "/")
 
-    if (!isPathMatch) return false
+      if (!isPathMatch) return false
 
-    const field = permissionFieldMap[permission]
-    return (ug.group as any)[field] === true
-  })
+      const field = permissionFieldMap[permission]
+      return (ug.group as any)[field] === true
+    })
+  )
 
   if (!hasAccess) {
     return NextResponse.json(
@@ -131,18 +133,20 @@ export async function requireAlbumRead(albumId: string) {
     where: { userId: session.user.id },
     include: {
       group: {
-        include: { album: { select: { path: true } } },
+        include: { albums: { include: { album: { select: { path: true } } } } },
       },
     },
   })
 
-  const hasAccess = userGroups.some((ug) => {
-    const groupAlbumPath = ug.group.album.path
-    return (
-      album.path === groupAlbumPath ||
-      album.path.startsWith(groupAlbumPath + "/")
-    )
-  })
+  const hasAccess = userGroups.some((ug) =>
+    ug.group.albums.some((ga) => {
+      const groupAlbumPath = ga.album.path
+      return (
+        album.path === groupAlbumPath ||
+        album.path.startsWith(groupAlbumPath + "/")
+      )
+    })
+  )
 
   if (!hasAccess) {
     return NextResponse.json(
@@ -168,12 +172,12 @@ export async function getAccessibleAlbumIds(userId: string, role: string): Promi
     where: { userId },
     include: {
       group: {
-        include: { album: { select: { id: true, path: true } } },
+        include: { albums: { include: { album: { select: { id: true, path: true } } } } },
       },
     },
   })
 
-  const groupPaths = userGroups.map((ug) => ug.group.album.path)
+  const groupPaths = userGroups.flatMap((ug) => ug.group.albums.map((ga) => ga.album.path))
 
   if (groupPaths.length === 0) {
     return []
@@ -210,7 +214,7 @@ export async function getAlbumPermissions(
     where: { userId },
     include: {
       group: {
-        include: { album: { select: { id: true, path: true } } },
+        include: { albums: { include: { album: { select: { id: true, path: true } } } } },
       },
     },
   })
@@ -219,7 +223,7 @@ export async function getAlbumPermissions(
     return {}
   }
 
-  const groupPaths = userGroups.map((ug) => ug.group.album.path)
+  const groupPaths = userGroups.flatMap((ug) => ug.group.albums.map((ga) => ga.album.path))
 
   // Get all accessible albums
   const albums = await prisma.album.findMany({
@@ -239,12 +243,15 @@ export async function getAlbumPermissions(
     permMap[album.id] = { canUpload: false, canEdit: false, canDelete: false, canCreateSubalbums: false }
 
     for (const ug of userGroups) {
-      const groupAlbumPath = ug.group.album.path
-      const isPathMatch =
-        album.path === groupAlbumPath ||
-        album.path.startsWith(groupAlbumPath + "/")
+      const hasMatchingAlbum = ug.group.albums.some((ga) => {
+        const groupAlbumPath = ga.album.path
+        return (
+          album.path === groupAlbumPath ||
+          album.path.startsWith(groupAlbumPath + "/")
+        )
+      })
 
-      if (isPathMatch) {
+      if (hasMatchingAlbum) {
         if (ug.group.canUpload) permMap[album.id].canUpload = true
         if (ug.group.canEdit) permMap[album.id].canEdit = true
         if (ug.group.canDelete) permMap[album.id].canDelete = true

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlbumTreeSelect } from "@/components/Admin/AlbumTreeSelect"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -21,12 +21,11 @@ interface Group {
   id: string
   name: string
   description: string | null
-  albumId: string
   canUpload: boolean
   canEdit: boolean
   canDelete: boolean
   canCreateSubalbums: boolean
-  album: { id: string; name: string; path: string }
+  albums: { album: { id: string; name: string; path: string } }[]
   _count: { members: number }
 }
 
@@ -39,7 +38,7 @@ interface Album {
 interface GroupForm {
   name: string
   description: string
-  albumId: string
+  albumIds: string[]
   canUpload: boolean
   canEdit: boolean
   canDelete: boolean
@@ -49,7 +48,7 @@ interface GroupForm {
 const emptyForm: GroupForm = {
   name: "",
   description: "",
-  albumId: "",
+  albumIds: [],
   canUpload: false,
   canEdit: false,
   canDelete: false,
@@ -93,7 +92,7 @@ export default function GroupsPage() {
   }
 
   const handleCreate = async () => {
-    if (!form.name.trim() || !form.albumId) {
+    if (!form.name.trim() || form.albumIds.length === 0) {
       toast({ title: t("toastError"), description: t("toastNameAlbumRequired"), variant: "destructive" })
       return
     }
@@ -105,7 +104,7 @@ export default function GroupsPage() {
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || undefined,
-          albumId: form.albumId,
+          albumIds: form.albumIds,
           canUpload: form.canUpload,
           canEdit: form.canEdit,
           canDelete: form.canDelete,
@@ -129,7 +128,7 @@ export default function GroupsPage() {
   }
 
   const handleEdit = async () => {
-    if (!editingGroup || !form.name.trim() || !form.albumId) return
+    if (!editingGroup || !form.name.trim() || form.albumIds.length === 0) return
     setSubmitting(true)
     try {
       const res = await fetch(`/api/admin/groups/${editingGroup.id}`, {
@@ -138,7 +137,7 @@ export default function GroupsPage() {
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || undefined,
-          albumId: form.albumId,
+          albumIds: form.albumIds,
           canUpload: form.canUpload,
           canEdit: form.canEdit,
           canDelete: form.canDelete,
@@ -185,7 +184,7 @@ export default function GroupsPage() {
     setForm({
       name: group.name,
       description: group.description || "",
-      albumId: group.albumId,
+      albumIds: group.albums.map((ga) => ga.album.id),
       canUpload: group.canUpload,
       canEdit: group.canEdit,
       canDelete: group.canDelete,
@@ -225,23 +224,14 @@ export default function GroupsPage() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="group-album">{t("formAlbum")}</Label>
-        <Select value={form.albumId} onValueChange={(v) => setForm({ ...form, albumId: v })}>
-          <SelectTrigger>
-            <SelectValue placeholder={t("formAlbumPlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            {albums
-              .sort((a, b) => a.path.localeCompare(b.path))
-              .map((album) => (
-                <SelectItem key={album.id} value={album.id}>
-                  {album.path}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
+        <Label htmlFor="group-albums">{t("formAlbums")}</Label>
+        <AlbumTreeSelect
+          albums={albums}
+          selectedAlbumIds={form.albumIds}
+          onSelectionChange={(ids) => setForm({ ...form, albumIds: ids })}
+        />
         <p className="text-xs text-muted-foreground">
-          {t("formAlbumHelp")}
+          {t("formAlbumsHelp")}
         </p>
       </div>
 
@@ -330,9 +320,13 @@ export default function GroupsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                        {group.album.path}
+                      <div className="space-y-0.5">
+                        {group.albums.map((ga) => (
+                          <div key={ga.album.id} className="flex items-center gap-1.5 text-sm">
+                            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            {ga.album.path}
+                          </div>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -383,7 +377,7 @@ export default function GroupsPage() {
           {formFields}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={submitting}>{t("cancel")}</Button>
-            <Button onClick={handleCreate} disabled={submitting || !form.name.trim() || !form.albumId}>
+            <Button onClick={handleCreate} disabled={submitting || !form.name.trim() || form.albumIds.length === 0}>
               {submitting ? t("creating") : t("createGroup")}
             </Button>
           </DialogFooter>
@@ -400,7 +394,7 @@ export default function GroupsPage() {
           {formFields}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditingGroup(null); setForm(emptyForm) }} disabled={submitting}>{t("cancel")}</Button>
-            <Button onClick={handleEdit} disabled={submitting || !form.name.trim() || !form.albumId}>
+            <Button onClick={handleEdit} disabled={submitting || !form.name.trim() || form.albumIds.length === 0}>
               {submitting ? t("saving") : t("saveChanges")}
             </Button>
           </DialogFooter>
