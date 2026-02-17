@@ -82,5 +82,16 @@
     },
     "search": {
         "search_albums_placeholder": "Procurar álbuns..."
+    },
+    "login": {
+        "welcome_back": "Bem-vindo de volta",
+        "description": "Inicie sessão para aceder ao painel de administração",
+        "email": "Email",
+        "password": "Palavra-passe",
+        "sign_in": "Iniciar sessão",
+        "signing_in": "A iniciar sessão...",
+        "error_invalid_credentials": "Credenciais inválidas",
+        "error_login_failed": "Falha no início de sessão",
+        "error_generic": "Ocorreu um erro durante o início de sessão"
     }
 }

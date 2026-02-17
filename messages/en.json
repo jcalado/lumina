@@ -12,5 +12,16 @@
   "nav": {
     "albums": "Albums",
     "favorites": "Favorites"
+  },
+  "login": {
+    "welcome_back": "Welcome back",
+    "description": "Sign in to access the admin dashboard",
+    "email": "Email",
+    "password": "Password",
+    "sign_in": "Sign in",
+    "signing_in": "Signing in...",
+    "error_invalid_credentials": "Invalid credentials",
+    "error_login_failed": "Login failed",
+    "error_generic": "An error occurred during login"
   }
 }

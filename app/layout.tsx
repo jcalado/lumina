@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Suspense } from 'react';
 import { FavoritesProvider } from '@/contexts/FavoritesContext';
 import { DownloadSelectionProvider } from '@/contexts/DownloadSelectionContext';
 import { NextIntlClientProvider } from 'next-intl';
@@ -9,8 +8,6 @@ import { getMessages } from 'next-intl/server';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import SettingsShell from '@/components/SettingsShell';
-import SettingsFallback from '@/components/SettingsFallback';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -55,13 +52,9 @@ export default async function RootLayout({
             <FavoritesProvider>
               <DownloadSelectionProvider>
                 <NextIntlClientProvider messages={messages}>
-                <Suspense fallback={<SettingsFallback />}>
-                  <SettingsShell>
-                    {children}
-                  </SettingsShell>
-                </Suspense>
-                <Toaster />
-              </NextIntlClientProvider>
+                  {children}
+                  <Toaster />
+                </NextIntlClientProvider>
               </DownloadSelectionProvider>
             </FavoritesProvider>
           </AuthProvider>

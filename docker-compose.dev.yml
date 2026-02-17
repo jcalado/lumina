@@ -76,6 +76,8 @@ services:
       migrate:
         condition: service_completed_successfully
     volumes:
+      - .:/app
+      - /app/node_modules
       - ./temp:/app/temp
       - ${PHOTOS_ROOT_PATH:-photos_data}:/var/app/photos
     healthcheck:
