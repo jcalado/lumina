@@ -191,12 +191,25 @@ export default function AdminAlbumsPage() {
     setExpandedNodes(newExpanded)
   }
 
+  const getRecursiveMediaCount = (node: AlbumTreeNode): { photos: number; videos: number } => {
+    let photos = node.album._count?.photos || 0
+    let videos = node.album._count?.videos || 0
+    for (const child of node.children) {
+      const childCounts = getRecursiveMediaCount(child)
+      photos += childCounts.photos
+      videos += childCounts.videos
+    }
+    return { photos, videos }
+  }
+
   const renderAlbumNode = (node: AlbumTreeNode): React.ReactElement => {
     const { album, children, level, isExpanded } = node
     const hasChildren = children.length > 0
     const indentStyle = { paddingLeft: `${level * 24 + 12}px` }
     const parentPath = getParentPath(album.path)
-    const mediaCount = (album._count?.photos || 0) + (album._count?.videos || 0)
+    const directCount = (album._count?.photos || 0) + (album._count?.videos || 0)
+    const recursive = getRecursiveMediaCount(node)
+    const totalCount = recursive.photos + recursive.videos
 
     return (
       <div key={album.id}>
@@ -287,9 +300,9 @@ export default function AdminAlbumsPage() {
 
           {/* Media Count */}
           <div className="col-span-1 hidden md:flex items-center justify-center">
-            <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex items-center gap-1 text-muted-foreground" title={hasChildren && directCount !== totalCount ? `${directCount} direct, ${totalCount} total` : undefined}>
               <Image className="h-3 w-3" />
-              <span className="font-medium text-foreground">{mediaCount}</span>
+              <span className="font-medium text-foreground">{totalCount}</span>
             </div>
           </div>
 
