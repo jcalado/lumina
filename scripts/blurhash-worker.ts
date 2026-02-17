@@ -5,8 +5,6 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
 import dotenv from 'dotenv';
-import fs from 'fs/promises';
-import path from 'path';
 import { getBatchProcessingSize } from '../lib/settings';
 
 // Load environment variables
@@ -71,58 +69,7 @@ async function generateBlurhash(imageBuffer: Buffer): Promise<string> {
   }
 }
 
-async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
-  try {
-    const photosRoot = process.env.PHOTOS_ROOT_PATH;
-    if (!photosRoot) {
-      console.log('PHOTOS_ROOT_PATH not configured, skipping local file check');
-      return null;
-    }
-
-    let fullPath: string;
-    
-    // Check if originalPath is already absolute
-    if (path.isAbsolute(originalPath)) {
-      // Use the path as-is if it's already absolute
-      fullPath = originalPath;
-      console.log(`Using absolute path: ${fullPath}`);
-    } else {
-      // Join with PHOTOS_ROOT_PATH if it's relative
-      fullPath = path.join(photosRoot, originalPath);
-      console.log(`Joining relative path: ${photosRoot} + ${originalPath} = ${fullPath}`);
-    }
-    
-    // Check if file exists
-    await fs.access(fullPath);
-    
-    // Read the file
-    const buffer = await fs.readFile(fullPath);
-    console.log(`✅ Read local file: ${fullPath} (${buffer.length} bytes)`);
-    return buffer;
-  } catch (error) {
-    // File doesn't exist locally or can't be read
-    console.log(`❌ Local file not available: ${originalPath} (${error instanceof Error ? error.message : 'Unknown error'})`);
-    return null;
-  }
-}
-
-async function getPhotoBuffer(originalPath: string, s3Key: string): Promise<{ buffer: Buffer; source: 'local' | 's3' }> {
-  // First try to read from local filesystem
-  console.log(`Trying to read photo locally: ${originalPath}`);
-  const localBuffer = await readLocalPhoto(originalPath);
-  
-  if (localBuffer) {
-    console.log(`✅ Using local copy of ${originalPath}`);
-    return { buffer: localBuffer, source: 'local' };
-  }
-  
-  // Fall back to S3 download
-  console.log(`📥 Local copy not available, downloading from S3: ${s3Key}`);
-  const s3Buffer = await downloadFromS3(s3Key, originalPath);
-  return { buffer: s3Buffer, source: 's3' };
-}
-
-async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buffer> {
+async function downloadFromS3(s3Key: string): Promise<Buffer> {
   try {
     // Validate bucket name before making the request
     if (!process.env.S3_BUCKET) {
@@ -157,16 +104,6 @@ async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buff
 
     const buffer = Buffer.concat(chunks);
     console.log(`✅ Successfully downloaded ${s3Key} (${buffer.length} bytes)`);
-
-    // Save the file to its proper location
-    const photosRoot = process.env.PHOTOS_ROOT_PATH;
-    if (photosRoot) {
-      const localPath = path.join(photosRoot, originalPath);
-      console.log(`💾 Saving downloaded file to: ${localPath}`);
-      await fs.mkdir(path.dirname(localPath), { recursive: true });
-      await fs.writeFile(localPath, buffer);
-      console.log(`✅ File saved successfully`);
-    }
 
     return buffer;
   } catch (error) {
@@ -212,7 +149,6 @@ async function processBlurhashJob(jobId: string) {
         id: true,
         s3Key: true,
         filename: true,
-        originalPath: true,
       },
     });
 
@@ -226,8 +162,6 @@ async function processBlurhashJob(jobId: string) {
     });
 
     let processedPhotos = 0;
-    let localPhotosUsed = 0;
-    let s3PhotosUsed = 0;
     const errors: string[] = [];
 
     // Helper function to process a single photo
@@ -235,15 +169,8 @@ async function processBlurhashJob(jobId: string) {
       try {
         console.log(`Processing photo ${photo.filename}`);
 
-        // Get image buffer (local file preferred, S3 fallback)
-        const { buffer: imageBuffer, source } = await getPhotoBuffer(photo.originalPath, photo.s3Key);
-        
-        // Track source usage
-        if (source === 'local') {
-          localPhotosUsed++;
-        } else {
-          s3PhotosUsed++;
-        }
+        // Download image from S3
+        const imageBuffer = await downloadFromS3(photo.s3Key);
 
         // Generate blurhash
         const blurhash = await generateBlurhash(imageBuffer);
@@ -254,7 +181,7 @@ async function processBlurhashJob(jobId: string) {
           data: { blurhash },
         });
 
-        return { success: true, filename: photo.filename, source };
+        return { success: true, filename: photo.filename };
       } catch (error) {
         const errorMessage = `Error processing photo ${photo.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         console.error(errorMessage);
@@ -335,7 +262,6 @@ async function processBlurhashJob(jobId: string) {
     });
 
     console.log(`Blurhash job ${jobId} completed. Processed ${processedPhotos}/${totalPhotos} photos`);
-    console.log(`📊 Source statistics: ${localPhotosUsed} from local files, ${s3PhotosUsed} from S3`);
     if (errors.length > 0) {
       console.log(`Encountered ${errors.length} errors during processing`);
     }
@@ -381,8 +307,7 @@ async function startBlurhashJob() {
     console.log(`🪣 S3 Bucket: ${process.env.S3_BUCKET}`);
     console.log(`🌍 S3 Region: ${process.env.S3_REGION || 'us-east-1'}`);
     console.log(`🔗 S3 Endpoint: ${process.env.S3_ENDPOINT || 'default AWS endpoint'}`);
-    console.log(`📁 Photos Root Path: ${process.env.PHOTOS_ROOT_PATH || 'not configured (will use S3 only)'}`);
-    console.log(`💡 Strategy: Will prefer local files when available, fallback to S3`);
+    console.log(`💡 Strategy: Download photos from S3`);
 
     // Check if there's already a running job
     const runningJob = await prisma.blurhashJob.findFirst({

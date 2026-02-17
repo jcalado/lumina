@@ -69,7 +69,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
-      - ${PHOTOS_DATA:-photos_data}:/var/app/photos
       - next_cache:/app/.next/cache
     restart: unless-stopped
     healthcheck:
@@ -136,7 +135,6 @@ services:
         condition: service_started
     volumes:
       - ./temp:/app/temp
-      - ${PHOTOS_DATA:-photos_data}:/var/app/photos
     restart: unless-stopped
     deploy:
       replicas: 1
@@ -198,5 +196,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  photos_data:
   next_cache:

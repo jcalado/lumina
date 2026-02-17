@@ -3,12 +3,9 @@
 import { isMainThread, parentPort, workerData } from 'worker_threads';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 
 interface PhotoTask {
   id: string;
-  originalPath: string;
   s3Key: string;
   albumPath: string;
   filename: string;
@@ -20,7 +17,6 @@ interface ThumbnailResult {
   success: boolean;
   thumbnailsCreated: number;
   error?: string;
-  source?: 'local' | 's3';
 }
 
 // Thumbnail sizes configuration
@@ -41,40 +37,7 @@ const s3Client = new S3Client({
 
 const S3_BUCKET = process.env.S3_BUCKET || '';
 
-async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
-  try {
-    const photosRoot = process.env.PHOTOS_ROOT_PATH;
-    if (!photosRoot) {
-      console.log('PHOTOS_ROOT_PATH not configured, skipping local file check');
-      return null;
-    }
-
-    let fullPath: string;
-    
-    // Check if originalPath is already absolute
-    if (path.isAbsolute(originalPath)) {
-      // Use the path as-is if it's already absolute
-      fullPath = originalPath;
-    } else {
-      // Join with PHOTOS_ROOT_PATH if it's relative
-      fullPath = path.join(photosRoot, originalPath);
-    }
-    
-    // Check if file exists
-    await fs.access(fullPath);
-    
-    // Read the file
-    const buffer = await fs.readFile(fullPath);
-    console.log(`✅ Read local file: ${fullPath} (${buffer.length} bytes)`);
-    return buffer;
-  } catch (error) {
-    // File doesn't exist locally or can't be read
-    console.log(`❌ Local file not available: ${originalPath}`);
-    return null;
-  }
-}
-
-async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buffer> {
+async function downloadFromS3(s3Key: string): Promise<Buffer> {
   try {
     if (!S3_BUCKET) {
       throw new Error('S3_BUCKET environment variable is not set');
@@ -106,16 +69,6 @@ async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buff
 
     const buffer = Buffer.concat(chunks);
 
-    // Save the file to its proper location
-    const photosRoot = process.env.PHOTOS_ROOT_PATH;
-    if (photosRoot) {
-      const localPath = path.join(photosRoot, originalPath);
-      console.log(`💾 Saving downloaded file to: ${localPath}`);
-      await fs.mkdir(path.dirname(localPath), { recursive: true });
-      await fs.writeFile(localPath, buffer);
-      console.log(`✅ File saved successfully`);
-    }
-
     return buffer;
   } catch (error) {
     if (error instanceof Error) {
@@ -125,21 +78,12 @@ async function downloadFromS3(s3Key: string, originalPath: string): Promise<Buff
   }
 }
 
-async function getImageBuffer(originalPath: string, s3Key: string): Promise<{ buffer: Buffer, source: 'local' | 's3' }> {
-  // First try to read from local filesystem
-  const localBuffer = await readLocalPhoto(originalPath);
-  
-  if (localBuffer) {
-    return { buffer: localBuffer, source: 'local' };
-  }
-  
-  // Fall back to S3 download
-  const s3Buffer = await downloadFromS3(s3Key, originalPath);
-  return { buffer: s3Buffer, source: 's3' };
+async function getImageBuffer(s3Key: string): Promise<Buffer> {
+  return downloadFromS3(s3Key);
 }
 
 function generateS3Key(albumPath: string, filename: string, size: string): string {
-  const baseName = path.parse(filename).name;
+  const baseName = filename.replace(/\.[^/.]+$/, '');
   const extension = '.jpg'; // All thumbnails are JPEG
   const thumbnailFilename = `${baseName}_${size.toLowerCase()}${extension}`;
   
@@ -160,11 +104,11 @@ async function uploadThumbnail(s3Key: string, buffer: Buffer): Promise<void> {
 }
 
 async function generateThumbnailsForPhoto(photoTask: PhotoTask): Promise<ThumbnailResult> {
-  const { id, originalPath, s3Key, albumPath, filename } = photoTask;
-  
+  const { id, s3Key, albumPath, filename } = photoTask;
+
   try {
-    // Get image buffer
-    const { buffer: imageBuffer, source } = await getImageBuffer(originalPath, s3Key);
+    // Get image buffer from S3
+    const imageBuffer = await getImageBuffer(s3Key);
     
     let thumbnailsCreated = 0;
     const thumbnails: Array<{ size: string, s3Key: string, width: number, height: number }> = [];
@@ -232,7 +176,6 @@ async function generateThumbnailsForPhoto(photoTask: PhotoTask): Promise<Thumbna
       filename,
       success: thumbnailsCreated > 0,
       thumbnailsCreated,
-      source,
       thumbnails, // Include thumbnail info for database updates
     } as ThumbnailResult & { thumbnails: typeof thumbnails };
     

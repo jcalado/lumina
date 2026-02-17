@@ -9,7 +9,7 @@ export interface ThumbnailData {
 export interface PhotoData {
   id: string;
   filename: string;
-  originalPath: string;
+  originalPath: string | null;
   s3Key: string;
   fileSize: number;
   takenAt: string | null;

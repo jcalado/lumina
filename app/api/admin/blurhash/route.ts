@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
     if (action === 'start') {
       const photos = await prisma.photo.findMany({
         where: { blurhash: null },
-        select: { id: true, originalPath: true, s3Key: true, filename: true },
+        select: { id: true, s3Key: true, filename: true },
       });
       for (const p of photos) {
-        await enqueueBlurhashJob({ photoId: p.id, originalPath: p.originalPath, s3Key: p.s3Key, filename: p.filename });
+        await enqueueBlurhashJob({ photoId: p.id, s3Key: p.s3Key, filename: p.filename });
       }
       await getBlurhashQueue().resume()
       return NextResponse.json({ success: true, enqueued: photos.length });

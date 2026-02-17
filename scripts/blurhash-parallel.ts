@@ -25,7 +25,6 @@ export interface PhotoTask {
   filepath: string;
   filename: string;
   s3Key?: string;
-  originalPath?: string;
 }
 
 export interface ProcessResult {
@@ -34,7 +33,6 @@ export interface ProcessResult {
   blurhash: string | null;
   success: boolean;
   error?: string;
-  source?: 'local' | 's3';
 }
 
 export function requestJobStop() {
@@ -77,7 +75,6 @@ async function processPhotoInWorker(photoTask: PhotoTask): Promise<ProcessResult
           },
           bucket: process.env.S3_BUCKET,
         },
-        photosRootPath: process.env.PHOTOS_ROOT_PATH,
       },
     });
 
@@ -142,7 +139,8 @@ export async function processBlurhashJobParallel(jobId: string) {
         id: true,
         s3Key: true,
         filename: true,
-        originalPath: true,
+
+
       },
     });
 
@@ -156,8 +154,6 @@ export async function processBlurhashJobParallel(jobId: string) {
     });
 
     let processedPhotos = 0;
-    let localPhotosUsed = 0;
-    let s3PhotosUsed = 0;
     const errors: string[] = [];
 
     // Process photos in parallel batches optimized for worker threads
@@ -202,7 +198,8 @@ export async function processBlurhashJobParallel(jobId: string) {
           filepath: photo.s3Key,
           s3Key: photo.s3Key,
           filename: photo.filename,
-          originalPath: photo.originalPath,
+
+
         })
       );
 
@@ -244,9 +241,7 @@ export async function processBlurhashJobParallel(jobId: string) {
 
       // Update counters
       processedPhotos += results.length;
-      localPhotosUsed += results.filter(r => r.source === 'local').length;
-      s3PhotosUsed += results.filter(r => r.source === 's3').length;
-      
+
       const failedResults = results.filter(r => !r.success);
       for (const failed of failedResults) {
         errors.push(`Failed to process ${failed.filename}: ${failed.error}`);
@@ -285,7 +280,6 @@ export async function processBlurhashJobParallel(jobId: string) {
 
     console.log(`✅ Parallelized blurhash job ${jobId} completed!`);
     console.log(`📊 Processed ${processedPhotos}/${totalPhotos} photos`);
-    console.log(`📊 Source statistics: ${localPhotosUsed} from local files, ${s3PhotosUsed} from S3`);
     console.log(`📊 Used ${maxWorkers} worker threads for parallel processing`);
     if (errors.length > 0) {
       console.log(`⚠️  Encountered ${errors.length} errors during processing`);

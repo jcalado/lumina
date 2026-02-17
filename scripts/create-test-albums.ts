@@ -19,7 +19,7 @@ async function main() {
       const slug = await generateUniqueSlug(albumData.name);
       
       await prisma.$executeRaw`
-        INSERT INTO albums (id, path, slug, name, description, status, enabled, syncedToS3, localFilesSafeDelete, createdAt, updatedAt)
+        INSERT INTO albums (id, path, slug, name, description, status, enabled, createdAt, updatedAt)
         VALUES (
           UUID(),
           ${albumData.path},
@@ -28,8 +28,6 @@ async function main() {
           'Test album created to demonstrate slug functionality.',
           'PUBLIC',
           1,
-          0,
-          0,
           NOW(),
           NOW()
         )

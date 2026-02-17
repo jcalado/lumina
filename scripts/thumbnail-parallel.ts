@@ -22,7 +22,6 @@ let shouldStopJob = false;
 
 export interface PhotoTask {
   id: string;
-  originalPath: string;
   s3Key: string;
   albumPath: string;
   filename: string;
@@ -144,7 +143,6 @@ export async function processThumbnailJobParallel(jobId: string) {
       select: {
         id: true,
         filename: true,
-        originalPath: true,
         s3Key: true,
         album: {
           select: {
@@ -165,8 +163,6 @@ export async function processThumbnailJobParallel(jobId: string) {
 
     let processedPhotos = 0;
     let thumbnailsCreated = 0;
-    let localPhotosUsed = 0;
-    let s3PhotosUsed = 0;
     const errors: string[] = [];
 
     // Process photos in parallel batches optimized for worker threads
@@ -206,10 +202,9 @@ export async function processThumbnailJobParallel(jobId: string) {
       // Process entire batch in parallel using worker threads
       const results: ThumbnailResult[] = [];
       
-      const workerPromises = batch.map(photo => 
+      const workerPromises = batch.map(photo =>
         processPhotoInWorker({
           id: photo.id,
-          originalPath: photo.originalPath,
           s3Key: photo.s3Key,
           albumPath: photo.album.path,
           filename: photo.filename,
@@ -263,8 +258,6 @@ export async function processThumbnailJobParallel(jobId: string) {
       // Update counters
       processedPhotos += results.length;
       thumbnailsCreated += results.reduce((sum, r) => sum + r.thumbnailsCreated, 0);
-      localPhotosUsed += results.filter(r => r.source === 'local').length;
-      s3PhotosUsed += results.filter(r => r.source === 's3').length;
       
       const failedResults = results.filter(r => !r.success);
       for (const failed of failedResults) {
@@ -308,8 +301,6 @@ export async function processThumbnailJobParallel(jobId: string) {
     console.log(`📊 Statistics:`);
     console.log(`   - Photos processed: ${processedPhotos}/${totalPhotos}`);
     console.log(`   - Thumbnails created: ${thumbnailsCreated}`);
-    console.log(`   - Local photos used: ${localPhotosUsed}`);
-    console.log(`   - S3 photos used: ${s3PhotosUsed}`);
     console.log(`   - Errors: ${errors.length}`);
 
   } catch (error) {

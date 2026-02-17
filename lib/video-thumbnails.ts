@@ -15,7 +15,7 @@ export const VIDEO_THUMBNAIL_SIZES = {
 
 interface VideoThumbnailJobData {
   videoId: string;
-  originalPath: string;
+  originalPath?: string;
   s3Key: string;
   albumPath: string;
   filename: string;
@@ -53,7 +53,7 @@ async function extractVideoFrame(videoPath: string, outputPath: string, timeOffs
 
 // Direct video thumbnail generation function
 export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): Promise<{ thumbnailsCreated: number }> {
-  const { videoId, originalPath, s3Key, albumPath, filename, reprocess } = jobData;
+  const { videoId, s3Key, albumPath, filename, reprocess } = jobData;
   
   try {
     console.log(`Processing video thumbnails for: ${filename}`);
@@ -79,20 +79,10 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
     const tempFramePath = path.join(tempDir, `temp_frame_${videoId}_${Date.now()}.jpg`);
     
     let videoBuffer: Buffer;
-    
-    // Try to read from local file first, fall back to S3
-    try {
-      await fs.access(originalPath);
-      videoBuffer = await fs.readFile(originalPath);
-      console.log(`Reading video from local path: ${originalPath}`);
-    } catch (error) {
-      console.log(`Local file not found, fetching from S3: ${s3Key}`);
-      try {
-        videoBuffer = await s3Service.getObject(s3Key);
-      } catch (s3Error) {
-        throw new Error(`Failed to read video from both local and S3: ${error} | ${s3Error}`);
-      }
-    }
+
+    // Fetch video from S3
+    console.log(`Fetching video from S3: ${s3Key}`);
+    videoBuffer = await s3Service.getObject(s3Key);
     
     // Write video to temporary file for ffmpeg processing
     await fs.writeFile(tempVideoPath, videoBuffer);

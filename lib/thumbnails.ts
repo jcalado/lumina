@@ -2,7 +2,6 @@ import sharp from 'sharp';
 import { prisma } from './prisma';
 import { S3Service } from './s3';
 import { getBatchProcessingSize } from './settings';
-import * as fs from 'fs/promises';
 import * as exifr from 'exifr';
 
 // Thumbnail sizes as per CLAUDE.md spec
@@ -14,7 +13,6 @@ export const THUMBNAIL_SIZES = {
 
 interface ThumbnailJobData {
   photoId: string;
-  originalPath: string;
   s3Key: string;
   albumPath: string;
   filename: string;
@@ -23,7 +21,7 @@ interface ThumbnailJobData {
 
 // Direct thumbnail generation function (synchronous approach for development)
 export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ thumbnailsCreated: number }> {
-  const { photoId, originalPath, s3Key, albumPath, filename, reprocess } = jobData;
+  const { photoId, s3Key, albumPath, filename, reprocess } = jobData;
   
   try {
     console.log(`Processing thumbnails for photo: ${filename}`);
@@ -46,20 +44,10 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
       }
     }
     let imageBuffer: Buffer;
-    
-    // Try to read from local file first, fall back to S3
-    try {
-      await fs.access(originalPath);
-      imageBuffer = await fs.readFile(originalPath);
-      console.log(`Reading image from local path: ${originalPath}`);
-    } catch (error) {
-      console.log(`Local file not found, fetching from S3: ${s3Key}`);
-      try {
-        imageBuffer = await s3Service.getObject(s3Key);
-      } catch (s3Error) {
-        throw new Error(`Failed to read image from both local and S3: ${error} | ${s3Error}`);
-      }
-    }
+
+    // Fetch image from S3
+    console.log(`Fetching image from S3: ${s3Key}`);
+    imageBuffer = await s3Service.getObject(s3Key);
     
     const thumbnailsCreated: any[] = [];
     
@@ -174,7 +162,8 @@ export async function reprocessAllThumbnails(): Promise<{ processed: number; tot
       select: {
         id: true,
         filename: true,
-        originalPath: true,
+
+
         s3Key: true,
         album: {
           select: {
@@ -193,7 +182,8 @@ export async function reprocessAllThumbnails(): Promise<{ processed: number; tot
       try {
         await generateThumbnails({
           photoId: photo.id,
-          originalPath: photo.originalPath,
+
+
           s3Key: photo.s3Key,
           albumPath: photo.album.path,
           filename: photo.filename,
@@ -248,7 +238,8 @@ export async function reprocessAllThumbnails(): Promise<{ processed: number; tot
       select: {
         id: true,
         filename: true,
-        originalPath: true,
+
+
         s3Key: true,
         metadata: true,
         thumbnails: {
@@ -301,7 +292,8 @@ export async function reprocessAllThumbnails(): Promise<{ processed: number; tot
       try {
         await generateThumbnails({
           photoId: photo.id,
-          originalPath: photo.originalPath,
+
+
           s3Key: photo.s3Key,
           albumPath: photo.album.path,
           filename: photo.filename,

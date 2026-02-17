@@ -3,40 +3,6 @@ import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
 import { slugPathToPath } from '@/lib/slug-paths';
 import archiver from 'archiver';
-import fs from 'fs/promises';
-import path from 'path';
-
-// Helper function to read photo data, preferring local files over S3
-async function readPhotoData(photo: { filename: string; s3Key: string; originalPath: string | null }, s3Service: S3Service): Promise<Buffer> {
-  // Try to read from local filesystem first
-  if (photo.originalPath) {
-    try {
-      const photosRoot = process.env.PHOTOS_ROOT_PATH;
-      let fullPath: string;
-
-      // Check if originalPath is already absolute
-      if (path.isAbsolute(photo.originalPath)) {
-        fullPath = photo.originalPath;
-      } else if (photosRoot) {
-        fullPath = path.join(photosRoot, photo.originalPath);
-      } else {
-        // No PHOTOS_ROOT_PATH configured, fall back to S3
-        return await s3Service.getObject(photo.s3Key);
-      }
-
-      // Check if file exists and read it
-      await fs.access(fullPath);
-      const buffer = await fs.readFile(fullPath);
-      return buffer;
-
-    } catch (localError) {
-      // Local file not available, falling back to S3
-    }
-  }
-
-  // Fall back to S3 if local file is not available
-  return await s3Service.getObject(photo.s3Key);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,7 +28,6 @@ export async function POST(request: NextRequest) {
             filename: true,
             s3Key: true,
             fileSize: true,
-            originalPath: true,
           },
         },
       },
@@ -100,7 +65,6 @@ export async function POST(request: NextRequest) {
           });
 
           // Force the archive to start producing headers immediately
-          // by setting up the stream in a way that triggers header generation
           archive.pointer(); // This forces internal initialization
 
           // Handle archive data - stream chunks directly to the browser
@@ -119,7 +83,6 @@ export async function POST(request: NextRequest) {
           });
 
           // Start downloading and adding photos immediately
-          // This approach processes photos one by one to start streaming ASAP
           let processedCount = 0;
 
           const processPhotos = async () => {
@@ -132,7 +95,7 @@ export async function POST(request: NextRequest) {
               // Download batch concurrently
               const downloadPromises = batch.map(async (photo) => {
                 try {
-                  const imageBuffer = await readPhotoData(photo, s3Service);
+                  const imageBuffer = await s3Service.getObject(photo.s3Key);
                   return { photo, imageBuffer };
                 } catch (photoError) {
                   return null;

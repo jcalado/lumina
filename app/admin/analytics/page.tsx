@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Image, FolderOpen, HardDrive, Camera, Video, CheckCircle } from "lucide-react"
+import { Image, FolderOpen, HardDrive, Camera, Video } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { AnalyticsCharts } from "./analytics-charts"
 
@@ -15,8 +15,8 @@ function formatBytes(bytes: number): string {
 function AnalyticsLoading() {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
           <Card key={i} className="animate-pulse">
             <CardHeader className="pb-2">
               <div className="h-4 bg-muted rounded w-20" />
@@ -55,7 +55,6 @@ async function getAnalyticsData() {
     videoGrowthRaw,
     mediaTimelineRaw,
     storageByAlbumRaw,
-    syncJobs,
     totalPhotos,
     totalVideos,
     totalAlbums,
@@ -64,8 +63,6 @@ async function getAnalyticsData() {
     prevPeriodPhotos,
     photoFilenames,
     videoCodecsRaw,
-    completedSyncs,
-    totalSyncs,
     totalPhotoSize,
     totalVideoSize,
   ] = await Promise.all([
@@ -104,7 +101,6 @@ async function getAnalyticsData() {
       ORDER BY total_size DESC
       LIMIT 10
     `,
-    prisma.syncJob.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }),
     prisma.photo.count(),
     prisma.video.count(),
     prisma.album.count(),
@@ -132,8 +128,6 @@ async function getAnalyticsData() {
       ORDER BY count DESC
       LIMIT 8
     `,
-    prisma.syncJob.count({ where: { status: 'COMPLETED' } }),
-    prisma.syncJob.count(),
     prisma.photo.aggregate({ _sum: { fileSize: true } }),
     prisma.video.aggregate({ _sum: { fileSize: true } }),
   ])
@@ -174,23 +168,10 @@ async function getAnalyticsData() {
     count: Number(r.count),
   }))
 
-  const syncJobHistory = syncJobs.map((j) => ({
-    id: j.id,
-    status: j.status,
-    type: j.type,
-    filesProcessed: j.filesProcessed,
-    durationSeconds:
-      j.startedAt && j.completedAt
-        ? Math.round((j.completedAt.getTime() - j.startedAt.getTime()) / 1000)
-        : null,
-    createdAt: j.createdAt.toISOString(),
-  }))
-
   const totalStorage = (totalPhotoSize._sum.fileSize || 0) + (totalVideoSize._sum.fileSize || 0)
   const photoGrowthPct = prevPeriodPhotos > 0
     ? Math.round(((recentPhotos - prevPeriodPhotos) / prevPeriodPhotos) * 100)
     : recentPhotos > 0 ? 100 : 0
-  const syncSuccessRate = totalSyncs > 0 ? Math.round((completedSyncs / totalSyncs) * 100) : 0
 
   return {
     summary: {
@@ -200,14 +181,12 @@ async function getAnalyticsData() {
       recentPhotos,
       photoGrowthPct,
       recentVideos,
-      syncSuccessRate,
     },
     contentGrowth,
     mediaTimeline,
     storageByAlbum,
     photoFormats,
     videoCodecs,
-    syncJobHistory,
   }
 }
 
@@ -247,17 +226,11 @@ async function AnalyticsContent() {
       description: "Added this month",
       icon: Video,
     },
-    {
-      title: "Sync Success",
-      value: `${data.summary.syncSuccessRate}%`,
-      description: "Completed jobs",
-      icon: CheckCircle,
-    },
   ]
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {summaryCards.map((card) => {
           const Icon = card.icon
           return (
@@ -281,7 +254,6 @@ async function AnalyticsContent() {
         storageByAlbum={data.storageByAlbum}
         photoFormats={data.photoFormats}
         videoCodecs={data.videoCodecs}
-        syncJobHistory={data.syncJobHistory}
       />
     </div>
   )

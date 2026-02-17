@@ -3,8 +3,6 @@ import { prisma } from '../lib/prisma';
 import { getExifQueue } from '../lib/queues/exifQueue';
 import exifr from 'exifr';
 import { s3 } from '../lib/s3';
-import fs from 'fs/promises';
-import path from 'path';
 
 const connection = () => {
   const url = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -26,31 +24,11 @@ async function processExifJob(job: any) {
       where: { id: photoId },
     });
 
-    if (!photo || !photo.originalPath) {
-      throw new Error(`Photo with id ${photoId} not found or has no original path`);
+    if (!photo) {
+      throw new Error(`Photo with id ${photoId} not found`);
     }
 
-    let fileBuffer: Buffer;
-    try {
-      // First, try to read the file from local storage
-      await fs.access(photo.originalPath);
-      fileBuffer = await fs.readFile(photo.originalPath);
-      console.log(`Found local file for photoId: ${photoId}`);
-    } catch (error) {
-      // If local file doesn't exist or can't be read, download from S3
-      console.log(`Local file not found for photoId: ${photoId}. Downloading from S3.`);
-      fileBuffer = await s3.getObject(photo.s3Key);
-
-      // Save the file to its proper location
-      const photosRoot = process.env.PHOTOS_ROOT_PATH;
-      if (photosRoot) {
-        const localPath = path.join(photosRoot, photo.originalPath);
-        console.log(`💾 Saving downloaded file to: ${localPath}`);
-        await fs.mkdir(path.dirname(localPath), { recursive: true });
-        await fs.writeFile(localPath, fileBuffer);
-        console.log(`✅ File saved successfully`);
-      }
-    }
+    const fileBuffer = await s3.getObject(photo.s3Key);
 
     let exifData;
     try {

@@ -12,7 +12,7 @@ import { useFavorites } from '@/contexts/FavoritesContext';
 interface Photo {
   id: string;
   filename: string;
-  originalPath: string;
+  originalPath: string | null;
   s3Key: string;
   fileSize: number;
   takenAt: string | null;

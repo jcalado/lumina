@@ -2,33 +2,24 @@ import React, { useState, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Upload, 
-  X, 
-  FileImage, 
-  Archive, 
-  CheckCircle, 
+import {
+  Upload,
+  X,
+  FileImage,
+  Archive,
+  CheckCircle,
   AlertCircle,
   Loader2
 } from 'lucide-react'
 
-interface FileProgress {
+interface FileUploadState {
+  file: File
   filename: string
-  status: 'pending' | 'processing' | 'completed' | 'error'
+  s3Key: string
+  presignedUrl: string
+  status: 'pending' | 'uploading' | 'uploaded' | 'confirming' | 'completed' | 'error'
+  progress: number
   error?: string
-  size: number
-}
-
-interface UploadProgress {
-  uploadId: string
-  totalFiles: number
-  processedFiles: number
-  currentBatch: number
-  totalBatches: number
-  files: FileProgress[]
-  errors: Array<{ filename: string; error: string }>
-  completed: boolean
-  phase: 'validating' | 'extracting' | 'uploading' | 'completed' | 'error'
 }
 
 interface FileUploadModalProps {
@@ -47,13 +38,13 @@ export function FileUploadModal({
   onUploadComplete
 }: FileUploadModalProps) {
   const [dragActive, setDragActive] = useState(false)
-  const [files, setFiles] = useState<File[]>([])
-  const [uploadType, setUploadType] = useState<'files' | 'zip'>('files')
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploadStates, setUploadStates] = useState<FileUploadState[]>([])
   const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState<UploadProgress | null>(null)
+  const [phase, setPhase] = useState<'select' | 'uploading' | 'confirming' | 'completed' | 'error'>('select')
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const progressInterval = useRef<NodeJS.Timeout | null>(null)
+  const abortControllers = useRef<Map<string, AbortController>>(new Map())
 
   const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp']
   const maxFileSize = 50 * 1024 * 1024 // 50MB
@@ -72,62 +63,41 @@ export function FileUploadModal({
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-
     const droppedFiles = Array.from(e.dataTransfer.files)
     validateAndSetFiles(droppedFiles)
   }, [])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files)
-      validateAndSetFiles(selectedFiles)
+      const selected = Array.from(e.target.files)
+      validateAndSetFiles(selected)
     }
   }, [])
 
   const validateAndSetFiles = (fileList: File[]) => {
     setError(null)
-    
-    // Check if it's a single ZIP file
-    if (fileList.length === 1 && fileList[0].name.toLowerCase().endsWith('.zip')) {
-      if (fileList[0].size > maxFileSize) {
-        setError(`ZIP file too large: ${formatFileSize(fileList[0].size)}. Max size: ${formatFileSize(maxFileSize)}`)
-        return
-      }
-      setUploadType('zip')
-      setFiles(fileList)
-      return
-    }
 
-    setUploadType('files')
-    
-    // Calculate total size first
-    const totalSize = fileList.reduce((sum: number, file: File) => sum + file.size, 0)
+    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0)
     const maxTotalSize = 2 * 1024 * 1024 * 1024 // 2GB
-    
+
     if (totalSize > maxTotalSize) {
       setError(`Total upload size too large: ${formatFileSize(totalSize)}. Maximum: ${formatFileSize(maxTotalSize)}`)
       return
     }
-    
-    // Filter for supported image formats
+
     const validFiles: File[] = []
     const errors: string[] = []
-    
+
     fileList.forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-      const isValidFormat = supportedFormats.includes(ext)
-      const isValidSize = file.size <= maxFileSize
-      
-      if (!isValidFormat) {
+      if (!supportedFormats.includes(ext)) {
         errors.push(`${file.name}: Unsupported format (${ext})`)
         return
       }
-      
-      if (!isValidSize) {
+      if (file.size > maxFileSize) {
         errors.push(`${file.name}: Too large (${formatFileSize(file.size)})`)
         return
       }
-      
       validFiles.push(file)
     })
 
@@ -135,128 +105,206 @@ export function FileUploadModal({
       setError(`Some files were rejected:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`)
     }
 
-    setFiles(validFiles)
-    
+    setSelectedFiles(validFiles)
+
     if (validFiles.length === 0 && errors.length > 0) {
-      setError('No valid files to upload. ' + (errors.length > 0 ? 'Supported formats: ' + supportedFormats.join(', ') : ''))
+      setError('No valid files to upload. Supported formats: ' + supportedFormats.join(', '))
     }
   }
 
-  const startUpload = async () => {
-    if (files.length === 0) return
+  const uploadFileWithXHR = (state: FileUploadState): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
 
-    setUploading(true)
-    setError(null)
-    
-    // Set initial progress state
-    const initialProgress: UploadProgress = {
-      uploadId: '',
-      totalFiles: files.length,
-      processedFiles: 0,
-      currentBatch: 0,
-      totalBatches: 0,
-      files: files.map(file => ({
-        filename: file.name,
-        status: 'pending',
-        size: file.size
-      })),
-      errors: [],
-      completed: false,
-      phase: 'validating'
-    }
-    
-    setProgress(initialProgress)
-    console.log('[UPLOAD] Set initial progress state:', initialProgress)
-
-    try {
-      const formData = new FormData()
-      files.forEach(file => formData.append('files', file))
-      formData.append('uploadType', uploadType)
-
-      const response = await fetch(`/api/admin/albums/${albumId}/upload`, {
-        method: 'POST',
-        body: formData
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100)
+          setUploadStates(prev =>
+            prev.map(s => s.filename === state.filename ? { ...s, progress: pct } : s)
+          )
+        }
       })
 
-      const result = await response.json()
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadStates(prev =>
+            prev.map(s => s.filename === state.filename ? { ...s, status: 'uploaded', progress: 100 } : s)
+          )
+          resolve()
+        } else {
+          const errMsg = `S3 upload failed (${xhr.status})`
+          setUploadStates(prev =>
+            prev.map(s => s.filename === state.filename ? { ...s, status: 'error', error: errMsg } : s)
+          )
+          reject(new Error(errMsg))
+        }
+      })
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed')
+      xhr.addEventListener('error', () => {
+        const errMsg = 'Network error during upload'
+        setUploadStates(prev =>
+          prev.map(s => s.filename === state.filename ? { ...s, status: 'error', error: errMsg } : s)
+        )
+        reject(new Error(errMsg))
+      })
+
+      xhr.open('PUT', state.presignedUrl)
+      xhr.setRequestHeader('Content-Type', state.file.type || 'application/octet-stream')
+      xhr.send(state.file)
+    })
+  }
+
+  const startUpload = async () => {
+    if (selectedFiles.length === 0) return
+
+    setUploading(true)
+    setPhase('uploading')
+    setError(null)
+
+    try {
+      // 1. Get presigned URLs
+      const fileMetadata = selectedFiles.map(f => ({
+        filename: f.name,
+        contentType: f.type || 'application/octet-stream',
+        size: f.size,
+      }))
+
+      const presignResponse = await fetch(`/api/admin/albums/${albumId}/presign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: fileMetadata }),
+      })
+
+      if (!presignResponse.ok) {
+        const err = await presignResponse.json()
+        throw new Error(err.error || 'Failed to get upload URLs')
       }
 
-      const uploadId = result.uploadId
-      initialProgress.uploadId = uploadId
-      setProgress(initialProgress)
-      
-      console.log('[UPLOAD] Upload started with ID:', uploadId)
-      
-      // Start polling for progress immediately
-      let pollCount = 0
-      progressInterval.current = setInterval(async () => {
-        pollCount++
-        try {
-          const progressResponse = await fetch(
-            `/api/admin/albums/${albumId}/upload?uploadId=${uploadId}`
-          )
-          const progressData = await progressResponse.json()
+      const { uploads } = await presignResponse.json()
 
-          console.log(`[UPLOAD] Progress update #${pollCount}:`, progressData)
+      // 2. Initialize upload state
+      const states: FileUploadState[] = uploads.map((u: any, i: number) => ({
+        file: selectedFiles[i],
+        filename: u.filename,
+        s3Key: u.s3Key,
+        presignedUrl: u.presignedUrl,
+        status: 'pending' as const,
+        progress: 0,
+      }))
 
-          if (progressResponse.ok) {
-            setProgress(progressData)
-            
-            if (progressData.completed) {
-              console.log('[UPLOAD] Upload completed, clearing interval')
-              clearInterval(progressInterval.current!)
-              setUploading(false)
-              
-              if (progressData.errors.length === 0) {
-                // All files uploaded successfully
-                setTimeout(() => {
-                  onUploadComplete()
-                  handleClose()
-                }, 2000)
-              }
-            }
-          } else {
-            console.error('[UPLOAD] Progress check failed:', progressData)
-            if (pollCount > 3) { // Stop polling after a few failures
-              clearInterval(progressInterval.current!)
-              setError('Failed to get upload progress')
-              setUploading(false)
-            }
+      setUploadStates(states)
+
+      // 3. Upload files to S3 in parallel (batch of 4 at a time)
+      const batchSize = 4
+      for (let i = 0; i < states.length; i += batchSize) {
+        const batch = states.slice(i, i + batchSize)
+
+        // Mark batch as uploading
+        setUploadStates(prev =>
+          prev.map(s => batch.find(b => b.filename === s.filename) ? { ...s, status: 'uploading' } : s)
+        )
+
+        const results = await Promise.allSettled(
+          batch.map(s => uploadFileWithXHR(s))
+        )
+
+        // Check for failures
+        results.forEach((result, idx) => {
+          if (result.status === 'rejected') {
+            console.error(`Upload failed for ${batch[idx].filename}:`, result.reason)
           }
-        } catch (error) {
-          console.error(`Progress check error #${pollCount}:`, error)
-          if (pollCount > 10) { // Stop polling after many attempts
-            clearInterval(progressInterval.current!)
-            setError('Lost connection to upload progress')
-            setUploading(false)
-          }
-        }
-      }, 500) // Poll more frequently for better responsiveness
+        })
+      }
+
+      // 4. Confirm uploads with the server
+      setPhase('confirming')
+
+      const successfulUploads = states.filter(s => {
+        // Re-read from the latest state
+        return true // We'll check the actual state below
+      })
+
+      // Get the current state to check which uploads succeeded
+      let currentStates: FileUploadState[] = []
+      setUploadStates(prev => {
+        currentStates = prev
+        return prev
+      })
+
+      // Wait a tick for state to settle
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      setUploadStates(prev => {
+        currentStates = prev
+        return prev
+      })
+
+      const uploaded = currentStates.filter(s => s.status === 'uploaded')
+
+      if (uploaded.length === 0) {
+        throw new Error('No files were uploaded successfully')
+      }
+
+      const confirmPayload = {
+        files: uploaded.map(s => ({
+          filename: s.filename,
+          s3Key: s.s3Key,
+          size: s.file.size,
+          contentType: s.file.type || 'application/octet-stream',
+        })),
+      }
+
+      const confirmResponse = await fetch(`/api/admin/albums/${albumId}/confirm-upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirmPayload),
+      })
+
+      if (!confirmResponse.ok) {
+        const err = await confirmResponse.json()
+        throw new Error(err.error || 'Failed to confirm uploads')
+      }
+
+      const confirmResult = await confirmResponse.json()
+
+      // Mark all uploaded as completed
+      setUploadStates(prev =>
+        prev.map(s => s.status === 'uploaded' ? { ...s, status: 'completed' } : s)
+      )
+
+      setPhase('completed')
+      setUploading(false)
+
+      // Auto-close after a delay
+      setTimeout(() => {
+        onUploadComplete()
+        handleClose()
+      }, 2000)
 
     } catch (error) {
+      console.error('Upload error:', error)
       setError(error instanceof Error ? error.message : 'Upload failed')
+      setPhase('error')
       setUploading(false)
     }
   }
 
   const handleClose = () => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current)
-    }
-    setFiles([])
-    setUploadType('files')
+    // Abort any in-progress uploads
+    abortControllers.current.forEach(controller => controller.abort())
+    abortControllers.current.clear()
+
+    setSelectedFiles([])
+    setUploadStates([])
     setUploading(false)
-    setProgress(null)
+    setPhase('select')
     setError(null)
     setDragActive(false)
     onClose()
   }
 
   const removeFile = (index: number) => {
-    setFiles(files.filter((_, i) => i !== index))
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== index))
   }
 
   const formatFileSize = (bytes: number) => {
@@ -267,25 +315,29 @@ export function FileUploadModal({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const getProgressPercentage = () => {
-    if (!progress) return 0
-    return Math.round((progress.processedFiles / progress.totalFiles) * 100)
+  const overallProgress = () => {
+    if (uploadStates.length === 0) return 0
+    const total = uploadStates.reduce((sum, s) => sum + s.progress, 0)
+    return Math.round(total / uploadStates.length)
   }
+
+  const completedCount = uploadStates.filter(s => s.status === 'completed' || s.status === 'uploaded').length
+  const errorCount = uploadStates.filter(s => s.status === 'error').length
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Upload Files to {albumName}</DialogTitle>
+          <DialogTitle>Upload Photos to {albumName}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Upload Area */}
-          {!uploading && (
+          {phase === 'select' && (
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragActive 
-                  ? 'border-blue-500 bg-blue-50' 
+                dragActive
+                  ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-300 hover:border-gray-400'
               }`}
               onDragEnter={handleDrag}
@@ -297,7 +349,7 @@ export function FileUploadModal({
                 <div className="p-4 rounded-full bg-gray-100">
                   <Upload className="h-8 w-8 text-gray-600" />
                 </div>
-                
+
                 <div>
                   <p className="text-lg font-medium">
                     Drop files here or click to browse
@@ -305,15 +357,12 @@ export function FileUploadModal({
                   <p className="text-sm text-gray-500 mt-1">
                     Support for {supportedFormats.join(', ')} files up to 50MB each
                   </p>
-                  <p className="text-sm text-gray-500">
-                    You can also upload a ZIP file containing photos (max 2GB total)
-                  </p>
                   <p className="text-xs text-gray-400 mt-2">
-                    Files will be processed in batches based on your admin settings
+                    Files are uploaded directly to cloud storage
                   </p>
                 </div>
 
-                <Button 
+                <Button
                   onClick={() => fileInputRef.current?.click()}
                   variant="outline"
                 >
@@ -325,7 +374,7 @@ export function FileUploadModal({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept={supportedFormats.join(',') + ',.zip'}
+                  accept={supportedFormats.join(',')}
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -333,52 +382,37 @@ export function FileUploadModal({
             </div>
           )}
 
-              {/* File List */}
-          {files.length > 0 && !uploading && (
+          {/* File List (before upload) */}
+          {selectedFiles.length > 0 && phase === 'select' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">
-                  {uploadType === 'zip' ? 'ZIP Archive' : 'Selected Files'} ({files.length})
+                  Selected Files ({selectedFiles.length})
                 </h3>
-                <div className="flex items-center gap-2">
-                  {files.length > 100 && (
-                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
-                      Large batch - will process in parallel
-                    </span>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setFiles([])}
-                  >
-                    Clear All
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedFiles([])}
+                >
+                  Clear All
+                </Button>
               </div>
-              
+
               <div className="text-sm text-gray-600 mb-2">
-                Total size: {formatFileSize(files.reduce((sum: number, file: File) => sum + file.size, 0))}
+                Total size: {formatFileSize(selectedFiles.reduce((sum, f) => sum + f.size, 0))}
               </div>
-              
+
               <div className="max-h-48 overflow-y-auto space-y-2">
-                {files.map((file, index) => (
+                {selectedFiles.map((file, index) => (
                   <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
-                      {uploadType === 'zip' ? (
-                        <Archive className="h-5 w-5 text-orange-500" />
-                      ) : (
-                        <FileImage className="h-5 w-5 text-blue-500" />
-                      )}
+                      <FileImage className="h-5 w-5 text-blue-500" />
                       <div>
                         <p className="font-medium text-sm">{file.name}</p>
                         <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFile(index)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => removeFile(index)}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -387,88 +421,64 @@ export function FileUploadModal({
             </div>
           )}
 
-          {/* Progress */}
-          {uploading && progress && (
+          {/* Upload Progress */}
+          {(phase === 'uploading' || phase === 'confirming' || phase === 'completed') && uploadStates.length > 0 && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>
-                    {progress.phase === 'validating' && 'Validating files...'}
-                    {progress.phase === 'extracting' && 'Extracting ZIP archive...'}
-                    {progress.phase === 'uploading' && `Batch ${progress.currentBatch}/${progress.totalBatches}`}
-                    {progress.phase === 'completed' && 'Upload completed'}
-                    {progress.phase === 'error' && 'Upload failed'}
+                    {phase === 'uploading' && 'Uploading to cloud storage...'}
+                    {phase === 'confirming' && 'Registering files...'}
+                    {phase === 'completed' && 'Upload completed'}
                   </span>
-                  <span>{getProgressPercentage()}%</span>
+                  <span>{overallProgress()}%</span>
                 </div>
-                <Progress value={getProgressPercentage()} />
+                <Progress value={overallProgress()} />
                 <p className="text-sm text-gray-600">
-                  {progress.processedFiles} of {progress.totalFiles} files processed
+                  {completedCount} of {uploadStates.length} files uploaded
+                  {errorCount > 0 && `, ${errorCount} failed`}
                 </p>
               </div>
 
-              {/* Individual File Progress */}
-              {progress.files && progress.files.length > 0 ? (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">File Status:</h4>
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {progress.files.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 border rounded text-xs">
-                        <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          {file.status === 'pending' && <div className="w-3 h-3 rounded-full bg-gray-300" />}
-                          {file.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
-                          {file.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-500" />}
-                          {file.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
-                          <span className="truncate">{file.filename}</span>
-                          {file.error && (
-                            <span className="text-red-500 text-xs">({file.error})</span>
-                          )}
-                        </div>
-                        <div className="text-gray-500 ml-2">
-                          {formatFileSize(file.size)}
-                        </div>
+              {/* Per-file status */}
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {uploadStates.map((state, index) => (
+                  <div key={index} className="p-2 border rounded space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-2 min-w-0 flex-1">
+                        {state.status === 'pending' && <div className="w-3 h-3 rounded-full bg-gray-300 shrink-0" />}
+                        {state.status === 'uploading' && <Loader2 className="w-3 h-3 animate-spin text-blue-500 shrink-0" />}
+                        {(state.status === 'uploaded' || state.status === 'confirming') && <CheckCircle className="w-3 h-3 text-yellow-500 shrink-0" />}
+                        {state.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />}
+                        {state.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500 shrink-0" />}
+                        <span className="truncate">{state.filename}</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : progress.totalFiles > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Processing Files:</h4>
-                  <div className="text-sm text-gray-600">
-                    {progress.phase === 'extracting' && 'Extracting files from ZIP archive...'}
-                    {progress.phase === 'validating' && 'Validating files...'}
-                    {progress.phase === 'uploading' && `Processing ${progress.totalFiles} files...`}
-                  </div>
-                </div>
-              )}
-
-              {progress.errors.length > 0 && (
-                <div className="border border-red-200 bg-red-50 p-3 rounded-lg">
-                  <div className="flex items-center">
-                    <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
-                    <div className="text-sm text-red-700">
-                      {progress.errors.length} file(s) failed to upload:
-                      <ul className="mt-1 space-y-1">
-                        {progress.errors.slice(0, 3).map((error, index) => (
-                          <li key={index} className="text-xs">
-                            {error.filename}: {error.error}
-                          </li>
-                        ))}
-                        {progress.errors.length > 3 && (
-                          <li className="text-xs">...and {progress.errors.length - 3} more</li>
+                      <div className="flex items-center gap-2 ml-2 shrink-0">
+                        {state.status === 'uploading' && (
+                          <span className="text-blue-600 tabular-nums">{state.progress}%</span>
                         )}
-                      </ul>
+                        <span className="text-muted-foreground">{formatFileSize(state.file.size)}</span>
+                      </div>
                     </div>
+                    {(state.status === 'uploading' || state.status === 'uploaded' || state.status === 'completed') && (
+                      <Progress
+                        value={state.progress}
+                        className="h-1"
+                      />
+                    )}
+                    {state.status === 'error' && state.error && (
+                      <p className="text-xs text-red-500">{state.error}</p>
+                    )}
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {progress.completed && progress.errors.length === 0 && (
+              {phase === 'completed' && errorCount === 0 && (
                 <div className="border border-green-200 bg-green-50 p-3 rounded-lg">
                   <div className="flex items-center">
                     <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                     <div className="text-sm text-green-700">
-                      All files uploaded successfully! The sync process will handle uploading to remote storage.
+                      All files uploaded successfully! Thumbnail and metadata processing has been queued.
                     </div>
                   </div>
                 </div>
@@ -481,26 +491,26 @@ export function FileUploadModal({
             <div className="border border-red-200 bg-red-50 p-3 rounded-lg">
               <div className="flex items-center">
                 <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
-                <div className="text-sm text-red-700">{error}</div>
+                <div className="text-sm text-red-700 whitespace-pre-line">{error}</div>
               </div>
             </div>
           )}
 
           {/* Actions */}
           <div className="flex justify-end space-x-3">
-            <Button variant="outline" onClick={handleClose} disabled={uploading}>
-              {uploading ? 'Close when done' : 'Cancel'}
+            <Button variant="outline" onClick={handleClose} disabled={uploading && phase === 'uploading'}>
+              {phase === 'completed' ? 'Close' : 'Cancel'}
             </Button>
-            {files.length > 0 && !uploading && !progress?.completed && (
+            {selectedFiles.length > 0 && phase === 'select' && (
               <Button onClick={startUpload}>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload {files.length} {uploadType === 'zip' ? 'ZIP file' : 'file(s)'}
+                Upload {selectedFiles.length} file(s)
               </Button>
             )}
             {uploading && (
               <Button disabled>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Uploading...
+                {phase === 'confirming' ? 'Registering...' : 'Uploading...'}
               </Button>
             )}
           </div>

@@ -10,7 +10,7 @@ import { useDownloadSelection } from '@/contexts/DownloadSelectionContext';
 interface Video {
   id: string;
   filename: string;
-  originalPath: string;
+  originalPath: string | null;
   s3Key: string;
   fileSize: number;
   duration?: number;
@@ -25,7 +25,7 @@ interface Media {
   id: string;
   type: 'photo' | 'video';
   filename: string;
-  originalPath: string;
+  originalPath: string | null;
   s3Key: string;
   fileSize: number;
   takenAt: string | null;

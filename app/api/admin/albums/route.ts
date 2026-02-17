@@ -35,7 +35,6 @@ export async function GET() {
       ...album,
       photoCount: album._count.photos,
       videoCount: album._count.videos,
-      lastSyncAt: album.lastSyncAt?.toISOString() || null
     }))
 
     return NextResponse.json({ albums: formattedAlbums })

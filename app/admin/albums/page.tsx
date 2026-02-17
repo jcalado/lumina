@@ -13,12 +13,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { FolderOpen, Folder, Image, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Cloud, CheckCircle2, XCircle, Clock, ImageIcon, GripVertical, MoreHorizontal, Settings, ExternalLink, Video, Star } from "lucide-react"
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty"
+import { FolderOpen, Folder, Image, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, CheckCircle2, GripVertical, MoreHorizontal, Settings, ExternalLink, Video, Plus } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface Album {
@@ -30,9 +32,6 @@ interface Album {
   status: "PUBLIC" | "PRIVATE"
   enabled: boolean
   featured: boolean
-  syncedToS3: boolean
-  localFilesSafeDelete: boolean
-  lastSyncAt: string | null
   createdAt: string
   displayOrder?: number
   _count: {
@@ -57,6 +56,9 @@ export default function AdminAlbumsPage() {
   const [loading, setLoading] = useState(true)
   const [editingAlbum, setEditingAlbum] = useState<Album | null>(null)
   const [deletingAlbum, setDeletingAlbum] = useState<Album | null>(null)
+  const [creatingAlbum, setCreatingAlbum] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: "", description: "", parentPath: "" })
+  const [createLoading, setCreateLoading] = useState(false)
   const [editForm, setEditForm] = useState({
     name: "",
     description: "",
@@ -304,49 +306,8 @@ export default function AdminAlbumsPage() {
             )}
           </div>
 
-          {/* Sync Status */}
-          <div className="col-span-2 hidden md:flex items-center">
-            <div className="flex items-center gap-1.5">
-              {album.syncedToS3 ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              ) : (
-                <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-              <span className="text-xs">
-                {album.syncedToS3 ? "Synced" : "Not synced"}
-              </span>
-            </div>
-            {album.lastSyncAt && (
-              <div className="ml-2 text-xs text-muted-foreground hidden lg:flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {new Date(album.lastSyncAt).toLocaleDateString()}
-              </div>
-            )}
-          </div>
-
-          {/* Actions: Star + Switch + Dropdown */}
-          <div className="col-span-4 md:col-span-3 flex items-center justify-end gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              className={`h-7 w-7 p-0 ${album.featured ? 'text-yellow-500' : 'text-muted-foreground'}`}
-              onClick={() => toggleFeatured(album)}
-              title={album.featured ? 'Remove from featured' : 'Set as featured'}
-            >
-              <Star className={`h-3.5 w-3.5 ${album.featured ? 'fill-yellow-500' : ''}`} />
-            </Button>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                {album.enabled ? "On" : "Off"}
-              </span>
-              <Switch
-                checked={album.enabled}
-                onCheckedChange={() => toggleAlbumStatus(album)}
-                className="data-[state=checked]:bg-green-600"
-              />
-            </div>
-
+          {/* Actions */}
+          <div className="col-span-4 md:col-span-5 flex items-center justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -365,6 +326,23 @@ export default function AdminAlbumsPage() {
                   <Settings className="h-4 w-4 mr-2" />
                   Edit Settings
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setCreateForm({ name: "", description: "", parentPath: album.path }); setCreatingAlbum(true) }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Sub-album
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={album.enabled}
+                  onCheckedChange={() => toggleAlbumStatus(album)}
+                >
+                  Enabled
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={album.featured}
+                  onCheckedChange={() => toggleFeatured(album)}
+                >
+                  Featured
+                </DropdownMenuCheckboxItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setDeletingAlbum(album)}
@@ -497,6 +475,34 @@ export default function AdminAlbumsPage() {
     }
   }
 
+  const handleCreate = async () => {
+    if (!createForm.name.trim()) {
+      toast({ title: "Error", description: "Album name is required", variant: "destructive" })
+      return
+    }
+    setCreateLoading(true)
+    try {
+      const response = await fetch("/api/admin/albums/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: createForm.name.trim(), description: createForm.description.trim() || undefined, parentPath: createForm.parentPath || undefined })
+      })
+      if (response.ok) {
+        toast({ title: "Success", description: "Album created successfully" })
+        setCreatingAlbum(false)
+        setCreateForm({ name: "", description: "", parentPath: "" })
+        fetchAlbums()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to create album")
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to create album", variant: "destructive" })
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -526,71 +532,76 @@ export default function AdminAlbumsPage() {
   const totalPhotos = albums.reduce((sum, album) => sum + (album._count?.photos || 0), 0)
   const totalVideos = albums.reduce((sum, album) => sum + (album._count?.videos || 0), 0)
   const enabledAlbums = albums.filter(album => album.enabled).length
-  const syncedAlbums = albums.filter(album => album.syncedToS3).length
-
   return (
     <div className="space-y-6">
       {/* Header with Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Album Management</h1>
-        <div className="flex items-center gap-4 md:gap-6 text-sm flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{albums.length}</span>
-            <span className="text-muted-foreground hidden sm:inline">albums</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Image className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{totalPhotos.toLocaleString()}</span>
-            <span className="text-muted-foreground hidden sm:inline">photos</span>
-          </div>
-          {totalVideos > 0 && (
+        {albums.length > 0 && (
+          <div className="flex items-center gap-4 md:gap-6 text-sm flex-wrap">
             <div className="flex items-center gap-1.5">
-              <Video className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{totalVideos.toLocaleString()}</span>
-              <span className="text-muted-foreground hidden sm:inline">videos</span>
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{albums.length}</span>
+              <span className="text-muted-foreground hidden sm:inline">albums</span>
             </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span className="font-medium">{enabledAlbums}</span>
-            <span className="text-muted-foreground hidden sm:inline">enabled</span>
+            <div className="flex items-center gap-1.5">
+              <Image className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{totalPhotos.toLocaleString()}</span>
+              <span className="text-muted-foreground hidden sm:inline">photos</span>
+            </div>
+            {totalVideos > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Video className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{totalVideos.toLocaleString()}</span>
+                <span className="text-muted-foreground hidden sm:inline">videos</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="font-medium">{enabledAlbums}</span>
+              <span className="text-muted-foreground hidden sm:inline">enabled</span>
+            </div>
+            <Button size="sm" onClick={() => setCreatingAlbum(true)}>
+              <Plus className="h-4 w-4" />
+              Create Album
+            </Button>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Cloud className="h-4 w-4 text-blue-600" />
-            <span className="font-medium">{syncedAlbums}</span>
-            <span className="text-muted-foreground hidden sm:inline">synced</span>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Column Headers */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="grid grid-cols-12 gap-2 md:gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide px-12">
-            <div className="col-span-5 md:col-span-4">Album</div>
-            <div className="col-span-1 text-center hidden md:block">Media</div>
-            <div className="col-span-3 md:col-span-2">Status</div>
-            <div className="col-span-2 hidden md:block">Sync</div>
-            <div className="col-span-4 md:col-span-3 text-right">Actions</div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {albums.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No albums found</h3>
-              <p className="text-muted-foreground text-center">
-                Albums will appear here after running a sync operation.
-              </p>
+      {albums.length === 0 ? (
+        <Empty className="border rounded-lg py-16">
+          <EmptyMedia variant="icon">
+            <FolderOpen className="h-5 w-5" />
+          </EmptyMedia>
+          <EmptyHeader>
+            <EmptyTitle>No albums yet</EmptyTitle>
+            <EmptyDescription>
+              Create your first album to start uploading and organizing photos.
+            </EmptyDescription>
+          </EmptyHeader>
+          <Button onClick={() => setCreatingAlbum(true)}>
+            <Plus className="h-4 w-4" />
+            Create Album
+          </Button>
+        </Empty>
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="grid grid-cols-12 gap-2 md:gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide px-12">
+              <div className="col-span-5 md:col-span-4">Album</div>
+              <div className="col-span-1 text-center hidden md:block">Media</div>
+              <div className="col-span-3 md:col-span-2">Status</div>
+              <div className="col-span-4 md:col-span-5 text-right">Actions</div>
             </div>
-          ) : (
+          </CardHeader>
+          <CardContent className="p-0">
             <div className="max-h-[70vh] overflow-y-auto">
               {albumTree.map(node => renderAlbumNode(node))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Edit Dialog — shared, page-level */}
       <Dialog open={!!editingAlbum} onOpenChange={(open) => { if (!open) setEditingAlbum(null) }}>
@@ -722,6 +733,71 @@ export default function AdminAlbumsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Album Dialog */}
+      <Dialog open={creatingAlbum} onOpenChange={(open) => { if (!open) { setCreatingAlbum(false); setCreateForm({ name: "", description: "", parentPath: "" }) } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Album</DialogTitle>
+            <DialogDescription>
+              Add a new album to organize and upload photos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-name">Name</Label>
+              <Input
+                id="create-name"
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                placeholder="e.g. Summer 2025"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-parent">Parent Album</Label>
+              <Select
+                value={createForm.parentPath}
+                onValueChange={(value) => setCreateForm({ ...createForm, parentPath: value === "__none__" ? "" : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None (top-level album)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None (top-level album)</SelectItem>
+                  {albums
+                    .sort((a, b) => a.path.localeCompare(b.path))
+                    .map((album) => (
+                    <SelectItem key={album.id} value={album.path}>
+                      {album.path}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-description">Description (optional)</Label>
+              <Textarea
+                id="create-description"
+                value={createForm.description}
+                onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                placeholder="A short description of this album"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => { setCreatingAlbum(false); setCreateForm({ name: "", description: "", parentPath: "" }) }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={createLoading || !createForm.name.trim()}>
+              {createLoading ? "Creating..." : "Create Album"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

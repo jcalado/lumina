@@ -20,7 +20,7 @@ export function getBlurhashQueue(): Queue {
   return blurhashQueue!
 }
 
-export async function enqueueBlurhashJob(data: { photoId: string; originalPath: string; s3Key: string; filename?: string }) {
+export async function enqueueBlurhashJob(data: { photoId: string; s3Key: string; filename?: string }) {
   const queue = getBlurhashQueue()
   return queue.add('generate', data, {
     attempts: 3,

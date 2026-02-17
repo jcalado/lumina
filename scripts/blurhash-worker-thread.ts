@@ -6,8 +6,6 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
 import dotenv from 'dotenv';
-import fs from 'fs/promises';
-import path from 'path';
 import os from 'os';
 import { getBatchProcessingSize } from '../lib/settings';
 
@@ -18,7 +16,6 @@ interface PhotoTask {
   id: string;
   s3Key: string;
   filename: string;
-  originalPath: string;
 }
 
 interface ProcessResult {
@@ -27,7 +24,6 @@ interface ProcessResult {
   blurhash?: string;
   success: boolean;
   error?: string;
-  source?: 'local' | 's3';
 }
 
 // Main thread functions (declared outside the conditional for exports)
@@ -44,10 +40,9 @@ function resetStopFlag() {
 
 // Worker thread code
 if (!isMainThread) {
-  const { photoTask, s3Config, photosRootPath }: { 
-    photoTask: PhotoTask; 
-    s3Config: any; 
-    photosRootPath?: string; 
+  const { photoTask, s3Config }: {
+    photoTask: PhotoTask;
+    s3Config: any;
   } = workerData;
 
   async function workerProcessPhoto(): Promise<ProcessResult> {
@@ -57,29 +52,6 @@ if (!isMainThread) {
       // Initialize S3 client in worker
       const s3 = new S3Client(s3Config);
       
-      // Helper function to read local photo
-      async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
-        try {
-          if (!photosRootPath) {
-            return null;
-          }
-
-          let fullPath: string;
-          if (path.isAbsolute(originalPath)) {
-            fullPath = originalPath;
-          } else {
-            fullPath = path.join(photosRootPath, originalPath);
-          }
-          
-          await fs.access(fullPath);
-          const buffer = await fs.readFile(fullPath);
-          console.log(`Worker read local file: ${fullPath} (${buffer.length} bytes)`);
-          return buffer;
-        } catch (error) {
-          return null;
-        }
-      }
-
       // Helper function to download from S3
       async function downloadFromS3(s3Key: string): Promise<Buffer> {
         const command = new GetObjectCommand({
@@ -106,18 +78,8 @@ if (!isMainThread) {
         return Buffer.concat(chunks);
       }
 
-      // Get photo buffer (local preferred, S3 fallback)
-      let imageBuffer: Buffer;
-      let source: 'local' | 's3';
-      
-      const localBuffer = await readLocalPhoto(photoTask.originalPath);
-      if (localBuffer) {
-        imageBuffer = localBuffer;
-        source = 'local';
-      } else {
-        imageBuffer = await downloadFromS3(photoTask.s3Key);
-        source = 's3';
-      }
+      // Get photo buffer from S3
+      const imageBuffer = await downloadFromS3(photoTask.s3Key);
 
       // Generate blurhash (CPU-intensive work in worker thread)
       const { data, info } = await sharp(imageBuffer)
@@ -133,7 +95,6 @@ if (!isMainThread) {
         filename: photoTask.filename,
         blurhash,
         success: true,
-        source,
       };
     } catch (error) {
       return {
@@ -193,7 +154,6 @@ else {
             },
             bucket: process.env.S3_BUCKET,
           },
-          photosRootPath: process.env.PHOTOS_ROOT_PATH,
         },
       });
 
@@ -254,7 +214,6 @@ else {
           id: true,
           s3Key: true,
           filename: true,
-          originalPath: true,
         },
       });
 
@@ -268,8 +227,6 @@ else {
       });
 
       let processedPhotos = 0;
-      let localPhotosUsed = 0;
-      let s3PhotosUsed = 0;
       const errors: string[] = [];
 
       // Process photos in parallel batches
@@ -313,12 +270,11 @@ else {
         for (let j = 0; j < batch.length; j += workerBatchSize) {
           const workerBatch = batch.slice(j, j + workerBatchSize);
           
-          const workerPromises = workerBatch.map(photo => 
+          const workerPromises = workerBatch.map(photo =>
             processPhotoInWorker({
               id: photo.id,
               s3Key: photo.s3Key,
               filename: photo.filename,
-              originalPath: photo.originalPath,
             })
           );
 
@@ -356,8 +312,6 @@ else {
 
         // Update counters
         processedPhotos += results.length;
-        localPhotosUsed += results.filter(r => r.source === 'local').length;
-        s3PhotosUsed += results.filter(r => r.source === 's3').length;
         
         const failedResults = results.filter(r => !r.success);
         for (const failed of failedResults) {
@@ -397,7 +351,6 @@ else {
 
       console.log(`Parallelized blurhash job ${jobId} completed!`);
       console.log(`📊 Processed ${processedPhotos}/${totalPhotos} photos`);
-      console.log(`📊 Source statistics: ${localPhotosUsed} from local files, ${s3PhotosUsed} from S3`);
       console.log(`📊 Using ${maxWorkers} worker threads for parallel processing`);
       if (errors.length > 0) {
         console.log(`⚠️  Encountered ${errors.length} errors during processing`);

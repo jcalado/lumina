@@ -20,7 +20,6 @@ async function testLocalFilePreference() {
       select: {
         id: true,
         filename: true,
-        originalPath: true,
         s3Key: true,
         blurhash: true,
       },
@@ -32,7 +31,6 @@ async function testLocalFilePreference() {
     }
 
     console.log(`📸 Selected photo for test: ${photo.filename}`);
-    console.log(`📁 Original path: ${photo.originalPath}`);
     console.log(`🔑 S3 key: ${photo.s3Key}`);
     console.log(`🎨 Current blurhash: ${photo.blurhash?.substring(0, 20)}...`);
 

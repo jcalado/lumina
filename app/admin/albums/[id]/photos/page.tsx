@@ -1,16 +1,17 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Image, Trash2, Search, Calendar, HardDrive, Download } from "lucide-react"
+import { ArrowLeft, Image, Trash2, Search, Calendar, HardDrive, Download, Upload } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { PhotoImage } from "@/components/PhotoImage"
+import { FileUploadModal } from "@/components/Admin/FileUploadModal"
 
 interface Photo {
   id: string
@@ -38,7 +39,6 @@ interface Album {
 
 export default function AlbumPhotosPage() {
   const params = useParams()
-  const router = useRouter()
   const albumId = params.id as string
 
   const [album, setAlbum] = useState<Album | null>(null)
@@ -48,6 +48,7 @@ export default function AlbumPhotosPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingPhotos, setDeletingPhotos] = useState(false)
   const [downloadingSelected, setDownloadingSelected] = useState(false)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
   useEffect(() => {
     fetchAlbumAndPhotos()
@@ -197,9 +198,11 @@ export default function AlbumPhotosPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Albums
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/admin/albums">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Albums
+            </a>
           </Button>
         </div>
         
@@ -219,9 +222,11 @@ export default function AlbumPhotosPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Albums
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/admin/albums">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Albums
+            </a>
           </Button>
         </div>
         <Card>
@@ -239,9 +244,11 @@ export default function AlbumPhotosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Albums
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/admin/albums">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Albums
+            </a>
           </Button>
           <div>
             <h1 className="text-3xl font-bold">{album.name}</h1>
@@ -324,6 +331,11 @@ export default function AlbumPhotosPage() {
                 </>
               )}
               
+              <Button size="sm" onClick={() => setUploadModalOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Photos
+              </Button>
+
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <Input
@@ -426,6 +438,17 @@ export default function AlbumPhotosPage() {
           )}
         </CardContent>
       </Card>
+
+      <FileUploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        albumId={albumId}
+        albumName={album.name}
+        onUploadComplete={() => {
+          setUploadModalOpen(false)
+          fetchAlbumAndPhotos()
+        }}
+      />
     </div>
   )
 }

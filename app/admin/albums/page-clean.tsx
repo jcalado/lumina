@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, Calendar, HardDrive, Cloud, CheckCircle2, XCircle, Clock } from "lucide-react"
+import { FolderOpen, Folder, Image, Settings, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, CheckCircle2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 
 interface Album {
@@ -21,9 +21,6 @@ interface Album {
   path: string
   status: "PUBLIC" | "PRIVATE"
   enabled: boolean
-  syncedToS3: boolean
-  localFilesSafeDelete: boolean
-  lastSyncAt: string | null
   createdAt: string
   _count: {
     photos: number
@@ -177,34 +174,8 @@ export default function AdminAlbumsPage() {
             )}
           </div>
 
-          {/* Sync Status - Col 8-9 */}
-          <div className="col-span-2">
-            <div className="flex items-center gap-1">
-              {album.syncedToS3 ? (
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
-              ) : (
-                <XCircle className="h-3 w-3 text-red-600" />
-              )}
-              <span className="text-xs">
-                {album.syncedToS3 ? "Synced" : "Not synced"}
-              </span>
-            </div>
-          </div>
-
-          {/* Last Sync - Col 10-11 */}
-          <div className="col-span-2 text-xs text-muted-foreground">
-            {album.lastSyncAt ? (
-              <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {new Date(album.lastSyncAt).toLocaleDateString()}
-              </div>
-            ) : (
-              "Never"
-            )}
-          </div>
-
-          {/* Actions - Col 12 */}
-          <div className="col-span-1 flex items-center justify-end gap-1">
+          {/* Actions */}
+          <div className="col-span-5 flex items-center justify-end gap-1">
             <Switch
               checked={album.enabled}
               onCheckedChange={() => toggleAlbumStatus(album)}
@@ -487,7 +458,6 @@ export default function AdminAlbumsPage() {
 
   const totalPhotos = albums.reduce((sum: number, album: Album) => sum + (album._count?.photos || 0), 0)
   const enabledAlbums = albums.filter(album => album.enabled).length
-  const syncedAlbums = albums.filter(album => album.syncedToS3).length
 
   return (
     <div className="space-y-6">
@@ -510,11 +480,6 @@ export default function AdminAlbumsPage() {
             <span className="font-medium">{enabledAlbums}</span>
             <span className="text-muted-foreground">enabled</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Cloud className="h-4 w-4 text-blue-600" />
-            <span className="font-medium">{syncedAlbums}</span>
-            <span className="text-muted-foreground">synced</span>
-          </div>
         </div>
       </div>
 
@@ -525,9 +490,7 @@ export default function AdminAlbumsPage() {
             <div className="col-span-4">Album & Path</div>
             <div className="col-span-1 text-center">Photos</div>
             <div className="col-span-2">Status</div>
-            <div className="col-span-2">Sync Status</div>
-            <div className="col-span-2">Last Sync</div>
-            <div className="col-span-1 text-right">Actions</div>
+            <div className="col-span-5 text-right">Actions</div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -536,7 +499,7 @@ export default function AdminAlbumsPage() {
               <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No albums found</h3>
               <p className="text-muted-foreground text-center">
-                Albums will appear here after running a sync operation.
+                No albums have been created yet. Create an album to start uploading photos.
               </p>
             </div>
           ) : (

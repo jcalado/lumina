@@ -28,7 +28,6 @@ const photoWorker = new Worker(
   async (job) => {
     const data = job.data as {
       photoId: string
-      originalPath: string
       s3Key: string
       albumPath: string
       filename: string
@@ -53,7 +52,6 @@ const videoWorker = new Worker(
   async (job) => {
     const data = job.data as {
       videoId: string
-      originalPath: string
       s3Key: string
       albumPath: string
       filename: string
@@ -79,7 +77,7 @@ const blurhashConcurrency = Number(process.env.BLURHASH_CONCURRENCY || defaultCp
 const blurhashWorker = new Worker(
   'blurhash',
   async (job) => {
-    const data = job.data as { photoId: string; originalPath: string; s3Key: string; filename?: string }
+    const data = job.data as { photoId: string; s3Key: string; filename?: string }
     return processBlurhashForPhoto(data)
   },
   { connection: connection(), concurrency: blurhashConcurrency }

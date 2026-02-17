@@ -20,7 +20,6 @@ async function getAnalyticsData() {
     videoGrowthRaw,
     mediaTimelineRaw,
     storageByAlbumRaw,
-    syncJobs,
     totalPhotos,
     totalVideos,
     totalAlbums,
@@ -29,8 +28,6 @@ async function getAnalyticsData() {
     prevPeriodPhotos,
     allPhotos,
     allVideos,
-    completedSyncs,
-    totalSyncs,
   ] = await Promise.all([
     // Content growth: photos by month created
     prisma.$queryRaw<{ month: string; count: bigint }[]>`
@@ -71,11 +68,6 @@ async function getAnalyticsData() {
       ORDER BY total_size DESC
       LIMIT 10
     `,
-    // Sync jobs
-    prisma.syncJob.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    }),
     prisma.photo.count(),
     prisma.video.count(),
     prisma.album.count(),
@@ -91,8 +83,6 @@ async function getAnalyticsData() {
     }),
     prisma.photo.findMany({ select: { filename: true } }),
     prisma.video.findMany({ select: { codec: true } }),
-    prisma.syncJob.count({ where: { status: 'COMPLETED' } }),
-    prisma.syncJob.count(),
   ])
 
   // Content growth: merge photos + videos by month
@@ -145,19 +135,6 @@ async function getAnalyticsData() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 8)
 
-  // Sync job history
-  const syncJobHistory = syncJobs.map((j) => ({
-    id: j.id,
-    status: j.status,
-    type: j.type,
-    filesProcessed: j.filesProcessed,
-    durationSeconds:
-      j.startedAt && j.completedAt
-        ? Math.round((j.completedAt.getTime() - j.startedAt.getTime()) / 1000)
-        : null,
-    createdAt: j.createdAt.toISOString(),
-  }))
-
   // Total storage
   const totalPhotoSize = await prisma.photo.aggregate({ _sum: { fileSize: true } })
   const totalVideoSize = await prisma.video.aggregate({ _sum: { fileSize: true } })
@@ -168,8 +145,6 @@ async function getAnalyticsData() {
     ? Math.round(((recentPhotos - prevPeriodPhotos) / prevPeriodPhotos) * 100)
     : recentPhotos > 0 ? 100 : 0
 
-  const syncSuccessRate = totalSyncs > 0 ? Math.round((completedSyncs / totalSyncs) * 100) : 0
-
   return {
     summary: {
       totalMedia: totalPhotos + totalVideos,
@@ -178,14 +153,12 @@ async function getAnalyticsData() {
       recentPhotos,
       photoGrowthPct,
       recentVideos,
-      syncSuccessRate,
     },
     contentGrowth,
     mediaTimeline,
     storageByAlbum,
     photoFormats,
     videoCodecs,
-    syncJobHistory,
   }
 }
 

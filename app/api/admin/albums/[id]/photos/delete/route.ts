@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
 import { s3 } from "@/lib/s3"
-import fs from 'fs/promises'
-import path from 'path'
 import { z } from "zod"
 
 const deletePhotosSchema = z.object({
@@ -60,7 +58,6 @@ export async function POST(
     const deletionResults = {
       photos: 0,
       thumbnails: 0,
-      localFiles: 0,
       s3Files: 0,
       errors: [] as string[]
     }
@@ -88,17 +85,6 @@ export async function POST(
           }
         }
 
-        // Delete local file if it exists
-        try {
-          const localFilePath = path.resolve(photo.originalPath)
-          await fs.access(localFilePath)
-          await fs.unlink(localFilePath)
-          deletionResults.localFiles++
-        } catch (localError) {
-          // File might not exist locally, which is okay
-          console.log(`Local file not found or already deleted: ${photo.originalPath}`)
-        }
-
         // Delete from database (cascades to thumbnails)
         await prisma.photo.delete({
           where: { id: photo.id }
@@ -116,7 +102,6 @@ export async function POST(
       requested: photoIds.length,
       deleted: deletionResults.photos,
       thumbnails: deletionResults.thumbnails,
-      localFiles: deletionResults.localFiles,
       s3Files: deletionResults.s3Files,
       errors: deletionResults.errors.length
     })
@@ -125,11 +110,10 @@ export async function POST(
       success: true,
       deletedCount: deletionResults.photos,
       thumbnailsDeleted: deletionResults.thumbnails,
-      localFilesDeleted: deletionResults.localFiles,
       s3FilesDeleted: deletionResults.s3Files,
       errors: deletionResults.errors,
-      message: deletionResults.errors.length > 0 
-        ? `${deletionResults.photos} photos deleted with some errors` 
+      message: deletionResults.errors.length > 0
+        ? `${deletionResults.photos} photos deleted with some errors`
         : `${deletionResults.photos} photos deleted successfully`
     })
 

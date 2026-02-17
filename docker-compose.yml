@@ -47,8 +47,6 @@ services:
       - S3_ACCESS_KEY=your-production-access-key
       - S3_SECRET_KEY=your-production-secret-key
       - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
-      - SYNC_CRON=0 3 * * *
     ports:
       - "3000:3000"
     depends_on:
@@ -58,7 +56,6 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -80,7 +77,6 @@ services:
       - S3_ACCESS_KEY=your-production-access-key
       - S3_SECRET_KEY=your-production-secret-key
       - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,33 +84,6 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
-    deploy:
-      replicas: 1
-
-  # Worker for blurhash generation
-  worker-blurhash:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: npm run worker:blurhash
-    environment:
-      - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
-      - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
-      - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - photos_data:/var/app/photos
     deploy:
       replicas: 1
 
@@ -132,7 +101,6 @@ services:
       - S3_ACCESS_KEY=your-production-access-key
       - S3_SECRET_KEY=your-production-secret-key
       - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,64 +108,9 @@ services:
         condition: service_healthy
     volumes:
       - ./temp:/app/temp
-      - photos_data:/var/app/photos
-    deploy:
-      replicas: 1
-
-  # Worker for file uploads/sync
-  worker-uploads:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: npm run worker:uploads
-    environment:
-      - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
-      - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
-      - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - photos_data:/var/app/photos
-    deploy:
-      replicas: 1
-
-  # Worker for sync operations
-  worker-sync:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: npm run worker:sync
-    environment:
-      - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
-      - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
-      - S3_REGION=us-east-1
-      - PHOTOS_ROOT_PATH=/var/app/photos
-      - SYNC_CRON=0 3 * * *
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp:/app/temp
-      - photos_data:/var/app/photos
     deploy:
       replicas: 1
 
 volumes:
   postgres_data:
   redis_data:
-  photos_data:

@@ -4,14 +4,11 @@ import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
-import * as fs from 'fs/promises';
-import * as path from 'path';
 
 interface PhotoTask {
   id: string;
   s3Key: string;
   filename: string;
-  originalPath: string;
 }
 
 interface ProcessResult {
@@ -20,15 +17,13 @@ interface ProcessResult {
   blurhash?: string;
   success: boolean;
   error?: string;
-  source?: 'local' | 's3';
 }
 
 // This file is designed to run as a worker thread
 if (!isMainThread) {
-  const { photoTask, s3Config, photosRootPath }: { 
-    photoTask: PhotoTask; 
-    s3Config: any; 
-    photosRootPath?: string; 
+  const { photoTask, s3Config }: {
+    photoTask: PhotoTask;
+    s3Config: any;
   } = workerData;
 
   async function processPhotoWorker(): Promise<ProcessResult> {
@@ -38,29 +33,6 @@ if (!isMainThread) {
       // Initialize S3 client in worker
       const s3 = new S3Client(s3Config);
       
-      // Helper function to read local photo
-      async function readLocalPhoto(originalPath: string): Promise<Buffer | null> {
-        try {
-          if (!photosRootPath) {
-            return null;
-          }
-
-          let fullPath: string;
-          if (path.isAbsolute(originalPath)) {
-            fullPath = originalPath;
-          } else {
-            fullPath = path.join(photosRootPath, originalPath);
-          }
-          
-          await fs.access(fullPath);
-          const buffer = await fs.readFile(fullPath);
-          console.log(`Worker read local file: ${fullPath} (${buffer.length} bytes)`);
-          return buffer;
-        } catch (error) {
-          return null;
-        }
-      }
-
       // Helper function to download from S3
       async function downloadFromS3(s3Key: string): Promise<Buffer> {
         const command = new GetObjectCommand({
@@ -87,18 +59,8 @@ if (!isMainThread) {
         return Buffer.concat(chunks);
       }
 
-      // Get photo buffer (local preferred, S3 fallback)
-      let imageBuffer: Buffer;
-      let source: 'local' | 's3';
-      
-      const localBuffer = await readLocalPhoto(photoTask.originalPath);
-      if (localBuffer) {
-        imageBuffer = localBuffer;
-        source = 'local';
-      } else {
-        imageBuffer = await downloadFromS3(photoTask.s3Key);
-        source = 's3';
-      }
+      // Get photo buffer from S3
+      const imageBuffer = await downloadFromS3(photoTask.s3Key);
 
       // Generate blurhash (CPU-intensive work in worker thread)
       const { data, info } = await sharp(imageBuffer)
@@ -114,7 +76,6 @@ if (!isMainThread) {
         filename: photoTask.filename,
         blurhash,
         success: true,
-        source,
       };
     } catch (error) {
       return {

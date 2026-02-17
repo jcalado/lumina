@@ -79,11 +79,6 @@ export default function AdminJobsPage() {
   const isBlurActive = (blurQueue?.active || 0) > 0
   const isBlurPaused = (blurQueue?.paused || 0) === 1
   const isBlurBusy = ((blurQueue?.waiting || 0) + (blurQueue?.active || 0)) > 0
-  const [uploadQueue, setUploadQueue] = useState<{waiting:number;active:number;completed:number;failed:number;delayed:number;paused:number}|null>(null)
-  const isUploadActive = (uploadQueue?.active || 0) > 0
-  const isUploadPaused = (uploadQueue?.paused || 0) === 1
-  const isUploadBusy = ((uploadQueue?.waiting || 0) + (uploadQueue?.active || 0)) > 0
-
   useEffect(() => {
     fetchBlurhashJobs()
     fetchThumbnailJobs()
@@ -91,8 +86,7 @@ export default function AdminJobsPage() {
     fetchJobStats()
     fetchThumbnailStats()
     fetchThumbQueue()
-    fetchUploadQueue()
-    
+
     // Poll for job updates every 3 seconds if there's a running job
     const interval = setInterval(() => {
       if (blurhashJob?.status === 'RUNNING' || thumbnailJob?.status === 'RUNNING' || videoThumbnailJob?.status === 'RUNNING') {
@@ -124,15 +118,6 @@ export default function AdminJobsPage() {
     try {
       const res = await fetch('/api/admin/jobs/thumbnail-queue')
       if (res.ok) setThumbQueue(await res.json())
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  const fetchUploadQueue = async () => {
-    try {
-      const res = await fetch('/api/admin/jobs/upload-queue')
-      if (res.ok) setUploadQueue(await res.json())
     } catch (e) {
       // ignore
     }
@@ -196,13 +181,6 @@ export default function AdminJobsPage() {
   useEffect(() => {
     fetchThumbQueue()
     const q = setInterval(fetchThumbQueue, 3000)
-    return () => clearInterval(q)
-  }, [])
-
-  // Always poll upload queue to keep UI in sync (including paused state)
-  useEffect(() => {
-    fetchUploadQueue()
-    const q = setInterval(fetchUploadQueue, 3000)
     return () => clearInterval(q)
   }, [])
 
@@ -1400,113 +1378,6 @@ export default function AdminJobsPage() {
           </CardContent>
         </Card>
 
-        {/* Album Synchronization - Upload Queue */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Save className="h-5 w-5" />
-                <span>Album Synchronization</span>
-              </div>
-              {/* Status badge derived from queue */}
-              <span className={`text-xs px-2 py-1 rounded ${isUploadActive ? 'bg-blue-100 text-blue-800' : isUploadPaused ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
-                {isUploadActive ? 'RUNNING' : isUploadPaused ? 'PAUSED' : 'IDLE'}
-              </span>
-            </CardTitle>
-            <CardDescription>
-              Background photo upload processing and synchronization
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Upload Queue Dashboard */}
-            {uploadQueue && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Status */}
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`p-2 rounded-full ${isUploadActive ? 'bg-blue-100 text-blue-600' : isUploadPaused ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-600'}`}>
-                        {isUploadActive ? <Activity className="h-4 w-4" /> : isUploadPaused ? <Pause className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-                      </span>
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Status</span>
-                    </div>
-                  </div>
-                  <div className={`mt-2 text-2xl font-bold ${isUploadActive ? 'text-blue-600' : isUploadPaused ? 'text-yellow-600' : 'text-gray-600'}`}>{isUploadActive ? 'Running' : isUploadPaused ? 'Paused' : 'Stopped'}</div>
-                </div>
-
-                {/* Jobs queued */}
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="p-2 rounded-full bg-orange-100 text-orange-600">
-                        <Clock className="h-4 w-4" />
-                      </span>
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Queued</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-2xl font-bold">{uploadQueue.waiting}</div>
-                </div>
-
-                {/* Jobs processing */}
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="p-2 rounded-full bg-blue-100 text-blue-600">
-                        <Activity className="h-4 w-4" />
-                      </span>
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Processing</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-2xl font-bold">{uploadQueue.active}</div>
-                </div>
-
-                {/* Jobs finished */}
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="p-2 rounded-full bg-green-100 text-green-600">
-                        <CheckCircle className="h-4 w-4" />
-                      </span>
-                      <span className="text-xs uppercase tracking-wide text-muted-foreground">Jobs Finished</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-2xl font-bold">{uploadQueue.completed}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Queue Statistics Overview */}
-            {uploadQueue && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary">{uploadQueue.waiting + uploadQueue.active + uploadQueue.completed + uploadQueue.failed}</div>
-                  <div className="text-sm text-muted-foreground">Total Jobs</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{uploadQueue.completed}</div>
-                  <div className="text-sm text-muted-foreground">Successful</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{uploadQueue.failed}</div>
-                  <div className="text-sm text-muted-foreground">Failed</div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t">
-              <Button
-                onClick={() => {
-                  fetchUploadQueue()
-                }}
-                className="flex items-center space-x-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-              >
-                <RotateCcw className="h-4 w-4" />
-                <span>Refresh</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )

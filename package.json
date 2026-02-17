@@ -27,12 +27,10 @@
     "worker:thumbnails:all": "tsx scripts/thumbnail-queue-worker-all.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
     "worker:exif": "tsx scripts/exif-worker.ts",
-    "worker:sync": "tsx scripts/sync-worker.ts",
     "docker:build:prod": "docker compose -f docker-compose.prod.yml build --parallel",
     "docker:build:prod:fast": "docker compose -f docker-compose.prod.yml build --parallel --no-cache-filter builder",
     "docker:up:prod": "docker compose -f docker-compose.prod.yml up -d",
-    "worker:uploads": "tsx scripts/upload-worker.ts",
-    "worker:all": "concurrently \"npm:worker:uploads\" \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:sync\" \"npm:worker:blurhash\"",
+    "worker:all": "concurrently \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:blurhash\"",
     "seed:admin": "tsx scripts/create-initial-admin.ts"
   },
   "dependencies": {

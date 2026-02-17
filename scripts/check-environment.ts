@@ -16,7 +16,6 @@ const requiredVars = {
 const optionalVars = {
   'S3_REGION': process.env.S3_REGION || 'us-east-1 (default)',
   'S3_ENDPOINT': process.env.S3_ENDPOINT || 'default AWS endpoint',
-  'PHOTOS_ROOT_PATH': process.env.PHOTOS_ROOT_PATH || 'not configured (S3 only mode)',
 };
 
 console.log('Required Environment Variables:');
@@ -49,7 +48,6 @@ if (allValid) {
   console.log('S3_SECRET_KEY=your-secret-key');
   console.log('S3_REGION=us-east-1  # optional');
   console.log('S3_ENDPOINT=https://your-s3-endpoint.com  # optional, for custom S3 providers');
-  console.log('PHOTOS_ROOT_PATH=C:\\\\path\\\\to\\\\photos  # optional, enables local file preference');
 }
 
 console.log('\n💡 Tip: Make sure your .env file is in the root directory of your project.');

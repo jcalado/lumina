@@ -28,12 +28,11 @@ export async function POST(request: NextRequest) {
     if (action === 'start') {
       const photos = await prisma.photo.findMany({
         where: { thumbnails: { none: {} } },
-        select: { id: true, filename: true, originalPath: true, s3Key: true, album: { select: { path: true } } },
+        select: { id: true, filename: true, s3Key: true, album: { select: { path: true } } },
       })
       for (const p of photos) {
         await enqueueThumbnailJob({
           photoId: p.id,
-          originalPath: p.originalPath,
           s3Key: p.s3Key,
           albumPath: p.album.path,
           filename: p.filename,
@@ -49,12 +48,11 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reprocess') {
       const all = await prisma.photo.findMany({
-        select: { id: true, filename: true, originalPath: true, s3Key: true, album: { select: { path: true } } },
+        select: { id: true, filename: true, s3Key: true, album: { select: { path: true } } },
       })
       for (const p of all) {
         await enqueueThumbnailJob({
           photoId: p.id,
-          originalPath: p.originalPath,
           s3Key: p.s3Key,
           albumPath: p.album.path,
           filename: p.filename,
@@ -85,4 +83,3 @@ export async function DELETE() {
     return NextResponse.json({ error: 'Failed to clear thumbnail queue' }, { status: 500 })
   }
 }
-

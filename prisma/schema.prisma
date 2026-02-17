@@ -20,12 +20,6 @@ model Album {
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
   enabled               Boolean  @default(true)
   featured              Boolean  @default(false) // Showcased on landing page
-  syncedToS3            Boolean  @default(false) // All photos uploaded to S3
-  localFilesSafeDelete  Boolean  @default(false) // Safe to delete local files
-  lastSyncAt            DateTime? // Last successful sync
-  syncFingerprint       String?  @db.Text // JSON string of album fingerprint
-  lastSyncCheck         DateTime? // Last time sync check was performed
-  syncStatus            SyncStatus @default(PENDING) // Current sync status
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   photos                Photo[]
@@ -40,7 +34,7 @@ model Photo {
   id              String      @id @default(cuid())
   albumId         String
   filename        String
-  originalPath    String
+  originalPath    String?
   s3Key           String
   metadata        String?     @db.Text // EXIF data as JSON string
   fileSize        Int
@@ -113,24 +107,6 @@ model Thumbnail {
   @@map("thumbnails")
 }
 
-model SyncJob {
-  id              String    @id @default(cuid())
-  type            SyncJobType @default(FILESYSTEM)
-  status          JobStatus @default(PENDING)
-  progress        Int       @default(0)
-  albumProgress   String?   @db.Text // JSON with per-album progress
-  totalAlbums     Int       @default(0)
-  completedAlbums Int       @default(0)
-  startedAt       DateTime?
-  completedAt     DateTime?
-  errors          String?   @db.Text // JSON string for error details
-  filesProcessed  Int       @default(0)
-  filesUploaded   Int       @default(0)
-  logs            String?   @db.Text // JSON array of detailed log entries
-  createdAt       DateTime  @default(now())
-
-  @@map("sync_jobs")
-}
 
 model BlurhashJob {
   id              String    @id @default(cuid())
@@ -186,12 +162,6 @@ enum AdminRole {
   ADMIN
 }
 
-enum SyncStatus {
-  PENDING
-  IN_PROGRESS
-  SYNCED
-  CHANGED
-}
 
 enum ThumbnailSize {
   SMALL  // 300px grid thumbnails
@@ -207,7 +177,3 @@ enum JobStatus {
   CANCELLED
 }
 
-enum SyncJobType {
-  FILESYSTEM
-  S3
-}
