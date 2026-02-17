@@ -222,6 +222,24 @@ export default function AdminAlbumsPage() {
     }
   }
 
+  const handleMove = async (albumId: string, newParentId: string | null, siblingOrder: string[]) => {
+    try {
+      const res = await fetch('/api/admin/albums/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ albumId, newParentId, siblingOrder }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to move album')
+      }
+      toast({ title: t('toastSuccess'), description: t('toastAlbumMoved') })
+      fetchAlbums()
+    } catch (error) {
+      toast({ title: t('toastError'), description: error instanceof Error ? error.message : t('toastMoveFailed'), variant: 'destructive' })
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -330,6 +348,7 @@ export default function AdminAlbumsPage() {
                 onToggleStatus={toggleAlbumStatus}
                 onToggleFeatured={toggleFeatured}
                 onReorder={handleReorder}
+                onMove={handleMove}
               />
             </div>
           </CardContent>

@@ -148,7 +148,9 @@
         "toastFeaturedFailed": "Falha ao alterar o estado de destaque",
         "toastAlbumCreated": "Álbum criado com sucesso",
         "toastNameRequired": "O nome do álbum é obrigatório",
-        "toastCreateFailed": "Falha ao criar álbum"
+        "toastCreateFailed": "Falha ao criar álbum",
+        "toastAlbumMoved": "Álbum movido com sucesso",
+        "toastMoveFailed": "Falha ao mover álbum"
     },
     "adminGroups": {
         "title": "Grupos",

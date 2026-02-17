@@ -67,6 +67,7 @@ interface AlbumTreeProps {
   onToggleStatus: (album: Album) => void
   onToggleFeatured: (album: Album) => void
   onReorder: (orderedIds: string[]) => void
+  onMove: (albumId: string, newParentId: string | null, siblingOrder: string[]) => void
 }
 
 type TreeItemData = {
@@ -84,6 +85,7 @@ export function AlbumTree({
   onToggleStatus,
   onToggleFeatured,
   onReorder,
+  onMove,
 }: AlbumTreeProps) {
   const t = useTranslations("adminAlbums")
 
@@ -171,7 +173,8 @@ export function AlbumTree({
   const tree = useTree<TreeItemData>({
     rootItemId: "root",
     getItemName: (item) => item.getItemData().album.name,
-    isItemFolder: (item) => (item.getItemData().children?.length ?? 0) > 0,
+    // Treat every album as a folder so it can receive drops
+    isItemFolder: () => true,
     dataLoader: {
       getItem: (id) => dataMap[id],
       getChildren: (id) => dataMap[id]?.children ?? [],
@@ -179,20 +182,49 @@ export function AlbumTree({
     canReorder: true,
     canDrag: () => isFullAccess,
     canDrop: (items, target) => {
-      if (!isOrderedDragTarget(target)) return false
-      const draggedParentId = items[0].getParent()?.getId()
-      return target.item.getId() === draggedParentId
+      const draggedId = items[0].getId()
+      const targetItem = target.item
+
+      // Can't drop album into itself
+      if (targetItem.getId() === draggedId) return false
+
+      // Can't drop album into its own descendants (would create a cycle)
+      if (targetItem.isDescendentOf(draggedId)) return false
+
+      return true
     },
     seperateDragHandle: true,
     indent: 24,
     onDrop: async (items, target) => {
-      if (!isOrderedDragTarget(target)) return
-      const parent = target.item
-      const draggedIds = new Set(items.map((i) => i.getId()))
-      const currentChildren = parent.getChildren().map((c) => c.getId())
-      const filtered = currentChildren.filter((id) => !draggedIds.has(id))
-      filtered.splice(target.childIndex, 0, ...items.map((i) => i.getId()))
-      onReorder(filtered)
+      const draggedId = items[0].getId()
+      const currentParentId = items[0].getParent()?.getId()
+
+      if (isOrderedDragTarget(target)) {
+        // Reorder / insert between siblings
+        const newParent = target.item
+        const currentChildren = newParent.getChildren().map((c) => c.getId())
+        const filtered = currentChildren.filter((id) => id !== draggedId)
+        filtered.splice(target.childIndex, 0, draggedId)
+
+        if (currentParentId === newParent.getId()) {
+          // Same parent — simple reorder
+          onReorder(filtered)
+        } else {
+          // Different parent — move album
+          const parentId = newParent.getId() === "root" ? null : newParent.getId()
+          onMove(draggedId, parentId, filtered)
+        }
+      } else {
+        // Unordered drop — dropping directly ON a folder
+        const targetFolder = target.item
+        const existingChildren = targetFolder
+          .getChildren()
+          .map((c) => c.getId())
+          .filter((id) => id !== draggedId)
+        const newOrder = [...existingChildren, draggedId]
+        const parentId = targetFolder.getId() === "root" ? null : targetFolder.getId()
+        onMove(draggedId, parentId, newOrder)
+      }
     },
     features: [syncDataLoaderFeature, dragAndDropFeature, hotkeysCoreFeature],
   })
@@ -203,7 +235,7 @@ export function AlbumTree({
         {tree.getItems().map((item) => {
           const album = item.getItemData().album
           const level = item.getItemMeta().level
-          const hasChildren = item.isFolder()
+          const hasChildren = item.getChildren().length > 0
           const directCount =
             (album._count?.photos || 0) + (album._count?.videos || 0)
           const recursive = recursiveCounts[album.id] || {
@@ -219,6 +251,7 @@ export function AlbumTree({
               className={cn(
                 item.isDragTargetAbove() && "border-t-2 border-t-primary",
                 item.isDragTargetBelow() && "border-b-2 border-b-primary",
+                item.isUnorderedDragTarget() && "ring-2 ring-primary ring-inset rounded-sm",
               )}
             >
               <div

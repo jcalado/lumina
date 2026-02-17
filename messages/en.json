@@ -78,7 +78,9 @@
     "toastFeaturedFailed": "Failed to toggle featured status",
     "toastAlbumCreated": "Album created successfully",
     "toastNameRequired": "Album name is required",
-    "toastCreateFailed": "Failed to create album"
+    "toastCreateFailed": "Failed to create album",
+    "toastAlbumMoved": "Album moved successfully",
+    "toastMoveFailed": "Failed to move album"
   },
   "adminGroups": {
     "title": "Groups",
