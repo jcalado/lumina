@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, Plus, Trash2, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { useTranslations } from "next-intl"
 
 interface GroupMember {
   id: string
@@ -39,6 +40,7 @@ interface MemberUser {
 }
 
 export default function GroupDetailPage() {
+  const t = useTranslations("adminGroups")
   const params = useParams()
   const groupId = params.id as string
 
@@ -68,7 +70,7 @@ export default function GroupDetailPage() {
         setAllUsers(users)
       }
     } catch {
-      toast({ title: "Error", description: "Failed to load group", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastLoadGroupFailed"), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -84,16 +86,16 @@ export default function GroupDetailPage() {
         body: JSON.stringify({ userIds: [selectedUserId] }),
       })
       if (res.ok) {
-        toast({ title: "Success", description: "Member added" })
+        toast({ title: t("toastSuccess"), description: t("toastMemberAdded") })
         setShowAddMemberDialog(false)
         setSelectedUserId("")
         fetchData()
       } else {
         const err = await res.json()
-        toast({ title: "Error", description: err.error || "Failed to add member", variant: "destructive" })
+        toast({ title: t("toastError"), description: err.error || t("toastAddMemberFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to add member", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastAddMemberFailed"), variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
@@ -108,13 +110,13 @@ export default function GroupDetailPage() {
         body: JSON.stringify({ userIds: [userId] }),
       })
       if (res.ok) {
-        toast({ title: "Success", description: "Member removed" })
+        toast({ title: t("toastSuccess"), description: t("toastMemberRemoved") })
         fetchData()
       } else {
-        toast({ title: "Error", description: "Failed to remove member", variant: "destructive" })
+        toast({ title: t("toastError"), description: t("toastRemoveMemberFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to remove member", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastRemoveMemberFailed"), variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
@@ -126,10 +128,10 @@ export default function GroupDetailPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/admin/groups">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Groups
+            {t("backToGroups")}
           </Link>
         </Button>
-        <div className="text-sm text-muted-foreground">Loading group...</div>
+        <div className="text-sm text-muted-foreground">{t("loadingGroup")}</div>
       </div>
     )
   }
@@ -140,12 +142,12 @@ export default function GroupDetailPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/admin/groups">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Groups
+            {t("backToGroups")}
           </Link>
         </Button>
         <Card>
           <CardContent className="p-12 text-center">
-            <h3 className="text-lg font-medium mb-2">Group not found</h3>
+            <h3 className="text-lg font-medium mb-2">{t("groupNotFound")}</h3>
           </CardContent>
         </Card>
       </div>
@@ -159,10 +161,10 @@ export default function GroupDetailPage() {
   )
 
   const permissionsList = [
-    { key: "canUpload", label: "Upload photos", icon: Upload, enabled: group.canUpload },
-    { key: "canEdit", label: "Edit album settings", icon: Pencil, enabled: group.canEdit },
-    { key: "canDelete", label: "Delete albums & photos", icon: TrashIcon, enabled: group.canDelete },
-    { key: "canCreateSubalbums", label: "Create sub-albums", icon: FolderPlus, enabled: group.canCreateSubalbums },
+    { key: "canUpload", label: t("permUploadPhotos"), icon: Upload, enabled: group.canUpload },
+    { key: "canEdit", label: t("permEditAlbumSettings"), icon: Pencil, enabled: group.canEdit },
+    { key: "canDelete", label: t("permDeleteAlbumsPhotos"), icon: TrashIcon, enabled: group.canDelete },
+    { key: "canCreateSubalbums", label: t("permCreateSubalbumsLabel"), icon: FolderPlus, enabled: group.canCreateSubalbums },
   ]
 
   return (
@@ -172,7 +174,7 @@ export default function GroupDetailPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/admin/groups">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Groups
+            {t("backToGroups")}
           </Link>
         </Button>
         <div>
@@ -187,7 +189,7 @@ export default function GroupDetailPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Album Access</CardTitle>
+            <CardTitle className="text-base">{t("albumAccess")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -196,14 +198,14 @@ export default function GroupDetailPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">{group.album.path}</p>
             <p className="text-xs text-muted-foreground mt-2">
-              Includes all sub-albums under this path.
+              {t("albumAccessSubtext")}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Permissions</CardTitle>
+            <CardTitle className="text-base">{t("permissions")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -213,7 +215,7 @@ export default function GroupDetailPage() {
                   <span className={p.enabled ? "" : "text-muted-foreground/60 line-through"}>
                     {p.label}
                   </span>
-                  {p.enabled && <Badge variant="secondary" className="text-xs ml-auto">Enabled</Badge>}
+                  {p.enabled && <Badge variant="secondary" className="text-xs ml-auto">{t("enabled")}</Badge>}
                 </div>
               ))}
             </div>
@@ -226,12 +228,12 @@ export default function GroupDetailPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Members</CardTitle>
-              <CardDescription>{group.members.length} member(s) in this group</CardDescription>
+              <CardTitle>{t("members")}</CardTitle>
+              <CardDescription>{t("membersCount", { count: group.members.length })}</CardDescription>
             </div>
             <Button size="sm" onClick={() => { setSelectedUserId(""); setShowAddMemberDialog(true) }}>
               <Plus className="h-4 w-4" />
-              Add Member
+              {t("addMember")}
             </Button>
           </div>
         </CardHeader>
@@ -239,16 +241,16 @@ export default function GroupDetailPage() {
           {group.members.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <UsersRound className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>No members yet. Add users to this group.</p>
+              <p>{t("noMembersEmpty")}</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t("memberColumnName")}</TableHead>
+                  <TableHead>{t("memberColumnEmail")}</TableHead>
+                  <TableHead>{t("memberColumnRole")}</TableHead>
+                  <TableHead>{t("memberColumnActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -259,10 +261,10 @@ export default function GroupDetailPage() {
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
                         {member.user.role === "SUPERADMIN"
-                          ? "Super Admin"
+                          ? t("roleSuperAdmin")
                           : member.user.role === "MEMBER"
-                          ? "Member"
-                          : "Admin"}
+                          ? t("roleMember")
+                          : t("roleAdmin")}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -287,21 +289,21 @@ export default function GroupDetailPage() {
       <Dialog open={showAddMemberDialog} onOpenChange={(o) => { if (!o) setShowAddMemberDialog(false) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Member</DialogTitle>
+            <DialogTitle>{t("addMemberDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Select a user to add to this group. They will gain the group&apos;s permissions on the linked album.
+              {t("addMemberDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>User</Label>
+              <Label>{t("selectUser")}</Label>
               <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a user" />
+                  <SelectValue placeholder={t("selectUserPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableUsers.length === 0 ? (
-                    <SelectItem value="__none__" disabled>No available users</SelectItem>
+                    <SelectItem value="__none__" disabled>{t("noAvailableUsers")}</SelectItem>
                   ) : (
                     availableUsers.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
@@ -314,9 +316,9 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddMemberDialog(false)} disabled={submitting}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowAddMemberDialog(false)} disabled={submitting}>{t("cancel")}</Button>
             <Button onClick={handleAddMember} disabled={submitting || !selectedUserId || selectedUserId === "__none__"}>
-              {submitting ? "Adding..." : "Add Member"}
+              {submitting ? t("adding") : t("addMember")}
             </Button>
           </DialogFooter>
         </DialogContent>

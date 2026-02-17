@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Trash2, Edit, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { useTranslations } from "next-intl"
 
 interface Group {
   id: string
@@ -56,6 +57,7 @@ const emptyForm: GroupForm = {
 }
 
 export default function GroupsPage() {
+  const t = useTranslations("adminGroups")
   const [groups, setGroups] = useState<Group[]>([])
   const [albums, setAlbums] = useState<Album[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,7 +86,7 @@ export default function GroupsPage() {
         setAlbums(data.albums.map((a: any) => ({ id: a.id, name: a.name, path: a.path })))
       }
     } catch {
-      toast({ title: "Error", description: "Failed to load data", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastFetchFailed"), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -92,7 +94,7 @@ export default function GroupsPage() {
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.albumId) {
-      toast({ title: "Error", description: "Name and album are required", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastNameAlbumRequired"), variant: "destructive" })
       return
     }
     setSubmitting(true)
@@ -111,16 +113,16 @@ export default function GroupsPage() {
         }),
       })
       if (res.ok) {
-        toast({ title: "Success", description: "Group created" })
+        toast({ title: t("toastSuccess"), description: t("toastGroupCreated") })
         setShowCreateDialog(false)
         setForm(emptyForm)
         fetchData()
       } else {
         const err = await res.json()
-        toast({ title: "Error", description: err.error || "Failed to create group", variant: "destructive" })
+        toast({ title: t("toastError"), description: err.error || t("toastCreateFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to create group", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastCreateFailed"), variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
@@ -144,16 +146,16 @@ export default function GroupsPage() {
         }),
       })
       if (res.ok) {
-        toast({ title: "Success", description: "Group updated" })
+        toast({ title: t("toastSuccess"), description: t("toastGroupUpdated") })
         setEditingGroup(null)
         setForm(emptyForm)
         fetchData()
       } else {
         const err = await res.json()
-        toast({ title: "Error", description: err.error || "Failed to update group", variant: "destructive" })
+        toast({ title: t("toastError"), description: err.error || t("toastUpdateFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to update group", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastUpdateFailed"), variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
@@ -165,14 +167,14 @@ export default function GroupsPage() {
     try {
       const res = await fetch(`/api/admin/groups/${deletingGroup.id}`, { method: "DELETE" })
       if (res.ok) {
-        toast({ title: "Success", description: "Group deleted" })
+        toast({ title: t("toastSuccess"), description: t("toastGroupDeleted") })
         setDeletingGroup(null)
         fetchData()
       } else {
-        toast({ title: "Error", description: "Failed to delete group", variant: "destructive" })
+        toast({ title: t("toastError"), description: t("toastDeleteFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to delete group", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastDeleteFailed"), variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
@@ -193,40 +195,40 @@ export default function GroupsPage() {
 
   const permissionBadges = (group: Group) => {
     const perms: string[] = []
-    if (group.canUpload) perms.push("Upload")
-    if (group.canEdit) perms.push("Edit")
-    if (group.canDelete) perms.push("Delete")
-    if (group.canCreateSubalbums) perms.push("Create Sub-albums")
+    if (group.canUpload) perms.push(t("permUpload"))
+    if (group.canEdit) perms.push(t("permEdit"))
+    if (group.canDelete) perms.push(t("permDelete"))
+    if (group.canCreateSubalbums) perms.push(t("permCreateSubalbums"))
     return perms
   }
 
   const formFields = (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="group-name">Name</Label>
+        <Label htmlFor="group-name">{t("formName")}</Label>
         <Input
           id="group-name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-          placeholder="e.g. ACNAC Editors"
+          placeholder={t("formNamePlaceholder")}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="group-description">Description</Label>
+        <Label htmlFor="group-description">{t("formDescription")}</Label>
         <Textarea
           id="group-description"
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
-          placeholder="Optional description"
+          placeholder={t("formDescriptionPlaceholder")}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="group-album">Album</Label>
+        <Label htmlFor="group-album">{t("formAlbum")}</Label>
         <Select value={form.albumId} onValueChange={(v) => setForm({ ...form, albumId: v })}>
           <SelectTrigger>
-            <SelectValue placeholder="Select an album" />
+            <SelectValue placeholder={t("formAlbumPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {albums
@@ -239,32 +241,32 @@ export default function GroupsPage() {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Members will have access to this album and all its sub-albums.
+          {t("formAlbumHelp")}
         </p>
       </div>
 
       <div className="space-y-3">
-        <Label>Permissions</Label>
+        <Label>{t("formPermissions")}</Label>
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={form.canUpload} onCheckedChange={(c) => setForm({ ...form, canUpload: c === true })} />
             <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-            Upload photos
+            {t("permUploadPhotos")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={form.canEdit} onCheckedChange={(c) => setForm({ ...form, canEdit: c === true })} />
             <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-            Edit album settings
+            {t("permEditAlbumSettings")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={form.canDelete} onCheckedChange={(c) => setForm({ ...form, canDelete: c === true })} />
             <TrashIcon className="h-3.5 w-3.5 text-muted-foreground" />
-            Delete albums &amp; photos
+            {t("permDeleteAlbumsPhotos")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={form.canCreateSubalbums} onCheckedChange={(c) => setForm({ ...form, canCreateSubalbums: c === true })} />
             <FolderPlus className="h-3.5 w-3.5 text-muted-foreground" />
-            Create sub-albums
+            {t("permCreateSubalbumsLabel")}
           </label>
         </div>
       </div>
@@ -274,9 +276,9 @@ export default function GroupsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Groups</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <div className="flex justify-center py-8">
-          <div className="text-sm text-muted-foreground">Loading groups...</div>
+          <div className="text-sm text-muted-foreground">{t("loading")}</div>
         </div>
       </div>
     )
@@ -285,35 +287,35 @@ export default function GroupsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold">Groups</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <Button onClick={() => { setForm(emptyForm); setShowCreateDialog(true) }}>
           <Plus className="h-4 w-4" />
-          Create Group
+          {t("createGroup")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Permission Groups</CardTitle>
+          <CardTitle>{t("permissionGroups")}</CardTitle>
           <CardDescription>
-            Assign member users to groups to grant scoped album access with configurable permissions.
+            {t("permissionGroupsDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {groups.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <UsersRound className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>No groups yet. Create a group to get started.</p>
+              <p>{t("noGroupsEmpty")}</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Album</TableHead>
-                  <TableHead>Permissions</TableHead>
-                  <TableHead>Members</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t("columnName")}</TableHead>
+                  <TableHead>{t("columnAlbum")}</TableHead>
+                  <TableHead>{t("columnPermissions")}</TableHead>
+                  <TableHead>{t("columnMembers")}</TableHead>
+                  <TableHead>{t("columnActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -341,7 +343,7 @@ export default function GroupsPage() {
                           </Badge>
                         ))}
                         {permissionBadges(group).length === 0 && (
-                          <span className="text-xs text-muted-foreground">Read only</span>
+                          <span className="text-xs text-muted-foreground">{t("readOnly")}</span>
                         )}
                       </div>
                     </TableCell>
@@ -373,16 +375,16 @@ export default function GroupsPage() {
       <Dialog open={showCreateDialog} onOpenChange={(o) => { if (!o) setShowCreateDialog(false) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Group</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Create a permission group to grant members access to an album and its sub-albums.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           {formFields}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={submitting}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={submitting}>{t("cancel")}</Button>
             <Button onClick={handleCreate} disabled={submitting || !form.name.trim() || !form.albumId}>
-              {submitting ? "Creating..." : "Create Group"}
+              {submitting ? t("creating") : t("createGroup")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -392,14 +394,14 @@ export default function GroupsPage() {
       <Dialog open={!!editingGroup} onOpenChange={(o) => { if (!o) { setEditingGroup(null); setForm(emptyForm) } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Group</DialogTitle>
-            <DialogDescription>Update group settings and permissions.</DialogDescription>
+            <DialogTitle>{t("editDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("editDialogDescription")}</DialogDescription>
           </DialogHeader>
           {formFields}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditingGroup(null); setForm(emptyForm) }} disabled={submitting}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setEditingGroup(null); setForm(emptyForm) }} disabled={submitting}>{t("cancel")}</Button>
             <Button onClick={handleEdit} disabled={submitting || !form.name.trim() || !form.albumId}>
-              {submitting ? "Saving..." : "Save Changes"}
+              {submitting ? t("saving") : t("saveChanges")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -409,15 +411,15 @@ export default function GroupsPage() {
       <AlertDialog open={!!deletingGroup} onOpenChange={(o) => { if (!o) setDeletingGroup(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Group</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &ldquo;{deletingGroup?.name}&rdquo;? All member associations will be removed. This cannot be undone.
+              {t("deleteDialogDescription", { name: deletingGroup?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700" disabled={submitting}>
-              {submitting ? "Deleting..." : "Delete"}
+              {submitting ? t("deleting") : t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
