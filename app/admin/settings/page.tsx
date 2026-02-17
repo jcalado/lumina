@@ -6,9 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Save, Settings, Plus, Trash2, Palette } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Save, Globe, Palette, FileText, Gauge, Plus, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { LiveAccentPreview } from "@/components/LiveAccentPreview"
+import { cn } from "@/lib/utils"
 
 interface FooterLink {
   name: string
@@ -28,18 +30,15 @@ interface SystemInfo {
   maxBatchProcessingSize: number
 }
 
-interface BlurhashJob {
-  id: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
-  progress: number
-  totalPhotos: number
-  processedPhotos: number
-  startedAt?: string
-  completedAt?: string
-  errors?: string
-}
+const sidebarItems = [
+  { id: "general", label: "General", icon: Globe },
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "footer", label: "Footer", icon: FileText },
+  { id: "performance", label: "Performance", icon: Gauge },
+]
 
 export default function AdminSettingsPage() {
+  const [activeSection, setActiveSection] = useState("general")
   const [settings, setSettings] = useState<SiteSettings>({
     siteName: "Lumina Gallery",
     footerCopyright: `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
@@ -65,9 +64,8 @@ export default function AdminSettingsPage() {
         const data = await response.json()
         const fetchedSettings = data.settings
         const fetchedSystemInfo = data.systemInfo
-        
-        // Parse footer links if they exist
-        let footerLinks = []
+
+        let footerLinks: FooterLink[] = []
         try {
           if (fetchedSettings.footerLinks) {
             footerLinks = JSON.parse(fetchedSettings.footerLinks)
@@ -75,7 +73,7 @@ export default function AdminSettingsPage() {
         } catch (error) {
           console.error('Error parsing footer links:', error)
         }
-        
+
         setSettings({
           siteName: fetchedSettings.siteName || "Lumina Gallery",
           footerCopyright: fetchedSettings.footerCopyright || `© ${new Date().getFullYear()} Lumina Gallery. All rights reserved.`,
@@ -89,18 +87,10 @@ export default function AdminSettingsPage() {
           maxBatchProcessingSize: fetchedSystemInfo?.maxBatchProcessingSize || 4
         })
       } else {
-        toast({
-          title: "Error",
-          description: "Failed to fetch settings",
-          variant: "destructive"
-        })
+        toast({ title: "Error", description: "Failed to fetch settings", variant: "destructive" })
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch settings",
-        variant: "destructive"
-      })
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch settings", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -108,23 +98,16 @@ export default function AdminSettingsPage() {
 
   const handleSave = async () => {
     setSaving(true)
-    
+
     try {
       const response = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings)
       })
 
       if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Settings saved successfully"
-        })
-        
-        // Trigger a page refresh to update the site name in the header
+        toast({ title: "Success", description: "Settings saved successfully" })
         window.location.reload()
       } else {
         const data = await response.json()
@@ -142,10 +125,7 @@ export default function AdminSettingsPage() {
   }
 
   const handleInputChange = (field: keyof SiteSettings, value: string | FooterLink[]) => {
-    setSettings(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    setSettings(prev => ({ ...prev, [field]: value }))
   }
 
   const addFooterLink = () => {
@@ -165,7 +145,7 @@ export default function AdminSettingsPage() {
   const updateFooterLink = (index: number, field: keyof FooterLink, value: string) => {
     setSettings(prev => ({
       ...prev,
-      footerLinks: prev.footerLinks.map((link, i) => 
+      footerLinks: prev.footerLinks.map((link, i) =>
         i === index ? { ...link, [field]: value } : link
       )
     }))
@@ -174,17 +154,16 @@ export default function AdminSettingsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-semibold">Settings</h1>
         <Card className="animate-pulse">
           <CardHeader>
-            <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-6 bg-muted rounded w-1/3" />
+            <div className="h-4 bg-muted rounded w-1/2" />
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded w-24"></div>
+              <div className="h-4 bg-muted rounded w-1/4" />
+              <div className="h-10 bg-muted rounded" />
             </div>
           </CardContent>
         </Card>
@@ -194,295 +173,328 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Live preview component for real-time accent color changes */}
       <LiveAccentPreview accentColor={settings.accentColor} />
-      
-      <div className="flex items-center space-x-2">
-        <Settings className="h-8 w-8" />
-        <h1 className="text-3xl font-bold">Settings</h1>
+
+      <div>
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="text-sm text-muted-foreground mt-1">Manage your gallery configuration</p>
       </div>
 
-      <div className="grid gap-6 max-w-2xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>Site Configuration</CardTitle>
-            <CardDescription>
-              Configure basic site settings that appear throughout the application
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="siteName">Site Name</Label>
-              <Input
-                id="siteName"
-                value={settings.siteName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleInputChange("siteName", e.target.value)
-                }
-                placeholder="Enter site name"
-                maxLength={100}
-              />
-              <p className="text-sm text-muted-foreground">
-                This name appears in the top navigation bar and browser title
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="accentColor">Accent Color</Label>
-              <div className="flex items-center space-x-3">
-                <input
-                  id="accentColor"
-                  type="color"
-                  value={settings.accentColor}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                    handleInputChange("accentColor", e.target.value)
-                  }
-                  className="w-12 h-10 rounded border border-input bg-background cursor-pointer"
-                />
-                <Input
-                  value={settings.accentColor}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                    handleInputChange("accentColor", e.target.value)
-                  }
-                  placeholder="#3b82f6"
-                  pattern="^#[0-9A-Fa-f]{6}$"
-                  maxLength={7}
-                  className="font-mono"
-                />
-                <div className="flex space-x-2">
-                  {/* Preset colors */}
-                  {[
-                    "#3b82f6", // Blue
-                    "#ef4444", // Red
-                    "#10b981", // Green
-                    "#f59e0b", // Yellow
-                    "#8b5cf6", // Purple
-                    "#ec4899", // Pink
-                    "#06b6d4", // Cyan
-                    "#84cc16"  // Lime
-                  ].map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="w-8 h-8 rounded border-2 border-white shadow-sm hover:scale-110 transition-transform"
-                      style={{ backgroundColor: color }}
-                      onClick={() => handleInputChange("accentColor", color)}
-                      title={color}
-                    />
-                  ))}
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                The primary accent color used throughout the application for buttons, links, and highlights
-              </p>
-            </div>
-            
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center space-x-2"
-              >
-                <Save className="h-4 w-4" />
-                <span>{saving ? "Saving..." : "Save Settings"}</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Footer Configuration</CardTitle>
-            <CardDescription>
-              Configure the footer that appears at the bottom of every page
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="footerCopyright">Copyright Text</Label>
-              <Textarea
-                id="footerCopyright"
-                value={settings.footerCopyright}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => 
-                  handleInputChange("footerCopyright", e.target.value)
-                }
-                placeholder="© 2024 Your Company. All rights reserved."
-                maxLength={500}
-                rows={3}
-              />
-              <p className="text-sm text-muted-foreground">
-                The copyright text that appears in the footer
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Footer Links</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addFooterLink}
-                  className="flex items-center space-x-2"
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Settings sidebar nav */}
+        <nav className="md:w-56 flex-shrink-0">
+          <div className="flex md:flex-col gap-1">
+            {sidebarItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors text-left w-full",
+                    activeSection === item.id
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  )}
                 >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Link</span>
-                </Button>
-              </div>
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
 
-              {settings.footerLinks.map((link, index) => (
-                <div key={index} className="flex items-center space-x-2 p-4 border rounded-lg">
-                  <div className="flex-1 space-y-2">
-                    <Input
-                      placeholder="Link name (e.g., Privacy Policy)"
-                      value={link.name}
-                      onChange={(e) => updateFooterLink(index, "name", e.target.value)}
-                      maxLength={100}
-                    />
-                    <Input
-                      placeholder="Link URL (e.g., /privacy or https://example.com)"
-                      value={link.url}
-                      onChange={(e) => updateFooterLink(index, "url", e.target.value)}
-                      maxLength={500}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeFooterLink(index)}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+        {/* Content area */}
+        <div className="flex-1 min-w-0 max-w-2xl">
+          {activeSection === "general" && (
+            <GeneralSection
+              settings={settings}
+              onInputChange={handleInputChange}
+            />
+          )}
+          {activeSection === "appearance" && (
+            <AppearanceSection
+              settings={settings}
+              onInputChange={handleInputChange}
+            />
+          )}
+          {activeSection === "footer" && (
+            <FooterSection
+              settings={settings}
+              onInputChange={handleInputChange}
+              onAddLink={addFooterLink}
+              onRemoveLink={removeFooterLink}
+              onUpdateLink={updateFooterLink}
+            />
+          )}
+          {activeSection === "performance" && (
+            <PerformanceSection
+              settings={settings}
+              systemInfo={systemInfo}
+              onInputChange={handleInputChange}
+            />
+          )}
 
-              {settings.footerLinks.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4 border-2 border-dashed rounded-lg">
-                  No footer links configured. Click "Add Link" to create your first footer link.
-                </p>
-              )}
-            </div>
-            
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center space-x-2"
-              >
-                <Save className="h-4 w-4" />
-                <span>{saving ? "Saving..." : "Save Settings"}</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          <Separator className="my-6" />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Gallery Configuration</CardTitle>
-            <CardDescription>
-              Configure gallery display and performance settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="photosPerPage">Photos Per Page</Label>
-              <Input
-                id="photosPerPage"
-                type="number"
-                min="1"
-                max="100"
-                value={settings.photosPerPage}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
-                  handleInputChange("photosPerPage", e.target.value)
-                }
-                placeholder="32"
-              />
-              <p className="text-sm text-muted-foreground">
-                Number of photos to load initially when viewing an album. More photos will load automatically as users scroll down.
-              </p>
-            </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? "Saving..." : "Save Settings"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            <div className="space-y-2">
-              <Label htmlFor="batchProcessingSize">Batch Processing Size</Label>
-              <Input
-                id="batchProcessingSize"
-                type="number"
-                min="1"
-                value={settings.batchProcessingSize}
+function GeneralSection({
+  settings,
+  onInputChange,
+}: {
+  settings: SiteSettings
+  onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">General</h2>
+        <p className="text-sm text-muted-foreground">Basic site settings that appear throughout the application</p>
+      </div>
+
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="siteName">Site Name</Label>
+            <Input
+              id="siteName"
+              value={settings.siteName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onInputChange("siteName", e.target.value)
+              }
+              placeholder="Enter site name"
+              maxLength={100}
+            />
+            <p className="text-xs text-muted-foreground">
+              This name appears in the top navigation bar and browser title
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function AppearanceSection({
+  settings,
+  onInputChange,
+}: {
+  settings: SiteSettings
+  onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
+}) {
+  const presetColors = [
+    "#3b82f6", "#ef4444", "#10b981", "#f59e0b",
+    "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Appearance</h2>
+        <p className="text-sm text-muted-foreground">Customize the visual style of your gallery</p>
+      </div>
+
+      <Card>
+        <CardContent className="p-6 space-y-6">
+          <div className="space-y-3">
+            <Label htmlFor="accentColor">Accent Color</Label>
+            <div className="flex items-center gap-3">
+              <input
+                id="accentColor"
+                type="color"
+                value={settings.accentColor}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  handleInputChange("batchProcessingSize", e.target.value)
+                  onInputChange("accentColor", e.target.value)
                 }
-                placeholder="4"
+                className="w-12 h-10 rounded border border-input bg-background cursor-pointer"
               />
-              <p className="text-sm text-muted-foreground">
-                Number of photos to process simultaneously during sync operations. Higher values are faster but use more system resources. Maximum is limited by available CPU threads ({systemInfo.maxBatchProcessingSize} threads).
-              </p>
-            </div>            <div className="flex justify-end">
-              <Button 
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center space-x-2"
-              >
-                <Save className="h-4 w-4" />
-                <span>{saving ? "Saving..." : "Save Settings"}</span>
-              </Button>
+              <Input
+                value={settings.accentColor}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  onInputChange("accentColor", e.target.value)
+                }
+                placeholder="#3b82f6"
+                pattern="^#[0-9A-Fa-f]{6}$"
+                maxLength={7}
+                className="font-mono w-28"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex gap-2">
+              {presetColors.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={cn(
+                    "w-8 h-8 rounded-md border-2 shadow-sm hover:scale-110 transition-transform",
+                    settings.accentColor === color
+                      ? "border-foreground ring-2 ring-ring ring-offset-2 ring-offset-background"
+                      : "border-transparent"
+                  )}
+                  style={{ backgroundColor: color }}
+                  onClick={() => onInputChange("accentColor", color)}
+                  title={color}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The primary accent color used for buttons, links, and highlights
+            </p>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Preview</CardTitle>
-            <CardDescription>
-              See how your changes will appear to visitors
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Header Preview */}
-            <div className="border rounded-lg p-4 bg-gray-50 mb-4">
+          <Separator />
+
+          {/* Live Preview */}
+          <div className="space-y-3">
+            <Label>Preview</Label>
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold" style={{ color: settings.accentColor }}>
+                <span className="text-lg font-bold" style={{ color: settings.accentColor }}>
                   {settings.siteName}
-                </h2>
-                <nav className="flex items-center space-x-4 text-sm text-muted-foreground">
+                </span>
+                <nav className="flex items-center gap-4 text-sm text-muted-foreground">
                   <span>Albums</span>
                   <span>Favorites</span>
                 </nav>
               </div>
-              <div className="mt-4 flex space-x-2">
-                <button 
-                  className="px-4 py-2 rounded text-white text-sm font-medium"
+              <div className="flex gap-2">
+                <button
+                  className="px-4 py-1.5 rounded-md text-white text-sm font-medium"
                   style={{ backgroundColor: settings.accentColor }}
                 >
-                  Sample Button
+                  Primary Button
                 </button>
-                <button 
-                  className="px-4 py-2 rounded border text-sm font-medium"
-                  style={{ 
-                    borderColor: settings.accentColor, 
-                    color: settings.accentColor 
-                  }}
+                <button
+                  className="px-4 py-1.5 rounded-md border text-sm font-medium"
+                  style={{ borderColor: settings.accentColor, color: settings.accentColor }}
                 >
                   Outline Button
                 </button>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mb-6">
-              Header and button preview with accent color
+            <p className="text-xs text-muted-foreground">
+              Live preview of header and buttons with accent color
             </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
-            {/* Footer Preview */}
-            <div className="border-t bg-gray-50 rounded-lg p-4">
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="text-sm text-muted-foreground">
-                  {settings.footerCopyright}
+function FooterSection({
+  settings,
+  onInputChange,
+  onAddLink,
+  onRemoveLink,
+  onUpdateLink,
+}: {
+  settings: SiteSettings
+  onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
+  onAddLink: () => void
+  onRemoveLink: (index: number) => void
+  onUpdateLink: (index: number, field: keyof FooterLink, value: string) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Footer</h2>
+        <p className="text-sm text-muted-foreground">Configure the footer that appears at the bottom of every page</p>
+      </div>
+
+      <Card>
+        <CardContent className="p-6 space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="footerCopyright">Copyright Text</Label>
+            <Textarea
+              id="footerCopyright"
+              value={settings.footerCopyright}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                onInputChange("footerCopyright", e.target.value)
+              }
+              placeholder="© 2024 Your Company. All rights reserved."
+              maxLength={500}
+              rows={2}
+            />
+            <p className="text-xs text-muted-foreground">
+              The copyright text that appears in the footer
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Footer Links</Label>
+              <Button type="button" variant="outline" size="sm" onClick={onAddLink}>
+                <Plus className="h-4 w-4" />
+                Add Link
+              </Button>
+            </div>
+
+            {settings.footerLinks.length > 0 ? (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="grid grid-cols-[1fr_1fr_40px] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <span>Name</span>
+                  <span>URL</span>
+                  <span />
                 </div>
+                {settings.footerLinks.map((link, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_1fr_40px] gap-0 items-center border-t">
+                    <Input
+                      placeholder="Link name"
+                      value={link.name}
+                      onChange={(e) => onUpdateLink(index, "name", e.target.value)}
+                      maxLength={100}
+                      className="border-0 rounded-none shadow-none focus-visible:ring-0 h-9 text-sm"
+                    />
+                    <Input
+                      placeholder="/path or https://..."
+                      value={link.url}
+                      onChange={(e) => onUpdateLink(index, "url", e.target.value)}
+                      maxLength={500}
+                      className="border-0 border-l rounded-none shadow-none focus-visible:ring-0 h-9 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onRemoveLink(index)}
+                      className="flex items-center justify-center h-9 text-muted-foreground/50 hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4 border-2 border-dashed rounded-lg">
+                No footer links configured
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Footer Preview */}
+          <div className="space-y-3">
+            <Label>Preview</Label>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-3">
+                <span className="text-sm text-muted-foreground">{settings.footerCopyright}</span>
                 {settings.footerLinks.length > 0 && (
-                  <div className="flex flex-wrap gap-6">
+                  <div className="flex flex-wrap gap-4">
                     {settings.footerLinks.map((link, index) => (
-                      <span key={index} className="text-sm text-muted-foreground">
+                      <span key={index} className="text-sm text-muted-foreground hover:text-foreground">
                         {link.name || "Link Name"}
                       </span>
                     ))}
@@ -490,12 +502,71 @@ export default function AdminSettingsPage() {
                 )}
               </div>
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
-              Footer preview
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function PerformanceSection({
+  settings,
+  systemInfo,
+  onInputChange,
+}: {
+  settings: SiteSettings
+  systemInfo: SystemInfo
+  onInputChange: (field: keyof SiteSettings, value: string | FooterLink[]) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Performance</h2>
+        <p className="text-sm text-muted-foreground">Gallery display and processing settings</p>
       </div>
+
+      <Card>
+        <CardContent className="p-6 space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="photosPerPage">Photos Per Page</Label>
+            <Input
+              id="photosPerPage"
+              type="number"
+              min="1"
+              max="100"
+              value={settings.photosPerPage}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onInputChange("photosPerPage", e.target.value)
+              }
+              placeholder="32"
+              className="max-w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              Photos loaded initially when viewing an album. More load automatically as users scroll.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label htmlFor="batchProcessingSize">Batch Processing Size</Label>
+            <Input
+              id="batchProcessingSize"
+              type="number"
+              min="1"
+              value={settings.batchProcessingSize}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onInputChange("batchProcessingSize", e.target.value)
+              }
+              placeholder="4"
+              className="max-w-32"
+            />
+            <p className="text-xs text-muted-foreground">
+              Photos processed simultaneously during sync. Higher values are faster but use more resources. Max: {systemInfo.maxBatchProcessingSize} threads.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
