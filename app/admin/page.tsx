@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FolderOpen, Image, HardDrive, Eye, Video, Settings, Activity, Upload, ArrowRight } from "lucide-react"
+import { FolderOpen, Image, HardDrive, Eye, Video, Settings, Activity, Upload, ArrowRight, Database, Cloud, Server, Cog } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { getAllHealthChecks, type HealthCheckResult } from "@/lib/health"
 import { formatDistanceToNow } from "date-fns"
@@ -168,34 +168,31 @@ async function DashboardStats() {
   )
 }
 
-function StatusDot({ status }: { status: HealthCheckResult['status'] }) {
-  const colors = {
-    online: 'bg-green-500',
-    degraded: 'bg-yellow-500',
-    offline: 'bg-red-500',
-  }
-  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${colors[status]}`} />
+const statusStyles = {
+  online: {
+    tile: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800',
+    iconBg: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400',
+    dot: 'bg-emerald-500',
+    label: 'text-emerald-700 dark:text-emerald-300',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+  },
+  degraded: {
+    tile: 'bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800',
+    iconBg: 'bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-400',
+    dot: 'bg-amber-500',
+    label: 'text-amber-700 dark:text-amber-300',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+  },
+  offline: {
+    tile: 'bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:border-rose-800',
+    iconBg: 'bg-rose-100 text-rose-600 dark:bg-rose-900 dark:text-rose-400',
+    dot: 'bg-rose-500',
+    label: 'text-rose-700 dark:text-rose-300',
+    badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
+  },
 }
 
-function StatusLabel({ result }: { result: HealthCheckResult }) {
-  const labels = { online: 'Online', degraded: 'Degraded', offline: 'Offline' }
-  const colors = {
-    online: 'text-green-600 dark:text-green-400',
-    degraded: 'text-yellow-600 dark:text-yellow-400',
-    offline: 'text-red-600 dark:text-red-400',
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <StatusDot status={result.status} />
-      <span className={`text-sm font-medium ${colors[result.status]}`}>
-        {labels[result.status]}
-      </span>
-      {result.latencyMs !== undefined && result.status !== 'offline' && (
-        <span className="text-xs text-muted-foreground">({result.latencyMs}ms)</span>
-      )}
-    </div>
-  )
-}
+const statusLabels = { online: 'Online', degraded: 'Degraded', offline: 'Offline' }
 
 function SystemStatusLoading() {
   return (
@@ -205,11 +202,16 @@ function SystemStatusLoading() {
         <CardDescription>Current system health</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between animate-pulse">
-              <div className="h-4 bg-muted rounded w-28" />
-              <div className="h-4 bg-muted rounded w-20" />
+            <div key={i} className="rounded-lg border p-3 animate-pulse">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 bg-muted rounded-md" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-muted rounded w-20" />
+                  <div className="h-3 bg-muted rounded w-14" />
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -222,10 +224,10 @@ async function SystemStatus() {
   const health = await getAllHealthChecks()
 
   const services = [
-    { name: 'Database', result: health.database },
-    { name: 'S3 Storage', result: health.s3 },
-    { name: 'Redis', result: health.redis },
-    { name: 'Background Jobs', result: health.jobs },
+    { name: 'Database', icon: Database, result: health.database },
+    { name: 'S3 Storage', icon: Cloud, result: health.s3 },
+    { name: 'Redis', icon: Server, result: health.redis },
+    { name: 'Jobs', icon: Cog, result: health.jobs },
   ]
 
   return (
@@ -235,13 +237,32 @@ async function SystemStatus() {
         <CardDescription>Current system health</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {services.map((svc) => (
-            <div key={svc.name} className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{svc.name}</span>
-              <StatusLabel result={svc.result} />
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3">
+          {services.map((svc) => {
+            const Icon = svc.icon
+            const style = statusStyles[svc.result.status]
+            return (
+              <div key={svc.name} className={`rounded-lg border p-3 ${style.tile}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 rounded-md p-2 ${style.iconBg}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-tight text-foreground">{svc.name}</p>
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <span className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
+                      <span className={`text-xs font-medium ${style.label}`}>
+                        {statusLabels[svc.result.status]}
+                      </span>
+                    </div>
+                    {svc.result.latencyMs !== undefined && svc.result.status !== 'offline' && (
+                      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">{svc.result.latencyMs}ms</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </CardContent>
     </Card>
