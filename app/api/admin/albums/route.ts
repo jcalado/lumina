@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requireAuthenticated } from "@/lib/admin-auth"
 import { prisma } from "@/lib/prisma"
-import { z } from "zod"
-
-const updateAlbumSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  status: z.enum(["PUBLIC", "PRIVATE"]),
-  enabled: z.boolean(),
-})
+import { getAccessibleAlbumIds, getAlbumPermissions } from "@/lib/album-auth"
 
 // GET /api/admin/albums - List all albums with admin details
 export async function GET() {
-  const authResult = await requireAdmin()
+  const authResult = await requireAuthenticated()
   if (authResult instanceof NextResponse) {
     return authResult
   }
 
   try {
+    const accessibleIds = await getAccessibleAlbumIds(authResult.user.id, authResult.user.role)
+    const permissions = await getAlbumPermissions(authResult.user.id, authResult.user.role)
+
     const albums = await prisma.album.findMany({
+      where: accessibleIds !== null ? { id: { in: accessibleIds } } : undefined,
       include: {
         _count: {
           select: { photos: true, videos: true }
@@ -37,7 +34,7 @@ export async function GET() {
       videoCount: album._count.videos,
     }))
 
-    return NextResponse.json({ albums: formattedAlbums })
+    return NextResponse.json({ albums: formattedAlbums, permissions })
   } catch (error) {
     console.error("Error fetching albums:", error)
     return NextResponse.json(

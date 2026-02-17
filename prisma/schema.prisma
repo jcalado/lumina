@@ -24,6 +24,7 @@ model Album {
   updatedAt             DateTime @updatedAt
   photos                Photo[]
   videos                Video[]
+  groups                Group[]
 
   // Composite unique constraint for path-based uniqueness
   @@unique([path, slug])
@@ -148,6 +149,7 @@ model AdminUser {
   createdBy String?   // ID of admin who created this user
   creator   AdminUser? @relation("AdminUserCreatedBy", fields: [createdBy], references: [id])
   created   AdminUser[] @relation("AdminUserCreatedBy")
+  groups    UserGroup[]
 
   @@map("admin_users")
 }
@@ -160,6 +162,7 @@ enum Status {
 enum AdminRole {
   SUPERADMIN
   ADMIN
+  MEMBER
 }
 
 
@@ -175,5 +178,35 @@ enum JobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+model Group {
+  id                String      @id @default(cuid())
+  name              String
+  description       String?
+  albumId           String
+  album             Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  canUpload         Boolean     @default(false)
+  canEdit           Boolean     @default(false)
+  canDelete         Boolean     @default(false)
+  canCreateSubalbums Boolean    @default(false)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  members           UserGroup[]
+
+  @@map("groups")
+}
+
+model UserGroup {
+  id      String    @id @default(cuid())
+  userId  String
+  groupId String
+  user    AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("user_groups")
 }
 

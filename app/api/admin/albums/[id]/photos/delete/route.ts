@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requireAlbumAccess } from "@/lib/album-auth"
 import { prisma } from "@/lib/prisma"
 import { s3 } from "@/lib/s3"
 import { z } from "zod"
@@ -13,13 +13,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
-  if (authResult instanceof NextResponse) {
-    return authResult
-  }
-
   try {
     const { id: albumId } = await params
+
+    const authResult = await requireAlbumAccess(albumId, 'can_delete')
+    if (authResult instanceof NextResponse) {
+      return authResult
+    }
     const body = await request.json()
     const { photoIds } = deletePhotosSchema.parse(body)
 

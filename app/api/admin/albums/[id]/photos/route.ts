@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requireAlbumRead } from "@/lib/album-auth"
 import { prisma } from "@/lib/prisma"
 
 // GET /api/admin/albums/[id]/photos - Get all photos in an album
@@ -7,13 +7,13 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
-  if (authResult instanceof NextResponse) {
-    return authResult
-  }
-
   try {
     const { id } = await params
+
+    const authResult = await requireAlbumRead(id)
+    if (authResult instanceof NextResponse) {
+      return authResult
+    }
 
     // Verify album exists
     const album = await prisma.album.findUnique({

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +23,7 @@ import {
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty"
 import { FolderOpen, Folder, Image, Trash2, Eye, EyeOff, ChevronRight, ChevronDown, CheckCircle2, GripVertical, MoreHorizontal, Settings, ExternalLink, Video, Plus } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { useTranslations } from "next-intl"
 
 interface Album {
   id: string
@@ -47,9 +49,16 @@ interface AlbumTreeNode {
   isExpanded: boolean
 }
 
+type AlbumPerms = { canUpload: boolean; canEdit: boolean; canDelete: boolean; canCreateSubalbums: boolean }
+type PermissionsMap = Record<string, AlbumPerms> | null // null = full access (admin/superadmin)
+
 export default function AdminAlbumsPage() {
+  const t = useTranslations("adminAlbums")
+  const { data: session } = useSession()
+  const isFullAccess = session?.user?.role === "admin" || session?.user?.role === "superadmin"
   const [albums, setAlbums] = useState<Album[]>([])
   const [albumTree, setAlbumTree] = useState<AlbumTreeNode[]>([])
+  const [permissions, setPermissions] = useState<PermissionsMap>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   type DragInfo = { id: string; parentPath: string; level: number } | null
   const [dragging, setDragging] = useState<DragInfo>(null)
@@ -216,7 +225,7 @@ export default function AdminAlbumsPage() {
         <div
           className="grid grid-cols-12 gap-2 md:gap-4 py-3 px-3 border-b border-border/40 hover:bg-muted/30 transition-colors items-center text-sm"
           style={indentStyle}
-          draggable
+          draggable={isFullAccess}
           data-node-id={album.id}
           data-node-level={level}
           data-parent-path={parentPath}
@@ -263,16 +272,20 @@ export default function AdminAlbumsPage() {
                 body: JSON.stringify({ order }),
               })
               if (!res.ok) throw new Error('Failed to save order')
-              toast({ title: 'Order updated', description: 'Album order saved' })
+              toast({ title: t('toastOrderUpdated'), description: t('toastOrderSaved') })
               fetchAlbums()
             } catch {
-              toast({ title: 'Error', description: 'Failed to save album order', variant: 'destructive' })
+              toast({ title: t('toastError'), description: t('toastOrderFailed'), variant: 'destructive' })
             }
           }}
         >
           {/* Album Name & Path */}
           <div className="col-span-5 md:col-span-4 flex items-center gap-2 min-w-0">
-            <GripVertical className="h-3 w-3 text-muted-foreground cursor-grab shrink-0" />
+            {isFullAccess ? (
+              <GripVertical className="h-3 w-3 text-muted-foreground cursor-grab shrink-0" />
+            ) : (
+              <div className="w-3 shrink-0" />
+            )}
             {hasChildren ? (
               <Button
                 variant="ghost"
@@ -300,7 +313,7 @@ export default function AdminAlbumsPage() {
 
           {/* Media Count */}
           <div className="col-span-1 hidden md:flex items-center justify-center">
-            <div className="flex items-center gap-1 text-muted-foreground" title={hasChildren && directCount !== totalCount ? `${directCount} direct, ${totalCount} total` : undefined}>
+            <div className="flex items-center gap-1 text-muted-foreground" title={hasChildren && directCount !== totalCount ? t('mediaDirect', { direct: directCount, total: totalCount }) : undefined}>
               <Image className="h-3 w-3" />
               <span className="font-medium text-foreground">{totalCount}</span>
             </div>
@@ -309,13 +322,13 @@ export default function AdminAlbumsPage() {
           {/* Status Badges */}
           <div className="col-span-3 md:col-span-2 flex items-center gap-1.5 flex-wrap">
             <Badge variant={album.status === "PUBLIC" ? "default" : "secondary"} className="text-xs">
-              {album.status === "PUBLIC" ? "Public" : "Private"}
+              {album.status === "PUBLIC" ? t("public") : t("private")}
             </Badge>
             {!album.enabled && (
               <Badge variant="destructive" className="text-xs">Off</Badge>
             )}
             {album.featured && (
-              <Badge className="bg-yellow-500/15 text-yellow-600 border-yellow-500/30 text-xs">Featured</Badge>
+              <Badge className="bg-yellow-500/15 text-yellow-600 border-yellow-500/30 text-xs">{t("featuredToggle")}</Badge>
             )}
           </div>
 
@@ -325,7 +338,7 @@ export default function AdminAlbumsPage() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                   <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("actions")}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -333,37 +346,49 @@ export default function AdminAlbumsPage() {
                   onClick={() => window.open(`/admin/albums/${album.id}/photos`, '_blank')}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Browse Photos
+                  {t("browsePhotos")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleEdit(album)}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Edit Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setCreateForm({ name: "", description: "", parentPath: album.path }); setCreatingAlbum(true) }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Sub-album
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem
-                  checked={album.enabled}
-                  onCheckedChange={() => toggleAlbumStatus(album)}
-                >
-                  Enabled
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={album.featured}
-                  onCheckedChange={() => toggleFeatured(album)}
-                >
-                  Featured
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setDeletingAlbum(album)}
-                  className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Album
-                </DropdownMenuItem>
+                {albumCan(album.id, "canEdit") && (
+                  <DropdownMenuItem onClick={() => handleEdit(album)}>
+                    <Settings className="h-4 w-4 mr-2" />
+                    {t("editSettings")}
+                  </DropdownMenuItem>
+                )}
+                {albumCan(album.id, "canCreateSubalbums") && (
+                  <DropdownMenuItem onClick={() => { setCreateForm({ name: "", description: "", parentPath: album.path }); setCreatingAlbum(true) }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {t("createSubAlbum")}
+                  </DropdownMenuItem>
+                )}
+                {isFullAccess && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                      checked={album.enabled}
+                      onCheckedChange={() => toggleAlbumStatus(album)}
+                    >
+                      {t("enabledToggle")}
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                      checked={album.featured}
+                      onCheckedChange={() => toggleFeatured(album)}
+                    >
+                      {t("featuredToggle")}
+                    </DropdownMenuCheckboxItem>
+                  </>
+                )}
+                {albumCan(album.id, "canDelete") && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setDeletingAlbum(album)}
+                      className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {t("deleteAlbum")}
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -379,17 +404,25 @@ export default function AdminAlbumsPage() {
     )
   }
 
+  const albumCan = (albumId: string, perm: keyof AlbumPerms): boolean => {
+    if (permissions === null) return true // full access
+    return permissions[albumId]?.[perm] ?? false
+  }
+
+  const canCreateAny = isFullAccess || (permissions !== null && Object.values(permissions).some((p) => p.canCreateSubalbums))
+
   const fetchAlbums = async () => {
     try {
       const response = await fetch("/api/admin/albums")
       if (response.ok) {
         const data = await response.json()
         setAlbums(data.albums)
+        setPermissions(data.permissions ?? null)
       } else {
-        toast({ title: "Error", description: "Failed to fetch albums", variant: "destructive" })
+        toast({ title: t("toastError"), description: t("toastFetchFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to fetch albums", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastFetchFailed"), variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -418,14 +451,14 @@ export default function AdminAlbumsPage() {
       })
 
       if (response.ok) {
-        toast({ title: "Success", description: "Album updated successfully" })
+        toast({ title: t("toastSuccess"), description: t("toastAlbumUpdated") })
         setEditingAlbum(null)
         fetchAlbums()
       } else {
         throw new Error("Failed to update album")
       }
     } catch {
-      toast({ title: "Error", description: "Failed to update album", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastUpdateFailed"), variant: "destructive" })
     }
   }
 
@@ -434,14 +467,14 @@ export default function AdminAlbumsPage() {
       const response = await fetch(`/api/admin/albums/${albumId}`, { method: "DELETE" })
 
       if (response.ok) {
-        toast({ title: "Success", description: "Album deleted successfully" })
+        toast({ title: t("toastSuccess"), description: t("toastAlbumDeleted") })
         setDeletingAlbum(null)
         fetchAlbums()
       } else {
         throw new Error("Failed to delete album")
       }
     } catch {
-      toast({ title: "Error", description: "Failed to delete album", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastDeleteFailed"), variant: "destructive" })
     }
   }
 
@@ -454,13 +487,13 @@ export default function AdminAlbumsPage() {
       })
 
       if (response.ok) {
-        toast({ title: "Success", description: `Album ${album.enabled ? "disabled" : "enabled"} successfully` })
+        toast({ title: t("toastSuccess"), description: album.enabled ? t("toastAlbumDisabled") : t("toastAlbumEnabled") })
         fetchAlbums()
       } else {
         throw new Error("Failed to toggle album status")
       }
     } catch {
-      toast({ title: "Error", description: "Failed to toggle album status", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastToggleFailed"), variant: "destructive" })
     }
   }
 
@@ -474,23 +507,23 @@ export default function AdminAlbumsPage() {
 
       if (response.ok) {
         toast({
-          title: "Success",
+          title: t("toastSuccess"),
           description: album.featured
-            ? `"${album.name}" removed from featured`
-            : `"${album.name}" set as featured`
+            ? t("toastFeaturedRemoved", { name: album.name })
+            : t("toastFeaturedAdded", { name: album.name })
         })
         fetchAlbums()
       } else {
         throw new Error("Failed to toggle featured")
       }
     } catch {
-      toast({ title: "Error", description: "Failed to toggle featured status", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastFeaturedFailed"), variant: "destructive" })
     }
   }
 
   const handleCreate = async () => {
     if (!createForm.name.trim()) {
-      toast({ title: "Error", description: "Album name is required", variant: "destructive" })
+      toast({ title: t("toastError"), description: t("toastNameRequired"), variant: "destructive" })
       return
     }
     setCreateLoading(true)
@@ -501,7 +534,7 @@ export default function AdminAlbumsPage() {
         body: JSON.stringify({ name: createForm.name.trim(), description: createForm.description.trim() || undefined, parentPath: createForm.parentPath || undefined })
       })
       if (response.ok) {
-        toast({ title: "Success", description: "Album created successfully" })
+        toast({ title: t("toastSuccess"), description: t("toastAlbumCreated") })
         setCreatingAlbum(false)
         setCreateForm({ name: "", description: "", parentPath: "" })
         fetchAlbums()
@@ -510,7 +543,7 @@ export default function AdminAlbumsPage() {
         throw new Error(data.error || "Failed to create album")
       }
     } catch (error) {
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to create album", variant: "destructive" })
+      toast({ title: t("toastError"), description: error instanceof Error ? error.message : t("toastCreateFailed"), variant: "destructive" })
     } finally {
       setCreateLoading(false)
     }
@@ -519,7 +552,7 @@ export default function AdminAlbumsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Album Management</h1>
+        <h1 className="text-3xl font-bold">{t("title")}</h1>
         <Card>
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -549,35 +582,37 @@ export default function AdminAlbumsPage() {
     <div className="space-y-6">
       {/* Header with Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Album Management</h1>
+        <h1 className="text-3xl font-bold">{t("title")}</h1>
         {albums.length > 0 && (
           <div className="flex items-center gap-4 md:gap-6 text-sm flex-wrap">
             <div className="flex items-center gap-1.5">
               <FolderOpen className="h-4 w-4 text-muted-foreground" />
               <span className="font-medium">{albums.length}</span>
-              <span className="text-muted-foreground hidden sm:inline">albums</span>
+              <span className="text-muted-foreground hidden sm:inline">{t("albums")}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Image className="h-4 w-4 text-muted-foreground" />
               <span className="font-medium">{totalPhotos.toLocaleString()}</span>
-              <span className="text-muted-foreground hidden sm:inline">photos</span>
+              <span className="text-muted-foreground hidden sm:inline">{t("photos")}</span>
             </div>
             {totalVideos > 0 && (
               <div className="flex items-center gap-1.5">
                 <Video className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{totalVideos.toLocaleString()}</span>
-                <span className="text-muted-foreground hidden sm:inline">videos</span>
+                <span className="text-muted-foreground hidden sm:inline">{t("videos")}</span>
               </div>
             )}
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
               <span className="font-medium">{enabledAlbums}</span>
-              <span className="text-muted-foreground hidden sm:inline">enabled</span>
+              <span className="text-muted-foreground hidden sm:inline">{t("enabled")}</span>
             </div>
-            <Button size="sm" onClick={() => setCreatingAlbum(true)}>
-              <Plus className="h-4 w-4" />
-              Create Album
-            </Button>
+            {(isFullAccess || canCreateAny) && (
+              <Button size="sm" onClick={() => setCreatingAlbum(true)}>
+                <Plus className="h-4 w-4" />
+                {t("createAlbum")}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -588,24 +623,26 @@ export default function AdminAlbumsPage() {
             <FolderOpen className="h-5 w-5" />
           </EmptyMedia>
           <EmptyHeader>
-            <EmptyTitle>No albums yet</EmptyTitle>
+            <EmptyTitle>{t("noAlbumsTitle")}</EmptyTitle>
             <EmptyDescription>
-              Create your first album to start uploading and organizing photos.
+              {t("noAlbumsDescription")}
             </EmptyDescription>
           </EmptyHeader>
-          <Button onClick={() => setCreatingAlbum(true)}>
-            <Plus className="h-4 w-4" />
-            Create Album
-          </Button>
+          {(isFullAccess || canCreateAny) && (
+            <Button onClick={() => setCreatingAlbum(true)}>
+              <Plus className="h-4 w-4" />
+              {t("createAlbum")}
+            </Button>
+          )}
         </Empty>
       ) : (
         <Card>
           <CardHeader className="pb-3">
             <div className="grid grid-cols-12 gap-2 md:gap-4 text-xs font-medium text-muted-foreground uppercase tracking-wide px-12">
-              <div className="col-span-5 md:col-span-4">Album</div>
-              <div className="col-span-1 text-center hidden md:block">Media</div>
-              <div className="col-span-3 md:col-span-2">Status</div>
-              <div className="col-span-4 md:col-span-5 text-right">Actions</div>
+              <div className="col-span-5 md:col-span-4">{t("columnAlbum")}</div>
+              <div className="col-span-1 text-center hidden md:block">{t("columnMedia")}</div>
+              <div className="col-span-3 md:col-span-2">{t("columnStatus")}</div>
+              <div className="col-span-4 md:col-span-5 text-right">{t("columnActions")}</div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -620,15 +657,15 @@ export default function AdminAlbumsPage() {
       <Dialog open={!!editingAlbum} onOpenChange={(open) => { if (!open) setEditingAlbum(null) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Album</DialogTitle>
+            <DialogTitle>{t("editDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Update album settings and visibility
+              {t("editDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Name</Label>
+              <Label htmlFor="edit-name">{t("name")}</Label>
               <Input
                 id="edit-name"
                 value={editForm.name}
@@ -637,7 +674,7 @@ export default function AdminAlbumsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
+              <Label htmlFor="edit-description">{t("description")}</Label>
               <Textarea
                 id="edit-description"
                 value={editForm.description}
@@ -646,21 +683,21 @@ export default function AdminAlbumsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-slug">URL Slug</Label>
+              <Label htmlFor="edit-slug">{t("urlSlug")}</Label>
               <Input
                 id="edit-slug"
                 value={editForm.slug}
                 onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })}
-                placeholder="url-friendly-name"
+                placeholder={t("urlSlugPlaceholder")}
                 pattern="^[a-z0-9]+(?:-[a-z0-9]+)*$"
               />
               <p className="text-sm text-muted-foreground">
-                URL-friendly identifier (lowercase letters, numbers, and hyphens only)
+                {t("urlSlugHelp")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-status">Visibility</Label>
+              <Label htmlFor="edit-status">{t("visibility")}</Label>
               <Select
                 value={editForm.status}
                 onValueChange={(value: "PUBLIC" | "PRIVATE") =>
@@ -674,13 +711,13 @@ export default function AdminAlbumsPage() {
                   <SelectItem value="PUBLIC">
                     <div className="flex items-center gap-2">
                       <Eye className="h-4 w-4" />
-                      <span>Public</span>
+                      <span>{t("public")}</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="PRIVATE">
                     <div className="flex items-center gap-2">
                       <EyeOff className="h-4 w-4" />
-                      <span>Private</span>
+                      <span>{t("private")}</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -695,7 +732,7 @@ export default function AdminAlbumsPage() {
                   setEditForm({ ...editForm, enabled: checked })
                 }
               />
-              <Label htmlFor="edit-enabled">Enabled</Label>
+              <Label htmlFor="edit-enabled">{t("enabledLabel")}</Label>
             </div>
 
             <div className="space-y-1.5">
@@ -707,20 +744,20 @@ export default function AdminAlbumsPage() {
                     setEditForm({ ...editForm, featured: checked })
                   }
                 />
-                <Label htmlFor="edit-featured">Featured</Label>
+                <Label htmlFor="edit-featured">{t("featuredLabel")}</Label>
               </div>
               <p className="text-xs text-muted-foreground pl-11">
-                Showcase this album on the landing page. Only one album can be featured at a time.
+                {t("featuredHelp")}
               </p>
             </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setEditingAlbum(null)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button onClick={handleSave}>
-              Save Changes
+              {t("saveChanges")}
             </Button>
           </div>
         </DialogContent>
@@ -730,18 +767,18 @@ export default function AdminAlbumsPage() {
       <AlertDialog open={!!deletingAlbum} onOpenChange={(open) => { if (!open) setDeletingAlbum(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Album</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &ldquo;{deletingAlbum?.name}&rdquo;? This action cannot be undone and will remove all associated photos and videos.
+              {t("deleteDialogDescription", { name: deletingAlbum?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingAlbum && handleDelete(deletingAlbum.id)}
               className="bg-red-600 hover:bg-red-700"
             >
-              Delete
+              {t("delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -751,34 +788,34 @@ export default function AdminAlbumsPage() {
       <Dialog open={creatingAlbum} onOpenChange={(open) => { if (!open) { setCreatingAlbum(false); setCreateForm({ name: "", description: "", parentPath: "" }) } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Album</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Add a new album to organize and upload photos.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="create-name">Name</Label>
+              <Label htmlFor="create-name">{t("name")}</Label>
               <Input
                 id="create-name"
                 value={createForm.name}
                 onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                placeholder="e.g. Summer 2025"
+                placeholder={t("namePlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="create-parent">Parent Album</Label>
+              <Label htmlFor="create-parent">{t("parentAlbum")}</Label>
               <Select
                 value={createForm.parentPath}
                 onValueChange={(value) => setCreateForm({ ...createForm, parentPath: value === "__none__" ? "" : value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="None (top-level album)" />
+                  <SelectValue placeholder={t("parentNone")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">None (top-level album)</SelectItem>
+                  <SelectItem value="__none__">{t("parentNone")}</SelectItem>
                   {albums
                     .sort((a, b) => a.path.localeCompare(b.path))
                     .map((album) => (
@@ -791,22 +828,22 @@ export default function AdminAlbumsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="create-description">Description (optional)</Label>
+              <Label htmlFor="create-description">{t("descriptionOptional")}</Label>
               <Textarea
                 id="create-description"
                 value={createForm.description}
                 onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                placeholder="A short description of this album"
+                placeholder={t("descriptionPlaceholder")}
               />
             </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => { setCreatingAlbum(false); setCreateForm({ name: "", description: "", parentPath: "" }) }}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button onClick={handleCreate} disabled={createLoading || !createForm.name.trim()}>
-              {createLoading ? "Creating..." : "Create Album"}
+              {createLoading ? t("creating") : t("createAlbum")}
             </Button>
           </div>
         </DialogContent>

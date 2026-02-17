@@ -28,6 +28,19 @@ export async function requireSuperAdmin() {
   return session
 }
 
+export async function requireAuthenticated() {
+  const session = await getServerSession(authOptions)
+
+  if (!session || !["admin", "superadmin", "member"].includes(session.user.role)) {
+    return NextResponse.json(
+      { error: "Unauthorized - Authentication required" },
+      { status: 401 }
+    )
+  }
+
+  return session
+}
+
 export async function isAdmin() {
   const session = await getServerSession(authOptions)
   return session && ["admin", "superadmin"].includes(session.user.role)

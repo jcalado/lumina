@@ -18,7 +18,7 @@ interface AdminUser {
   id: string
   email: string
   name: string
-  role: "ADMIN" | "SUPERADMIN"
+  role: "ADMIN" | "SUPERADMIN" | "MEMBER"
   enabled: boolean
   lastLogin: Date | null
   createdAt: Date
@@ -34,7 +34,7 @@ interface CreateUserForm {
   email: string
   name: string
   password: string
-  role: "ADMIN" | "SUPERADMIN"
+  role: "ADMIN" | "SUPERADMIN" | "MEMBER"
   enabled: boolean
 }
 
@@ -42,7 +42,7 @@ interface EditUserForm {
   email?: string
   name?: string
   password?: string
-  role?: "ADMIN" | "SUPERADMIN"
+  role?: "ADMIN" | "SUPERADMIN" | "MEMBER"
   enabled?: boolean
 }
 
@@ -305,7 +305,7 @@ export default function AdminUsersPage() {
                 <Label htmlFor="create-role">Role</Label>
                 <Select
                   value={createForm.role}
-                  onValueChange={(value: "ADMIN" | "SUPERADMIN") =>
+                  onValueChange={(value: "ADMIN" | "SUPERADMIN" | "MEMBER") =>
                     setCreateForm({ ...createForm, role: value })
                   }
                 >
@@ -313,6 +313,7 @@ export default function AdminUsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="MEMBER">Member</SelectItem>
                     <SelectItem value="ADMIN">Admin</SelectItem>
                     {isCurrentUserSuperAdmin && (
                       <SelectItem value="SUPERADMIN">Super Admin</SelectItem>
@@ -374,7 +375,7 @@ export default function AdminUsersPage() {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.role === "SUPERADMIN" ? "default" : "secondary"}
+                      variant={user.role === "SUPERADMIN" ? "default" : user.role === "MEMBER" ? "outline" : "secondary"}
                       className="flex items-center gap-1 w-fit"
                     >
                       {user.role === "SUPERADMIN" ? (
@@ -382,7 +383,7 @@ export default function AdminUsersPage() {
                       ) : (
                         <Shield className="h-3 w-3" />
                       )}
-                      {user.role === "SUPERADMIN" ? "Super Admin" : "Admin"}
+                      {user.role === "SUPERADMIN" ? "Super Admin" : user.role === "MEMBER" ? "Member" : "Admin"}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -482,7 +483,7 @@ export default function AdminUsersPage() {
               <Label htmlFor="edit-role">Role</Label>
               <Select
                 value={editForm.role}
-                onValueChange={(value: "ADMIN" | "SUPERADMIN") =>
+                onValueChange={(value: "ADMIN" | "SUPERADMIN" | "MEMBER") =>
                   setEditForm({ ...editForm, role: value })
                 }
               >
@@ -490,6 +491,7 @@ export default function AdminUsersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="MEMBER">Member</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
                   {isCurrentUserSuperAdmin && (
                     <SelectItem value="SUPERADMIN">Super Admin</SelectItem>

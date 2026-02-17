@@ -12,6 +12,7 @@ import {
   Activity,
   FileText,
   Users,
+  UsersRound,
   Camera,
   LogOut,
   ChevronsUpDown,
@@ -35,15 +36,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useTranslations } from "next-intl"
 
-const navigationItems = [
-  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { name: "Albums", href: "/admin/albums", icon: FolderOpen },
-  { name: "Jobs", href: "/admin/jobs", icon: Activity },
-  { name: "Logs", href: "/admin/logs", icon: FileText },
-  { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-  { name: "Users", href: "/admin/users", icon: Users },
-  { name: "Settings", href: "/admin/settings", icon: Settings },
+type NavItem = { key: string; href: string; icon: typeof LayoutDashboard; adminOnly?: boolean }
+
+const allNavigationItems: NavItem[] = [
+  { key: "dashboard", href: "/admin", icon: LayoutDashboard },
+  { key: "albums", href: "/admin/albums", icon: FolderOpen },
+  { key: "groups", href: "/admin/groups", icon: UsersRound, adminOnly: true },
+  { key: "jobs", href: "/admin/jobs", icon: Activity, adminOnly: true },
+  { key: "logs", href: "/admin/logs", icon: FileText, adminOnly: true },
+  { key: "analytics", href: "/admin/analytics", icon: BarChart3, adminOnly: true },
+  { key: "users", href: "/admin/users", icon: Users, adminOnly: true },
+  { key: "settings", href: "/admin/settings", icon: Settings, adminOnly: true },
 ]
 
 function getInitials(email: string): string {
@@ -52,8 +57,15 @@ function getInitials(email: string): string {
 }
 
 export default function AdminSidebar({ session }: { session: Session }) {
+  const t = useTranslations("adminNav")
   const pathname = usePathname()
   const email = session.user?.email ?? ""
+  const role = session.user?.role ?? ""
+  const isAdminOrAbove = ["admin", "superadmin"].includes(role)
+
+  const navigationItems = allNavigationItems.filter(
+    (item) => !item.adminOnly || isAdminOrAbove
+  )
 
   return (
     <Sidebar collapsible="icon">
@@ -66,8 +78,8 @@ export default function AdminSidebar({ session }: { session: Session }) {
                   <Camera className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Lumina</span>
-                  <span className="truncate text-xs text-muted-foreground">Admin</span>
+                  <span className="truncate font-semibold">{t("appName")}</span>
+                  <span className="truncate text-xs text-muted-foreground">{t("appSubtitle")}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -77,7 +89,7 @@ export default function AdminSidebar({ session }: { session: Session }) {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("navigation")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navigationItems.map((item) => {
@@ -85,13 +97,14 @@ export default function AdminSidebar({ session }: { session: Session }) {
                   item.href === "/admin"
                     ? pathname === "/admin"
                     : pathname.startsWith(item.href)
+                const label = t(item.key as any)
 
                 return (
-                  <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                  <SidebarMenuItem key={item.key}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={label}>
                       <Link href={item.href}>
                         <item.icon />
-                        <span>{item.name}</span>
+                        <span>{label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -130,7 +143,7 @@ export default function AdminSidebar({ session }: { session: Session }) {
               >
                 <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
                   <LogOut />
-                  Log out
+                  {t("logOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

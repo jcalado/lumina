@@ -1,16 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin-auth'
+import { requireAlbumAccess } from '@/lib/album-auth'
 import { prisma } from '@/lib/prisma'
 import { generateUniqueSlug } from '@/lib/slugs'
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireAdmin()
-  if (authResult instanceof NextResponse) {
-    return authResult
-  }
-
   try {
     const { name, description, parentPath } = await request.json()
+
+    // If creating under a parent, check can_create_subalbums on the parent.
+    // Otherwise, require admin/superadmin.
+    if (parentPath) {
+      const parentAlbum = await prisma.album.findUnique({
+        where: { path: parentPath },
+        select: { id: true },
+      })
+
+      if (!parentAlbum) {
+        return NextResponse.json(
+          { error: 'Parent album not found' },
+          { status: 404 }
+        )
+      }
+
+      const authResult = await requireAlbumAccess(parentAlbum.id, 'can_create_subalbums')
+      if (authResult instanceof NextResponse) {
+        return authResult
+      }
+    } else {
+      const authResult = await requireAdmin()
+      if (authResult instanceof NextResponse) {
+        return authResult
+      }
+    }
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json(

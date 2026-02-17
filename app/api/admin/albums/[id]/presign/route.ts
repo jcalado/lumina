@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin-auth'
+import { requireAlbumAccess } from '@/lib/album-auth'
 import { prisma } from '@/lib/prisma'
 import { getS3Service } from '@/lib/s3'
 
@@ -7,13 +7,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
-  if (authResult instanceof NextResponse) {
-    return authResult
-  }
-
   try {
     const { id } = await params
+
+    const authResult = await requireAlbumAccess(id, 'can_upload')
+    if (authResult instanceof NextResponse) {
+      return authResult
+    }
 
     const album = await prisma.album.findUnique({
       where: { id },

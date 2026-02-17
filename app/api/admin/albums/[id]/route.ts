@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requireAlbumRead, requireAlbumAccess } from "@/lib/album-auth"
 import { prisma } from "@/lib/prisma"
 import { generateUniqueSlug, isValidSlug } from "@/lib/slugs"
 import { z } from "zod"
@@ -18,19 +18,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
+  const { id } = await params
+
+  const authResult = await requireAlbumRead(id)
   if (authResult instanceof NextResponse) {
     return authResult
   }
 
   try {
-    const { id } = await params
-
     const album = await prisma.album.findUnique({
       where: { id },
       include: {
         _count: {
-          select: { 
+          select: {
             photos: true,
             videos: true
           }
@@ -60,19 +60,20 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
+  const { id } = await params
+
+  const authResult = await requireAlbumAccess(id, "can_edit")
   if (authResult instanceof NextResponse) {
     return authResult
   }
 
   try {
-    const { id } = await params
     const body = await request.json()
     const validatedData = updateAlbumSchema.parse(body)
 
     // Handle slug validation and generation
     let slugToUpdate = validatedData.slug;
-    
+
     if (validatedData.slug !== undefined) {
       if (!isValidSlug(validatedData.slug)) {
         return NextResponse.json(
@@ -80,12 +81,12 @@ export async function PUT(
           { status: 400 }
         )
       }
-      
+
       // Check if slug is unique using raw query
       const existingAlbum = await prisma.$queryRaw`
         SELECT id FROM albums WHERE slug = ${validatedData.slug} AND id != ${id}
       ` as any[];
-      
+
       if (existingAlbum.length > 0) {
         return NextResponse.json(
           { error: "Slug already exists. Please choose a different slug." },
@@ -93,7 +94,7 @@ export async function PUT(
         )
       }
     }
-    
+
     // If name is being updated but slug is not provided, generate new slug
     if (validatedData.name && !validatedData.slug) {
       slugToUpdate = await generateUniqueSlug(validatedData.name, id);
@@ -144,13 +145,14 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const authResult = await requireAdmin()
+  const { id } = await params
+
+  const authResult = await requireAlbumAccess(id, "can_delete")
   if (authResult instanceof NextResponse) {
     return authResult
   }
 
   try {
-    const { id } = await params
     await prisma.album.delete({
       where: { id }
     })

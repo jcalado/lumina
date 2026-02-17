@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -12,22 +13,27 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-
-const staticLabels: Record<string, string> = {
-  admin: "Home",
-  albums: "Albums",
-  analytics: "Analytics",
-  jobs: "Jobs",
-  logs: "Logs",
-  settings: "Settings",
-  users: "Users",
-  photos: "Photos",
-}
+import { useTranslations } from "next-intl"
 
 export default function AdminHeader() {
+  const t = useTranslations("adminNav")
+
+  const staticLabels: Record<string, string> = {
+    admin: t("dashboard"),
+    albums: t("albums"),
+    analytics: t("analytics"),
+    groups: t("groups"),
+    jobs: t("jobs"),
+    logs: t("logs"),
+    settings: t("settings"),
+    users: t("users"),
+    photos: t("photos"),
+  }
   const pathname = usePathname()
   const [albumName, setAlbumName] = useState<string | null>(null)
   const [albumId, setAlbumId] = useState<string | null>(null)
+  const [groupName, setGroupName] = useState<string | null>(null)
+  const [groupId, setGroupId] = useState<string | null>(null)
 
   // Detect album ID from paths like /admin/albums/[id]/photos
   useEffect(() => {
@@ -48,6 +54,25 @@ export default function AdminHeader() {
     }
   }, [pathname])
 
+  // Detect group ID from paths like /admin/groups/[id]
+  useEffect(() => {
+    const match = pathname.match(/^\/admin\/groups\/([^/]+)/)
+    const id = match?.[1]
+    if (id && id !== groupId) {
+      setGroupId(id)
+      setGroupName(null)
+      fetch(`/api/admin/groups/${id}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.group?.name) setGroupName(data.group.name)
+        })
+        .catch(() => {})
+    } else if (!id) {
+      setGroupId(null)
+      setGroupName(null)
+    }
+  }, [pathname])
+
   const buildBreadcrumbs = () => {
     const segments = pathname.replace(/\/$/, "").split("/").filter(Boolean)
     // segments: ["admin"] or ["admin", "albums"] or ["admin", "albums", "<id>", "photos"]
@@ -60,13 +85,19 @@ export default function AdminHeader() {
 
       // Skip "admin" as first crumb — it's always there as the root
       if (i === 0 && segment === "admin") {
-        crumbs.push({ label: "Lumina Admin", href: "/admin" })
+        crumbs.push({ label: t("breadcrumbHome"), href: "/admin" })
         continue
       }
 
       // If this segment is a dynamic album ID, link to its photos page
       if (i === 2 && segments[1] === "albums" && !staticLabels[segment]) {
         crumbs.push({ label: albumName || "...", href: href + "/photos" })
+        continue
+      }
+
+      // If this segment is a dynamic group ID, resolve group name
+      if (i === 2 && segments[1] === "groups" && !staticLabels[segment]) {
+        crumbs.push({ label: groupName || "...", href })
         continue
       }
 
@@ -87,14 +118,16 @@ export default function AdminHeader() {
           {crumbs.map((crumb, i) => {
             const isLast = i === crumbs.length - 1
             return (
-              <BreadcrumbItem key={crumb.href}>
+              <React.Fragment key={crumb.href}>
                 {i > 0 && <BreadcrumbSeparator />}
-                {isLast ? (
-                  <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
-                )}
-              </BreadcrumbItem>
+                <BreadcrumbItem>
+                  {isLast ? (
+                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              </React.Fragment>
             )
           })}
         </BreadcrumbList>

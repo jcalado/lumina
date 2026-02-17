@@ -8,7 +8,7 @@ const updateAdminUserSchema = z.object({
   email: z.string().email('Invalid email address').optional(),
   name: z.string().min(1, 'Name is required').max(100, 'Name too long').optional(),
   password: z.string().min(8, 'Password must be at least 8 characters').optional(),
-  role: z.enum(['ADMIN', 'SUPERADMIN']).optional(),
+  role: z.enum(['ADMIN', 'SUPERADMIN', 'MEMBER']).optional(),
   enabled: z.boolean().optional(),
 })
 

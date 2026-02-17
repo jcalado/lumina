@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,6 +41,8 @@ interface Album {
 export default function AlbumPhotosPage() {
   const params = useParams()
   const albumId = params.id as string
+  const { data: session } = useSession()
+  const isFullAccess = session?.user?.role === "admin" || session?.user?.role === "superadmin"
 
   const [album, setAlbum] = useState<Album | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -49,6 +52,8 @@ export default function AlbumPhotosPage() {
   const [deletingPhotos, setDeletingPhotos] = useState(false)
   const [downloadingSelected, setDownloadingSelected] = useState(false)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [canUpload, setCanUpload] = useState(false)
+  const [canDelete, setCanDelete] = useState(false)
 
   useEffect(() => {
     fetchAlbumAndPhotos()
@@ -57,22 +62,39 @@ export default function AlbumPhotosPage() {
   const fetchAlbumAndPhotos = async () => {
     try {
       setLoading(true)
-      
-      // Fetch album details
-      const albumResponse = await fetch(`/api/admin/albums/${albumId}`)
+
+      // Fetch album details and permissions in parallel
+      const [albumResponse, photosResponse, albumsResponse] = await Promise.all([
+        fetch(`/api/admin/albums/${albumId}`),
+        fetch(`/api/admin/albums/${albumId}/photos`),
+        fetch(`/api/admin/albums`),
+      ])
+
       if (!albumResponse.ok) {
         throw new Error("Failed to fetch album")
       }
       const albumData = await albumResponse.json()
       setAlbum(albumData.album)
 
-      // Fetch photos
-      const photosResponse = await fetch(`/api/admin/albums/${albumId}/photos`)
       if (!photosResponse.ok) {
         throw new Error("Failed to fetch photos")
       }
       const photosData = await photosResponse.json()
       setPhotos(photosData.photos)
+
+      // Extract permissions for this album
+      if (albumsResponse.ok) {
+        const albumsData = await albumsResponse.json()
+        const perms = albumsData.permissions
+        if (perms === null || perms === undefined) {
+          // Full access (admin/superadmin)
+          setCanUpload(true)
+          setCanDelete(true)
+        } else {
+          setCanUpload(perms[albumId]?.canUpload ?? false)
+          setCanDelete(perms[albumId]?.canDelete ?? false)
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error)
       toast({
@@ -291,7 +313,7 @@ export default function AlbumPhotosPage() {
                     <Download className="h-4 w-4 mr-2" />
                     {downloadingSelected ? 'Starting…' : `Download Selected (${selectedPhotos.size})`}
                   </Button>
-                  <AlertDialog>
+                  {canDelete && <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm" disabled={deletingPhotos}>
                         <Trash2 className="h-4 w-4 mr-2" />
@@ -327,14 +349,16 @@ export default function AlbumPhotosPage() {
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
-                  </AlertDialog>
+                  </AlertDialog>}
                 </>
               )}
               
-              <Button size="sm" onClick={() => setUploadModalOpen(true)}>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Photos
-              </Button>
+              {canUpload && (
+                <Button size="sm" onClick={() => setUploadModalOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Photos
+                </Button>
+              )}
 
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-muted-foreground" />
