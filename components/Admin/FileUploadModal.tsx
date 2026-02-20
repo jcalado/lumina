@@ -77,14 +77,6 @@ export function FileUploadModal({
   const validateAndSetFiles = (fileList: File[]) => {
     setError(null)
 
-    const totalSize = fileList.reduce((sum, file) => sum + file.size, 0)
-    const maxTotalSize = 2 * 1024 * 1024 * 1024 // 2GB
-
-    if (totalSize > maxTotalSize) {
-      setError(`Total upload size too large: ${formatFileSize(totalSize)}. Maximum: ${formatFileSize(maxTotalSize)}`)
-      return
-    }
-
     const validFiles: File[] = []
     const errors: string[] = []
 
