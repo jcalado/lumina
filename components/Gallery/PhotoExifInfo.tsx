@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Camera, Image, MapPin, Calendar, Info, Setti
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
+import { cn } from '@/lib/utils';
 
 interface ExifData {
   // Basic info
@@ -109,9 +110,10 @@ interface PhotoExifInfoProps {
     metadata?: string | ExifData | null;
     orientation?: number;
   };
+  className?: string;
 }
 
-export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
+export function PhotoExifInfo({ photo, className }: PhotoExifInfoProps) {
   const t = useTranslations('PhotoExifInfo');
 
   // Move helper functions inside component to access translations
@@ -287,7 +289,7 @@ export function PhotoExifInfo({ photo }: PhotoExifInfoProps) {
     .sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <Card className="w-96 max-h-[80vh] overflow-hidden">
+    <Card className={cn("w-96 max-h-[80vh] overflow-hidden", className)}>
       <CardContent className="p-0">
         <div className="sticky top-0 bg-background border-b border-border p-3 z-10">
           <h3 className="font-semibold text-sm flex items-center gap-2">

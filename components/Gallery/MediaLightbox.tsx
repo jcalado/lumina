@@ -1,11 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Download, Info, Check, Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Download, Info, Check, Play, Pause, Volume2, VolumeX, Maximize, MoreVertical } from 'lucide-react';
+import { useSwipeable } from 'react-swipeable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { PhotoExifInfo } from '@/components/Gallery/PhotoExifInfo';
 import { useDownloadSelection } from '@/contexts/DownloadSelectionContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Video {
   id: string;
@@ -56,6 +64,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
   const [duration, setDuration] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { isSelectedForDownload, toggleDownloadSelection } = useDownloadSelection();
+  const isMobile = useIsMobile();
 
   const currentMedia = media[currentIndex];
   const isVideo = currentMedia?.type === 'video';
@@ -123,6 +132,29 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
     setDuration(0);
   }, [currentIndex]);
 
+  // Preload adjacent images
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const preloadImages: HTMLImageElement[] = [];
+    const adjacentIndices = [currentIndex - 1, currentIndex + 1];
+
+    for (const idx of adjacentIndices) {
+      const item = media[idx];
+      if (item && item.type === 'photo') {
+        const img = new Image();
+        img.src = item.originalUrl || `/api/photos/${item.id}/serve?size=large`;
+        preloadImages.push(img);
+      }
+    }
+
+    return () => {
+      for (const img of preloadImages) {
+        img.src = '';
+      }
+    };
+  }, [isOpen, currentIndex, media]);
+
   // Video event handlers
   const handleVideoLoad = () => {
     setMediaLoading(false);
@@ -187,6 +219,17 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
     }
   };
 
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => goToNext(),
+    onSwipedRight: () => goToPrevious(),
+    onSwipedDown: ({ absY }) => { if (absY > 100) onClose(); },
+    preventScrollOnSwipe: true,
+    trackTouch: true,
+    trackMouse: false,
+    delta: 50,
+    swipeDuration: 500,
+  });
+
   const handleDownload = () => {
     const endpoint = isVideo ? `/api/videos/${currentMedia.id}/download` : `/api/photos/${currentMedia.id}/download`;
     const link = document.createElement('a');
@@ -208,56 +251,102 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
         <div className="flex items-center justify-between text-white">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-medium truncate">
-              {currentMedia.filename}
-            </h2>
-            <span className="text-sm text-gray-300">
-              {currentIndex + 1} of {media.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => toggleDownloadSelection(currentMedia.id)}
-              className={`text-white hover:bg-white/20 ${
-                isSelectedForDownload(currentMedia.id) ? 'bg-white/20' : ''
-              }`}
-              title={isSelectedForDownload(currentMedia.id) ? 'Remove from download selection' : 'Add to download selection'}
-            >
-              {isSelectedForDownload(currentMedia.id) ? (
-                <Check className="h-4 w-4 text-blue-400" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowMetadata(!showMetadata)}
-              className="text-white hover:bg-white/20"
-            >
-              <Info className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleDownload}
-              className="text-white hover:bg-white/20"
-              title={`Download this ${isVideo ? 'video' : 'photo'}`}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-white hover:bg-white/20"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          {isMobile ? (
+            <>
+              <span className="text-sm text-gray-300">
+                {currentIndex + 1} / {media.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-white hover:bg-white/20 h-8 w-8"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => toggleDownloadSelection(currentMedia.id)}>
+                      {isSelectedForDownload(currentMedia.id) ? (
+                        <><Check className="h-4 w-4 mr-2 text-blue-400" /> Remove from selection</>
+                      ) : (
+                        <><Download className="h-4 w-4 mr-2" /> Add to selection</>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowMetadata(!showMetadata)}>
+                      <Info className="h-4 w-4 mr-2" /> {showMetadata ? 'Hide info' : 'Show info'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownload}>
+                      <Download className="h-4 w-4 mr-2" /> Download
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="text-white hover:bg-white/20 h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-medium truncate">
+                  {currentMedia.filename}
+                </h2>
+                <span className="text-sm text-gray-300">
+                  {currentIndex + 1} of {media.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => toggleDownloadSelection(currentMedia.id)}
+                  className={`text-white hover:bg-white/20 ${
+                    isSelectedForDownload(currentMedia.id) ? 'bg-white/20' : ''
+                  }`}
+                  title={isSelectedForDownload(currentMedia.id) ? 'Remove from download selection' : 'Add to download selection'}
+                >
+                  {isSelectedForDownload(currentMedia.id) ? (
+                    <Check className="h-4 w-4 text-blue-400" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowMetadata(!showMetadata)}
+                  className="text-white hover:bg-white/20"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleDownload}
+                  className="text-white hover:bg-white/20"
+                  title={`Download this ${isVideo ? 'video' : 'photo'}`}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="text-white hover:bg-white/20"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -267,98 +356,103 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
           variant="ghost"
           size="icon"
           onClick={goToPrevious}
-          className="absolute left-4 z-10 text-white hover:bg-white/20 h-12 w-12"
+          className="absolute left-2 md:left-4 z-10 text-white hover:bg-white/20 h-8 w-8 md:h-12 md:w-12 opacity-60 md:opacity-100"
         >
-          <ChevronLeft className="h-8 w-8" />
+          <ChevronLeft className="h-5 w-5 md:h-8 md:w-8" />
         </Button>
       )}
-      
+
       {currentIndex < media.length - 1 && (
         <Button
           variant="ghost"
           size="icon"
           onClick={goToNext}
-          className="absolute right-4 z-10 text-white hover:bg-white/20 h-12 w-12"
+          className="absolute right-2 md:right-4 z-10 text-white hover:bg-white/20 h-8 w-8 md:h-12 md:w-12 opacity-60 md:opacity-100"
         >
-          <ChevronRight className="h-8 w-8" />
+          <ChevronRight className="h-5 w-5 md:h-8 md:w-8" />
         </Button>
       )}
 
       {/* Main media container */}
-      <div className="relative max-w-screen-lg max-h-screen w-full h-full flex items-center justify-center p-4">
+      <div {...swipeHandlers} className="relative max-w-screen-lg max-h-screen w-full h-full flex items-center justify-center p-4">
         {mediaLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div>
         )}
-        
-        {isVideo ? (
-          <div className="relative">
-            <video
-              ref={videoRef}
-              src={currentMedia.originalUrl || `/api/videos/${currentMedia.id}/serve?size=original`}
-              className="max-w-full max-h-full object-contain"
-              onLoadedData={handleVideoLoad}
-              onPlay={handleVideoPlay}
-              onPause={handleVideoPause}
-              onTimeUpdate={handleVideoTimeUpdate}
-              onEnded={handleVideoEnded}
-              onError={() => setMediaLoading(false)}
-              controls={false}
-            />
-            
-            {/* Custom video controls */}
-            <div className="absolute bottom-4 left-4 right-4 bg-black/50 rounded-lg p-4">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={togglePlayPause}
-                  className="text-white hover:bg-white/20"
-                >
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                
-                <div className="flex-1">
-                  <div className="bg-white/20 rounded-full h-2 relative">
-                    <div 
-                      className="bg-white rounded-full h-2 transition-all" 
-                      style={{ width: `${progress}%` }}
-                    />
+
+        <div key={currentIndex} className="animate-in fade-in duration-150 flex items-center justify-center max-w-full max-h-full">
+          {isVideo ? (
+            <div className="relative">
+              <video
+                ref={videoRef}
+                src={currentMedia.originalUrl || `/api/videos/${currentMedia.id}/serve?size=original`}
+                className="max-w-full max-h-full object-contain"
+                onLoadedData={handleVideoLoad}
+                onPlay={handleVideoPlay}
+                onPause={handleVideoPause}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onEnded={handleVideoEnded}
+                onError={() => setMediaLoading(false)}
+                controls={false}
+              />
+
+              {/* Custom video controls */}
+              <div
+                className="absolute bottom-4 left-4 right-4 bg-black/50 rounded-lg p-4"
+                onTouchStart={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={togglePlayPause}
+                    className="text-white hover:bg-white/20"
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </Button>
+
+                  <div className="flex-1">
+                    <div className="bg-white/20 rounded-full h-2 relative">
+                      <div
+                        className="bg-white rounded-full h-2 transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
                   </div>
+
+                  <div className="text-white text-sm">
+                    {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(duration)}
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleMute}
+                    className="text-white hover:bg-white/20"
+                  >
+                    {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  </Button>
                 </div>
-                
-                <div className="text-white text-sm">
-                  {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(duration)}
-                </div>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleMute}
-                  className="text-white hover:bg-white/20"
-                >
-                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
               </div>
             </div>
-          </div>
-        ) : (
-          <img
-            src={currentMedia.originalUrl || `/api/photos/${currentMedia.id}/serve?size=large`}
-            alt={currentMedia.filename}
-            className="max-w-full max-h-full object-contain"
-            onLoad={() => setMediaLoading(false)}
-            onError={() => setMediaLoading(false)}
-          />
-        )}
+          ) : (
+            <img
+              src={currentMedia.originalUrl || `/api/photos/${currentMedia.id}/serve?size=large`}
+              alt={currentMedia.filename}
+              className="max-w-full max-h-full object-contain"
+              onLoad={() => setMediaLoading(false)}
+              onError={() => setMediaLoading(false)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Metadata panel */}
       {showMetadata && (
-        <div className="absolute bottom-4 right-4 z-20">
+        <div className="absolute bottom-0 left-0 right-0 md:bottom-4 md:right-4 md:left-auto z-20">
           {isVideo ? (
-            <Card className="w-96 max-h-[80vh] overflow-hidden">
+            <Card className="w-full md:w-96 max-h-[50vh] md:max-h-[80vh] overflow-hidden rounded-b-none md:rounded-b-lg">
               <CardContent className="p-4">
                 <h3 className="font-semibold text-sm mb-2">Video Information</h3>
                 <div className="space-y-2 text-sm">
@@ -387,6 +481,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
                 metadata: currentMedia.metadata || null,
                 orientation: currentMedia.orientation,
               }}
+              className="!w-full md:!w-96 !max-h-[50vh] md:!max-h-[80vh] rounded-b-none md:rounded-b-lg"
             />
           )}
         </div>
