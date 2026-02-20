@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { getS3Service } from '@/lib/s3';
 import { getPhotoOrientation } from '@/lib/photo-orientation';
+import { buildSlugPathFromMap } from '@/lib/slug-paths';
 import type {
   AlbumPageData,
   BreadcrumbItem,
@@ -398,23 +399,6 @@ export async function getAlbumPageData(
     slugByPath.set(desc.path, desc.slug);
   }
 
-  // Helper: build slug path for a descendant using stored slug values
-  function buildSlugPath(fsPath: string): string {
-    const segments = fsPath.split('/');
-    const slugSegmentsResult: string[] = [];
-    let accum = '';
-    for (const seg of segments) {
-      accum = accum ? `${accum}/${seg}` : seg;
-      const slug = slugByPath.get(accum);
-      if (slug) {
-        slugSegmentsResult.push(slug);
-      } else {
-        // Fallback: generate slug from segment name
-        slugSegmentsResult.push(seg.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
-      }
-    }
-    return slugSegmentsResult.join('/');
-  }
 
   // Helper: get all descendant IDs that belong to a child's subtree
   function getSubtreeIds(childPath: string): string[] {
@@ -585,7 +569,7 @@ export async function getAlbumPageData(
     return {
       id: child.id,
       path: child.path,
-      slugPath: buildSlugPath(child.path),
+      slugPath: buildSlugPathFromMap(child.path, slugByPath),
       name: child.name,
       description: child.description,
       photoCount: child._count.photos + (videoCountMap.get(child.id) || 0),

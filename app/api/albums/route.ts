@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
+import { pathToSlugPath } from '@/lib/slug-paths';
 
 export async function GET() {
   try {
@@ -41,25 +42,8 @@ export async function GET() {
         coverS3Key = featuredAlbumRaw.photos[0]?.thumbnails[0]?.s3Key;
       }
 
-      // Build full slugPath for nested albums by walking path segments upward
-      let slugPath = featuredAlbumRaw.slug;
-      if (featuredAlbumRaw.path.includes('/')) {
-        const pathSegments = featuredAlbumRaw.path.split('/');
-        // Build all ancestor paths
-        const ancestorPaths: string[] = [];
-        for (let i = 0; i < pathSegments.length; i++) {
-          ancestorPaths.push(pathSegments.slice(0, i + 1).join('/'));
-        }
-        const ancestors = await prisma.album.findMany({
-          where: { path: { in: ancestorPaths } },
-          select: { path: true, slug: true },
-        });
-        const slugByPath = new Map(ancestors.map((a) => [a.path, a.slug]));
-        const slugSegments = ancestorPaths.map(
-          (p) => slugByPath.get(p) || p.split('/').pop()!.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        );
-        slugPath = slugSegments.join('/');
-      }
+      // Build full slugPath for nested albums
+      const slugPath = await pathToSlugPath(featuredAlbumRaw.path);
 
       featuredAlbum = {
         id: featuredAlbumRaw.id,
