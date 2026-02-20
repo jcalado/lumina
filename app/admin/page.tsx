@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { getAllHealthChecks } from "@/lib/health"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
-import { useTranslations } from "next-intl"
+import { useTranslations, getTranslations } from "next-intl"
 
 interface StorageUsage {
   remote: {
@@ -100,7 +100,7 @@ function DashboardStatsLoading() {
 }
 
 async function DashboardStats() {
-  const t = useTranslations("adminDashboard")
+  const t = await getTranslations("adminDashboard")
   const stats = await getDashboardStats()
   const totalMedia = stats.photoCount + stats.videoCount
 
@@ -228,7 +228,7 @@ function SystemStatusLoading() {
 }
 
 async function SystemStatus() {
-  const t = useTranslations("adminDashboard")
+  const t = await getTranslations("adminDashboard")
   const health = await getAllHealthChecks()
 
   const statusLabels = { online: t("online"), degraded: t("degraded"), offline: t("offline") }
@@ -382,7 +382,7 @@ function RecentActivityLoading() {
 }
 
 async function RecentActivity() {
-  const t = useTranslations("adminDashboard")
+  const t = await getTranslations("adminDashboard")
   const [recentAlbums, last24hPhotos, last24hVideos] = await Promise.all([
     prisma.album.findMany({
       orderBy: { updatedAt: 'desc' },
