@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { Folder, Heart, Home } from 'lucide-react';
 import { AlbumHeader } from '@/components/Album/AlbumHeader';
@@ -103,21 +103,49 @@ export function AlbumClient({ initialData, slugPath }: AlbumClientProps) {
     }
   }, [loadingMore, hasMore, currentPage, sortOrder, fetchPage]);
 
+  // --------------- Lightbox URL sync ---------------
+  const setPhotoParam = useCallback((photoId: string | null) => {
+    const url = new URL(window.location.href);
+    if (photoId) {
+      url.searchParams.set('photo', photoId);
+    } else {
+      url.searchParams.delete('photo');
+    }
+    window.history.replaceState(null, '', url.toString());
+  }, []);
+
+  // On mount, open lightbox if ?photo= is present
+  useEffect(() => {
+    const photoId = new URLSearchParams(window.location.search).get('photo');
+    if (!photoId) return;
+    const index = allMedia.findIndex(m => m.id === photoId);
+    if (index >= 0) {
+      setCurrentMediaIndex(index);
+      setLightboxOpen(true);
+    }
+  // Only run on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // --------------- Lightbox ---------------
   const openLightbox = useCallback((filteredIndex: number) => {
     const filteredItem = filteredMedia[filteredIndex];
     const originalIndex = allMedia.findIndex(m => m.id === filteredItem.id);
-    setCurrentMediaIndex(originalIndex >= 0 ? originalIndex : filteredIndex);
+    const idx = originalIndex >= 0 ? originalIndex : filteredIndex;
+    setCurrentMediaIndex(idx);
     setLightboxOpen(true);
-  }, [filteredMedia, allMedia]);
+    setPhotoParam(allMedia[idx]?.id ?? null);
+  }, [filteredMedia, allMedia, setPhotoParam]);
 
   const closeLightbox = useCallback(() => {
     setLightboxOpen(false);
-  }, []);
+    setPhotoParam(null);
+  }, [setPhotoParam]);
 
   const navigateToMedia = useCallback((index: number) => {
     setCurrentMediaIndex(index);
-  }, []);
+    setPhotoParam(allMedia[index]?.id ?? null);
+  }, [allMedia, setPhotoParam]);
 
   // --------------- Download ---------------
   const handleDownload = useCallback(async () => {
