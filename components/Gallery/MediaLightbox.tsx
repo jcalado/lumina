@@ -205,19 +205,17 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (!isOpen || !currentMedia) return null;
-
-  const goToPrevious = () => {
+  const goToPrevious = useCallback(() => {
     if (currentIndex > 0) {
       onNavigate(currentIndex - 1);
     }
-  };
+  }, [currentIndex, onNavigate]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     if (currentIndex < media.length - 1) {
       onNavigate(currentIndex + 1);
     }
-  };
+  }, [currentIndex, media.length, onNavigate]);
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => goToNext(),
@@ -229,6 +227,8 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
     delta: 50,
     swipeDuration: 500,
   });
+
+  if (!isOpen || !currentMedia) return null;
 
   const handleDownload = () => {
     const endpoint = isVideo ? `/api/videos/${currentMedia.id}/download` : `/api/photos/${currentMedia.id}/download`;
