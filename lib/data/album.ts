@@ -30,6 +30,7 @@ export async function getAlbumPageData(
   // ---------------------------------------------------------------
   const slugSegments = slugPath ? slugPath.split('/') : [];
   const breadcrumbs: BreadcrumbItem[] = [];
+  const ancestorSlugByPath = new Map<string, string>();
   let albumPath = '';
 
   for (let i = 0; i < slugSegments.length; i++) {
@@ -52,6 +53,7 @@ export async function getAlbumPageData(
     if (!match) return null;
 
     albumPath = match.path;
+    ancestorSlugByPath.set(match.path, match.slug);
     const slugSoFar = slugSegments.slice(0, i + 1).join('/');
     breadcrumbs.push({ name: match.name, href: `/albums/${slugSoFar}` });
   }
@@ -386,11 +388,13 @@ export async function getAlbumPageData(
 
   // Build a map from album path to slug for fast slug-path construction
   const slugByPath = new Map<string, string>();
+  // Include ancestor and current album slugs (resolved during breadcrumb building)
+  for (const [path, slug] of ancestorSlugByPath) {
+    slugByPath.set(path, slug);
+  }
   for (const desc of allDescendants) {
     slugByPath.set(desc.path, desc.slug);
   }
-  // Also include the current album's breadcrumb segments (already resolved above)
-  // and ensure direct children paths are covered (they are in allDescendants)
 
   // Helper: build slug path for a descendant using stored slug values
   function buildSlugPath(fsPath: string): string {
