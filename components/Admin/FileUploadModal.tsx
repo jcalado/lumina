@@ -6,11 +6,11 @@ import {
   Upload,
   X,
   FileImage,
-  Archive,
   CheckCircle,
   AlertCircle,
   Loader2
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface FileUploadState {
   file: File
@@ -37,6 +37,7 @@ export function FileUploadModal({
   albumName,
   onUploadComplete
 }: FileUploadModalProps) {
+  const t = useTranslations('fileUpload')
   const [dragActive, setDragActive] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadStates, setUploadStates] = useState<FileUploadState[]>([])
@@ -83,24 +84,26 @@ export function FileUploadModal({
     fileList.forEach(file => {
       const ext = '.' + file.name.split('.').pop()?.toLowerCase()
       if (!supportedFormats.includes(ext)) {
-        errors.push(`${file.name}: Unsupported format (${ext})`)
+        errors.push(t('unsupportedFormat', { name: file.name, ext }))
         return
       }
       if (file.size > maxFileSize) {
-        errors.push(`${file.name}: Too large (${formatFileSize(file.size)})`)
+        errors.push(t('fileTooLarge', { name: file.name, size: formatFileSize(file.size) }))
         return
       }
       validFiles.push(file)
     })
 
     if (errors.length > 0) {
-      setError(`Some files were rejected:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`)
+      const shown = errors.slice(0, 5).join('\n')
+      const extra = errors.length > 5 ? '\n' + t('andMore', { count: errors.length - 5 }) : ''
+      setError(`${t('filesRejected')}\n${shown}${extra}`)
     }
 
     setSelectedFiles(validFiles)
 
     if (validFiles.length === 0 && errors.length > 0) {
-      setError('No valid files to upload. Supported formats: ' + supportedFormats.join(', '))
+      setError(t('noValidFiles', { formats: supportedFormats.join(', ') }))
     }
   }
 
@@ -124,7 +127,7 @@ export function FileUploadModal({
           )
           resolve()
         } else {
-          const errMsg = `S3 upload failed (${xhr.status})`
+          const errMsg = t('s3UploadFailed', { status: xhr.status })
           setUploadStates(prev =>
             prev.map(s => s.filename === state.filename ? { ...s, status: 'error', error: errMsg } : s)
           )
@@ -133,7 +136,7 @@ export function FileUploadModal({
       })
 
       xhr.addEventListener('error', () => {
-        const errMsg = 'Network error during upload'
+        const errMsg = t('networkError')
         setUploadStates(prev =>
           prev.map(s => s.filename === state.filename ? { ...s, status: 'error', error: errMsg } : s)
         )
@@ -169,7 +172,7 @@ export function FileUploadModal({
 
       if (!presignResponse.ok) {
         const err = await presignResponse.json()
-        throw new Error(err.error || 'Failed to get upload URLs')
+        throw new Error(err.error || t('failedPresign'))
       }
 
       const { uploads } = await presignResponse.json()
@@ -211,11 +214,6 @@ export function FileUploadModal({
       // 4. Confirm uploads with the server
       setPhase('confirming')
 
-      const successfulUploads = states.filter(s => {
-        // Re-read from the latest state
-        return true // We'll check the actual state below
-      })
-
       // Get the current state to check which uploads succeeded
       let currentStates: FileUploadState[] = []
       setUploadStates(prev => {
@@ -234,7 +232,7 @@ export function FileUploadModal({
       const uploaded = currentStates.filter(s => s.status === 'uploaded')
 
       if (uploaded.length === 0) {
-        throw new Error('No files were uploaded successfully')
+        throw new Error(t('noFilesUploaded'))
       }
 
       const confirmPayload = {
@@ -254,7 +252,7 @@ export function FileUploadModal({
 
       if (!confirmResponse.ok) {
         const err = await confirmResponse.json()
-        throw new Error(err.error || 'Failed to confirm uploads')
+        throw new Error(err.error || t('failedConfirm'))
       }
 
       const confirmResult = await confirmResponse.json()
@@ -275,7 +273,7 @@ export function FileUploadModal({
 
     } catch (error) {
       console.error('Upload error:', error)
-      setError(error instanceof Error ? error.message : 'Upload failed')
+      setError(error instanceof Error ? error.message : t('uploadFailed'))
       setPhase('error')
       setUploading(false)
     }
@@ -320,7 +318,7 @@ export function FileUploadModal({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Upload Photos to {albumName}</DialogTitle>
+          <DialogTitle>{t('title', { album: albumName })}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -344,13 +342,13 @@ export function FileUploadModal({
 
                 <div>
                   <p className="text-lg font-medium">
-                    Drop files here or click to browse
+                    {t('dropOrBrowse')}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
-                    Support for {supportedFormats.join(', ')} files up to 50MB each
+                    {t('supportedFormats', { formats: supportedFormats.join(', '), maxSize: '50MB' })}
                   </p>
                   <p className="text-xs text-gray-400 mt-2">
-                    Files are uploaded directly to cloud storage
+                    {t('directToCloud')}
                   </p>
                 </div>
 
@@ -359,7 +357,7 @@ export function FileUploadModal({
                   variant="outline"
                 >
                   <FileImage className="h-4 w-4 mr-2" />
-                  Choose Files
+                  {t('chooseFiles')}
                 </Button>
 
                 <input
@@ -379,19 +377,19 @@ export function FileUploadModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium">
-                  Selected Files ({selectedFiles.length})
+                  {t('selectedFiles', { count: selectedFiles.length })}
                 </h3>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedFiles([])}
                 >
-                  Clear All
+                  {t('clearAll')}
                 </Button>
               </div>
 
               <div className="text-sm text-gray-600 mb-2">
-                Total size: {formatFileSize(selectedFiles.reduce((sum, f) => sum + f.size, 0))}
+                {t('totalSize', { size: formatFileSize(selectedFiles.reduce((sum, f) => sum + f.size, 0)) })}
               </div>
 
               <div className="max-h-48 overflow-y-auto space-y-2">
@@ -419,16 +417,16 @@ export function FileUploadModal({
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>
-                    {phase === 'uploading' && 'Uploading to cloud storage...'}
-                    {phase === 'confirming' && 'Registering files...'}
-                    {phase === 'completed' && 'Upload completed'}
+                    {phase === 'uploading' && t('uploadingToCloud')}
+                    {phase === 'confirming' && t('registeringFiles')}
+                    {phase === 'completed' && t('uploadCompleted')}
                   </span>
                   <span>{overallProgress()}%</span>
                 </div>
                 <Progress value={overallProgress()} />
                 <p className="text-sm text-gray-600">
-                  {completedCount} of {uploadStates.length} files uploaded
-                  {errorCount > 0 && `, ${errorCount} failed`}
+                  {t('filesUploaded', { completed: completedCount, total: uploadStates.length })}
+                  {errorCount > 0 && t('filesFailed', { count: errorCount })}
                 </p>
               </div>
 
@@ -470,7 +468,7 @@ export function FileUploadModal({
                   <div className="flex items-center">
                     <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                     <div className="text-sm text-green-700">
-                      All files uploaded successfully! Thumbnail and metadata processing has been queued.
+                      {t('allFilesSuccess')}
                     </div>
                   </div>
                 </div>
@@ -491,18 +489,18 @@ export function FileUploadModal({
           {/* Actions */}
           <div className="flex justify-end space-x-3">
             <Button variant="outline" onClick={handleClose} disabled={uploading && phase === 'uploading'}>
-              {phase === 'completed' ? 'Close' : 'Cancel'}
+              {phase === 'completed' ? t('close') : t('cancel')}
             </Button>
             {selectedFiles.length > 0 && phase === 'select' && (
               <Button onClick={startUpload}>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload {selectedFiles.length} file(s)
+                {t('uploadCount', { count: selectedFiles.length })}
               </Button>
             )}
             {uploading && (
               <Button disabled>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {phase === 'confirming' ? 'Registering...' : 'Uploading...'}
+                {phase === 'confirming' ? t('registering') : t('uploading')}
               </Button>
             )}
           </div>
