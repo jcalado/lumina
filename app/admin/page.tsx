@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { getAllHealthChecks } from "@/lib/health"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
-import { useTranslations, getTranslations } from "next-intl"
+import { useTranslations } from "next-intl"
+import { getTranslations } from "next-intl/server"
 
 interface StorageUsage {
   remote: {
