@@ -83,6 +83,7 @@ export interface AlbumPageData {
     totalPhotoCount: number;
     subAlbumsCount: number;
   };
+  ogImageUrl: string | null;
   subAlbums: SubAlbumData[];
   photos: PhotoData[];
   videos: VideoData[];

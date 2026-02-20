@@ -88,6 +88,7 @@ export async function getAlbumPageData(
       description: true,
       status: true,
       enabled: true,
+      coverPhotoId: true,
     },
   });
 
@@ -606,7 +607,29 @@ export async function getAlbumPageData(
   }
 
   // ---------------------------------------------------------------
-  // 8. Return AlbumPageData
+  // 8. Resolve OG image: coverPhotoId → first photo → first descendant photo
+  // ---------------------------------------------------------------
+  let ogImageUrl: string | null = null;
+  if (album.coverPhotoId) {
+    const coverPhoto = await prisma.photo.findUnique({
+      where: { id: album.coverPhotoId },
+      select: { thumbnails: { where: { size: 'LARGE' }, select: { s3Key: true }, take: 1 } },
+    });
+    const key = coverPhoto?.thumbnails[0]?.s3Key;
+    if (key) ogImageUrl = s3.getPublicUrl(key);
+  }
+  if (!ogImageUrl && photos.length > 0) {
+    const largeThumbnail = photos[0].thumbnails.find((t) => t.size === 'LARGE');
+    const medThumbnail = photos[0].thumbnails.find((t) => t.size === 'MEDIUM');
+    ogImageUrl = largeThumbnail?.url || medThumbnail?.url || null;
+  }
+  if (!ogImageUrl && subAlbums.length > 0) {
+    const firstThumb = subAlbums[0].thumbnails[0];
+    if (firstThumb?.thumbnailUrl) ogImageUrl = firstThumb.thumbnailUrl;
+  }
+
+  // ---------------------------------------------------------------
+  // 9. Return AlbumPageData
   // ---------------------------------------------------------------
   const totalMedia = totalPhotoCount + totalVideoCount;
 
@@ -621,6 +644,7 @@ export async function getAlbumPageData(
       totalPhotoCount: albumTotalPhotos + albumTotalVideos,
       subAlbumsCount: directChildren.length,
     },
+    ogImageUrl,
     subAlbums,
     photos,
     videos,

@@ -15,6 +15,11 @@ export async function generateMetadata({ params }: AlbumPageProps): Promise<Meta
   return {
     title: data.album.name,
     description: data.album.description || `Photo album: ${data.album.name}`,
+    openGraph: data.ogImageUrl
+      ? {
+          images: [{ url: data.ogImageUrl }],
+        }
+      : undefined,
   };
 }
 
