@@ -27,6 +27,11 @@ const nextConfig = {
   },
   images: {
     minimumCacheTTL: 31536000, // 1 year - photos are immutable
+    localPatterns: [
+      {
+        pathname: '/api/photos/**',
+      },
+    ],
     remotePatterns: [
       {
         protocol: 'https',
