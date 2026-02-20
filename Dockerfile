@@ -1,5 +1,5 @@
-# Use Node.js 20 Alpine for smaller image size
-FROM node:20-alpine AS build-base
+# Use Node.js 22 Alpine for smaller image size
+FROM node:22-alpine AS build-base
 
 # Toolchain and headers for building native modules (build only)
 RUN apk add --no-cache \
@@ -14,7 +14,7 @@ ENV CXXFLAGS="-include cstdint"
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Runtime-only base (no compilers, only shared libs)
-FROM node:20-alpine AS runtime-base
+FROM node:22-alpine AS runtime-base
 RUN apk add --no-cache \
   libc6-compat \
   pixman cairo jpeg giflib librsvg pango \
