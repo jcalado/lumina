@@ -150,7 +150,15 @@
         "toastNameRequired": "O nome do álbum é obrigatório",
         "toastCreateFailed": "Falha ao criar álbum",
         "toastAlbumMoved": "Álbum movido com sucesso",
-        "toastMoveFailed": "Falha ao mover álbum"
+        "toastMoveFailed": "Falha ao mover álbum",
+        "selectCoverPhoto": "Selecionar Foto de Capa",
+        "clearCover": "Limpar Capa",
+        "coverPhotoLabel": "Foto de Capa",
+        "coverPhotoHelp": "Escolha uma foto deste álbum ou dos seus sub-álbuns para usar como imagem de capa.",
+        "noCoverPhoto": "Nenhuma foto de capa selecionada (seleção automática)",
+        "photosFromAlbum": "Fotos de {album}",
+        "saveCover": "Guardar",
+        "noPhotosFound": "Nenhuma foto encontrada neste álbum ou nos seus sub-álbuns."
     },
     "adminSettings": {
         "title": "Definições",

@@ -80,7 +80,15 @@
     "toastNameRequired": "Album name is required",
     "toastCreateFailed": "Failed to create album",
     "toastAlbumMoved": "Album moved successfully",
-    "toastMoveFailed": "Failed to move album"
+    "toastMoveFailed": "Failed to move album",
+    "selectCoverPhoto": "Select Cover Photo",
+    "clearCover": "Clear Cover",
+    "coverPhotoLabel": "Cover Photo",
+    "coverPhotoHelp": "Choose a photo from this album or its sub-albums to use as the cover image.",
+    "noCoverPhoto": "No cover photo selected (auto-selected)",
+    "photosFromAlbum": "Photos from {album}",
+    "saveCover": "Save",
+    "noPhotosFound": "No photos found in this album or its sub-albums."
   },
   "adminSettings": {
     "title": "Settings",

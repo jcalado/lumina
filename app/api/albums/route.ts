@@ -17,17 +17,59 @@ export async function GET() {
     });
 
     const s3 = new S3Service();
-    const coverS3Key = featuredAlbumRaw?.photos[0]?.thumbnails[0]?.s3Key;
-    const featuredAlbum = featuredAlbumRaw
-      ? {
-          id: featuredAlbumRaw.id,
-          name: featuredAlbumRaw.name,
-          description: featuredAlbumRaw.description,
-          slug: featuredAlbumRaw.slug,
-          slugPath: featuredAlbumRaw.slug,
-          coverThumbnailUrl: coverS3Key ? s3.getPublicUrl(coverS3Key) : null,
+
+    let featuredAlbum: {
+      id: string;
+      name: string;
+      description: string | null;
+      slug: string;
+      slugPath: string;
+      coverThumbnailUrl: string | null;
+    } | null = null;
+
+    if (featuredAlbumRaw) {
+      // Resolve cover photo: prefer coverPhotoId, fall back to first direct photo
+      let coverS3Key: string | undefined;
+      if (featuredAlbumRaw.coverPhotoId) {
+        const coverPhoto = await prisma.photo.findUnique({
+          where: { id: featuredAlbumRaw.coverPhotoId },
+          include: { thumbnails: { where: { size: 'MEDIUM' }, take: 1 } },
+        });
+        coverS3Key = coverPhoto?.thumbnails[0]?.s3Key;
+      }
+      if (!coverS3Key) {
+        coverS3Key = featuredAlbumRaw.photos[0]?.thumbnails[0]?.s3Key;
+      }
+
+      // Build full slugPath for nested albums by walking path segments upward
+      let slugPath = featuredAlbumRaw.slug;
+      if (featuredAlbumRaw.path.includes('/')) {
+        const pathSegments = featuredAlbumRaw.path.split('/');
+        // Build all ancestor paths
+        const ancestorPaths: string[] = [];
+        for (let i = 0; i < pathSegments.length; i++) {
+          ancestorPaths.push(pathSegments.slice(0, i + 1).join('/'));
         }
-      : null;
+        const ancestors = await prisma.album.findMany({
+          where: { path: { in: ancestorPaths } },
+          select: { path: true, slug: true },
+        });
+        const slugByPath = new Map(ancestors.map((a) => [a.path, a.slug]));
+        const slugSegments = ancestorPaths.map(
+          (p) => slugByPath.get(p) || p.split('/').pop()!.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        );
+        slugPath = slugSegments.join('/');
+      }
+
+      featuredAlbum = {
+        id: featuredAlbumRaw.id,
+        name: featuredAlbumRaw.name,
+        description: featuredAlbumRaw.description,
+        slug: featuredAlbumRaw.slug,
+        slugPath,
+        coverThumbnailUrl: coverS3Key ? s3.getPublicUrl(coverS3Key) : null,
+      };
+    }
 
     // Single comprehensive query to get everything at once
     const result = await prisma.$queryRaw`

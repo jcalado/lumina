@@ -12,10 +12,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty"
-import { FolderOpen, Image, Eye, EyeOff, CheckCircle2, Video, Plus } from "lucide-react"
+import { FolderOpen, Image, Eye, EyeOff, CheckCircle2, Video, Plus, ImageIcon } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useTranslations } from "next-intl"
 import { AlbumTree } from "@/components/Admin/AlbumTree"
+import { CoverPhotoPicker } from "@/components/Admin/CoverPhotoPicker"
 
 interface Album {
   id: string
@@ -26,6 +27,7 @@ interface Album {
   status: "PUBLIC" | "PRIVATE"
   enabled: boolean
   featured: boolean
+  coverPhotoId: string | null
   createdAt: string
   displayOrder?: number
   _count: {
@@ -55,8 +57,10 @@ export default function AdminAlbumsPage() {
     slug: "",
     status: "PUBLIC" as "PUBLIC" | "PRIVATE",
     enabled: true,
-    featured: false
+    featured: false,
+    coverPhotoId: null as string | null,
   })
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false)
 
   useEffect(() => {
     fetchAlbums()
@@ -94,7 +98,8 @@ export default function AdminAlbumsPage() {
       slug: album.slug,
       status: album.status,
       enabled: album.enabled,
-      featured: album.featured
+      featured: album.featured,
+      coverPhotoId: album.coverPhotoId,
     })
   }
 
@@ -452,6 +457,33 @@ export default function AdminAlbumsPage() {
                 {t("featuredHelp")}
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label>{t("coverPhotoLabel")}</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCoverPickerOpen(true)}
+                >
+                  <ImageIcon className="h-4 w-4 mr-1" />
+                  {t("selectCoverPhoto")}
+                </Button>
+                {editForm.coverPhotoId ? (
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                    ID: {editForm.coverPhotoId.slice(0, 12)}...
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {t("noCoverPhoto")}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("coverPhotoHelp")}
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
@@ -550,6 +582,17 @@ export default function AdminAlbumsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Cover Photo Picker */}
+      {editingAlbum && (
+        <CoverPhotoPicker
+          isOpen={coverPickerOpen}
+          onClose={() => setCoverPickerOpen(false)}
+          albumId={editingAlbum.id}
+          currentCoverPhotoId={editForm.coverPhotoId}
+          onSelect={(photoId) => setEditForm({ ...editForm, coverPhotoId: photoId })}
+        />
+      )}
     </div>
   )
 }

@@ -42,6 +42,7 @@ interface Album {
   status: "PUBLIC" | "PRIVATE"
   enabled: boolean
   featured: boolean
+  coverPhotoId: string | null
   createdAt: string
   displayOrder?: number
   _count: {
@@ -141,6 +142,7 @@ export function AlbumTree({
         status: "PUBLIC",
         enabled: true,
         featured: false,
+        coverPhotoId: null,
         createdAt: "",
         _count: { photos: 0, videos: 0 },
       },

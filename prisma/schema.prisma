@@ -20,6 +20,7 @@ model Album {
   status                Status   @default(PUBLIC) // PUBLIC | PRIVATE
   enabled               Boolean  @default(true)
   featured              Boolean  @default(false) // Showcased on landing page
+  coverPhotoId          String?  // Photo ID from this album or any descendant
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   photos                Photo[]

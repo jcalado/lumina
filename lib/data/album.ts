@@ -204,6 +204,7 @@ export async function getAlbumPageData(
       slug: true,
       description: true,
       displayOrder: true,
+      coverPhotoId: true,
       _count: { select: { photos: true } },
     },
     orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
@@ -435,6 +436,28 @@ export async function getAlbumPageData(
     return result;
   }
 
+  // Batch-fetch cover photo thumbnails for children that have coverPhotoId set
+  const coverPhotoIds = directChildren
+    .map((c) => c.coverPhotoId)
+    .filter((id): id is string => id !== null);
+  const coverPhotoThumbnailMap = new Map<string, string>();
+  if (coverPhotoIds.length > 0) {
+    const coverPhotos = await prisma.photo.findMany({
+      where: { id: { in: coverPhotoIds } },
+      select: {
+        id: true,
+        filename: true,
+        thumbnails: { where: { size: 'MEDIUM' }, select: { s3Key: true }, take: 1 },
+      },
+    });
+    for (const cp of coverPhotos) {
+      const s3Key = cp.thumbnails[0]?.s3Key;
+      if (s3Key) {
+        coverPhotoThumbnailMap.set(cp.id, s3Key);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------
   // 6. Build SubAlbumData for each direct child
   // ---------------------------------------------------------------
@@ -534,12 +557,29 @@ export async function getAlbumPageData(
 
     const samples = pickDistributedSamples(allMedia, 5);
 
-    const thumbnails: SubAlbumData['thumbnails'] = samples.map((s) => ({
+    let thumbnails: SubAlbumData['thumbnails'] = samples.map((s) => ({
       mediaId: s.id,
       filename: s.filename,
       mediaType: s.type,
       thumbnailUrl: s.thumbnailS3Key ? s3.getPublicUrl(s.thumbnailS3Key) : undefined,
     }));
+
+    // If cover photo is set, place it first in thumbnails
+    if (child.coverPhotoId) {
+      const coverS3Key = coverPhotoThumbnailMap.get(child.coverPhotoId);
+      if (coverS3Key) {
+        // Remove cover photo from samples if already present, then prepend
+        thumbnails = thumbnails.filter((t) => t.mediaId !== child.coverPhotoId);
+        thumbnails.unshift({
+          mediaId: child.coverPhotoId,
+          filename: 'cover',
+          mediaType: 'photo',
+          thumbnailUrl: s3.getPublicUrl(coverS3Key),
+        });
+        // Keep max 5 thumbnails
+        if (thumbnails.length > 5) thumbnails = thumbnails.slice(0, 5);
+      }
+    }
 
     return {
       id: child.id,

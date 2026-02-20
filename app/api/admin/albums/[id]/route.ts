@@ -11,6 +11,7 @@ const updateAlbumSchema = z.object({
   status: z.enum(["PUBLIC", "PRIVATE"]).optional(),
   enabled: z.boolean().optional(),
   featured: z.boolean().optional(),
+  coverPhotoId: z.string().nullable().optional(),
 })
 
 // GET /api/admin/albums/[id] - Get album details
@@ -122,6 +123,20 @@ export async function PUT(
     // If name is being updated but slug is not provided, generate new slug
     if (validatedData.name && !validatedData.slug) {
       slugToUpdate = await generateUniqueSlug(validatedData.name, albumParentPath, id);
+    }
+
+    // Validate coverPhotoId if provided
+    if (validatedData.coverPhotoId) {
+      const photo = await prisma.photo.findUnique({
+        where: { id: validatedData.coverPhotoId },
+        select: { id: true },
+      })
+      if (!photo) {
+        return NextResponse.json(
+          { error: "Cover photo not found" },
+          { status: 400 }
+        )
+      }
     }
 
     // Enforce single-featured constraint
