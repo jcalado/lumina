@@ -550,13 +550,24 @@ export default function AdminAlbumsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">{t("parentNone")}</SelectItem>
-                  {albums
-                    .sort((a, b) => a.path.localeCompare(b.path))
-                    .map((album) => (
-                    <SelectItem key={album.id} value={album.path}>
-                      {album.path}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const pathToName = new Map(albums.map((a) => [a.path, a.name]))
+                    return [...albums]
+                      .sort((a, b) => a.path.localeCompare(b.path))
+                      .map((album) => {
+                        const segments = album.path.split("/")
+                        let accum = ""
+                        const nameSegments = segments.map((seg) => {
+                          accum = accum ? `${accum}/${seg}` : seg
+                          return pathToName.get(accum) || seg
+                        })
+                        return (
+                          <SelectItem key={album.id} value={album.path}>
+                            {nameSegments.join(" / ")}
+                          </SelectItem>
+                        )
+                      })
+                  })()}
                 </SelectContent>
               </Select>
             </div>

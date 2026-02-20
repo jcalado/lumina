@@ -298,9 +298,19 @@ export function AlbumTree({
 
                   <div className="min-w-0 flex-1">
                     <div className="font-medium truncate">{album.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {album.path}
-                    </div>
+                    {level > 0 && (
+                      <div className="text-xs text-muted-foreground truncate">
+                        {(() => {
+                          const parts: string[] = []
+                          let current = item.getParent()
+                          while (current && current.getId() !== "root") {
+                            parts.unshift(current.getItemData().album.name)
+                            current = current.getParent()
+                          }
+                          return parts.join(" / ")
+                        })()}
+                      </div>
+                    )}
                   </div>
                 </div>
 
