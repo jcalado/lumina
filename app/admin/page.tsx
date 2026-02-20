@@ -1,11 +1,11 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { FolderOpen, Image, HardDrive, Eye, Video, Settings, Activity, Upload, ArrowRight, Database, Cloud, Server, Cog } from "lucide-react"
+import { FolderOpen, Image, HardDrive, Eye, Settings, Activity, Upload, ArrowRight, Database, Cloud, Server, Cog } from "lucide-react"
 import { prisma } from "@/lib/prisma"
-import { getAllHealthChecks, type HealthCheckResult } from "@/lib/health"
+import { getAllHealthChecks } from "@/lib/health"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 
 interface StorageUsage {
   remote: {
@@ -100,43 +100,41 @@ function DashboardStatsLoading() {
 }
 
 async function DashboardStats() {
+  const t = useTranslations("adminDashboard")
   const stats = await getDashboardStats()
   const totalMedia = stats.photoCount + stats.videoCount
 
   const statCards = [
     {
-      title: "Total Albums",
+      title: t("totalAlbums"),
       value: stats.albumCount,
-      description: "All albums in system",
+      description: t("allAlbumsInSystem"),
       icon: FolderOpen,
       iconBg: "bg-amber-100 dark:bg-amber-900",
       iconColor: "text-amber-600 dark:text-amber-400",
-      accent: "",
     },
     {
-      title: "Public Albums",
+      title: t("publicAlbums"),
       value: stats.publicAlbumCount,
-      description: "Visible to visitors",
+      description: t("visibleToVisitors"),
       icon: Eye,
       iconBg: "bg-emerald-100 dark:bg-emerald-900",
       iconColor: "text-emerald-600 dark:text-emerald-400",
-      accent: "",
     },
     {
-      title: "Total Media",
+      title: t("totalMedia"),
       value: totalMedia.toLocaleString(),
-      description: `${stats.photoCount.toLocaleString()} photos, ${stats.videoCount.toLocaleString()} videos`,
+      description: t("photosAndVideos", { photos: stats.photoCount.toLocaleString(), videos: stats.videoCount.toLocaleString() }),
       icon: Image,
       iconBg: "bg-sky-100 dark:bg-sky-900",
       iconColor: "text-sky-600 dark:text-sky-400",
-      accent: "",
     },
   ]
 
   const storageValue = stats.storageUsage ? stats.storageUsage.remote.sizeFormatted : "--"
   const storageDesc = stats.storageUsage
-    ? `${stats.storageUsage.remote.objectCount.toLocaleString()} objects in S3`
-    : "Loading storage data..."
+    ? t("objectsInS3", { count: stats.storageUsage.remote.objectCount.toLocaleString() })
+    : t("loadingStorageData")
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -164,7 +162,7 @@ async function DashboardStats() {
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Storage Usage</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("storageUsage")}</p>
               <div className="text-3xl font-bold tabular-nums">{storageValue}</div>
               <p className="text-xs text-muted-foreground">{storageDesc}</p>
             </div>
@@ -202,14 +200,13 @@ const statusStyles = {
   },
 }
 
-const statusLabels = { online: 'Online', degraded: 'Degraded', offline: 'Offline' }
-
 function SystemStatusLoading() {
+  const t = useTranslations("adminDashboard")
   return (
     <Card>
       <CardHeader>
-        <CardTitle>System Status</CardTitle>
-        <CardDescription>Current system health</CardDescription>
+        <CardTitle>{t("systemStatus")}</CardTitle>
+        <CardDescription>{t("currentSystemHealth")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3">
@@ -231,20 +228,23 @@ function SystemStatusLoading() {
 }
 
 async function SystemStatus() {
+  const t = useTranslations("adminDashboard")
   const health = await getAllHealthChecks()
 
+  const statusLabels = { online: t("online"), degraded: t("degraded"), offline: t("offline") }
+
   const services = [
-    { name: 'Database', icon: Database, result: health.database },
-    { name: 'S3 Storage', icon: Cloud, result: health.s3 },
-    { name: 'Redis', icon: Server, result: health.redis },
-    { name: 'Jobs', icon: Cog, result: health.jobs },
+    { name: t("database"), icon: Database, result: health.database },
+    { name: t("s3Storage"), icon: Cloud, result: health.s3 },
+    { name: t("redis"), icon: Server, result: health.redis },
+    { name: t("jobs"), icon: Cog, result: health.jobs },
   ]
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>System Status</CardTitle>
-        <CardDescription>Current system health</CardDescription>
+        <CardTitle>{t("systemStatus")}</CardTitle>
+        <CardDescription>{t("currentSystemHealth")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3">
@@ -280,10 +280,11 @@ async function SystemStatus() {
 }
 
 function QuickActions() {
+  const t = useTranslations("adminDashboard")
   const actions = [
     {
-      label: 'Upload Photos',
-      description: 'Add new photos to albums',
+      label: t("uploadPhotos"),
+      description: t("addNewPhotos"),
       href: '/admin/albums',
       icon: Upload,
       iconBg: 'bg-sky-100 dark:bg-sky-900',
@@ -292,8 +293,8 @@ function QuickActions() {
       hoverBg: 'hover:bg-sky-50/50 dark:hover:bg-sky-950/20',
     },
     {
-      label: 'Manage Albums',
-      description: 'Organize and edit albums',
+      label: t("manageAlbums"),
+      description: t("organizeAlbums"),
       href: '/admin/albums',
       icon: FolderOpen,
       iconBg: 'bg-amber-100 dark:bg-amber-900',
@@ -302,8 +303,8 @@ function QuickActions() {
       hoverBg: 'hover:bg-amber-50/50 dark:hover:bg-amber-950/20',
     },
     {
-      label: 'View Jobs',
-      description: 'Monitor background tasks',
+      label: t("viewJobs"),
+      description: t("monitorTasks"),
       href: '/admin/jobs',
       icon: Activity,
       iconBg: 'bg-violet-100 dark:bg-violet-900',
@@ -312,8 +313,8 @@ function QuickActions() {
       hoverBg: 'hover:bg-violet-50/50 dark:hover:bg-violet-950/20',
     },
     {
-      label: 'Settings',
-      description: 'Configure your gallery',
+      label: t("settings"),
+      description: t("configureGallery"),
       href: '/admin/settings',
       icon: Settings,
       iconBg: 'bg-slate-100 dark:bg-slate-800',
@@ -326,8 +327,8 @@ function QuickActions() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Quick Actions</CardTitle>
-        <CardDescription>Common admin tasks</CardDescription>
+        <CardTitle>{t("quickActions")}</CardTitle>
+        <CardDescription>{t("commonAdminTasks")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-3">
@@ -359,11 +360,12 @@ function QuickActions() {
 }
 
 function RecentActivityLoading() {
+  const t = useTranslations("adminDashboard")
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Activity</CardTitle>
-        <CardDescription>Latest album updates</CardDescription>
+        <CardTitle>{t("recentActivity")}</CardTitle>
+        <CardDescription>{t("latestAlbumUpdates")}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -380,6 +382,7 @@ function RecentActivityLoading() {
 }
 
 async function RecentActivity() {
+  const t = useTranslations("adminDashboard")
   const [recentAlbums, last24hPhotos, last24hVideos] = await Promise.all([
     prisma.album.findMany({
       orderBy: { updatedAt: 'desc' },
@@ -394,21 +397,23 @@ async function RecentActivity() {
     }),
   ])
 
+  const newMediaCount = last24hPhotos + last24hVideos
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Activity</CardTitle>
+        <CardTitle>{t("recentActivity")}</CardTitle>
         <CardDescription>
-          {last24hPhotos + last24hVideos > 0
-            ? `${last24hPhotos + last24hVideos} new media in the last 24h`
-            : 'No new media in the last 24h'}
+          {newMediaCount > 0
+            ? t("newMediaLast24h", { count: newMediaCount })
+            : t("noNewMedia")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {recentAlbums.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Updated Albums</h4>
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">{t("updatedAlbums")}</h4>
               <div className="space-y-2">
                 {recentAlbums.map((album) => (
                   <div key={album.id} className="flex items-center justify-between text-sm">
@@ -426,7 +431,7 @@ async function RecentActivity() {
           )}
 
           {recentAlbums.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+            <p className="text-sm text-muted-foreground text-center py-4">{t("noRecentActivity")}</p>
           )}
         </div>
       </CardContent>
