@@ -194,8 +194,8 @@ export function FileUploadModal({
 
       setUploadStates(states)
 
-      // 3. Upload files to S3 in parallel (batch of 4 at a time)
-      const batchSize = 4
+      // 3. Upload files to S3 in parallel (batch of 12 at a time)
+      const batchSize = 12
       for (let i = 0; i < states.length; i += batchSize) {
         const batch = states.slice(i, i + batchSize)
 
