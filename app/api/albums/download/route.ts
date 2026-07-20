@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
 import { slugPathToPath } from '@/lib/slug-paths';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           // Create a ZIP archive
-          const archive = archiver('zip', {
+          const archive = new ZipArchive({
             zlib: { level: 0 }, // No compression for better streaming performance
             statConcurrency: 1, // Process one file at a time to maintain order
             highWaterMark: 1024 * 16, // Smaller buffer for faster initial response

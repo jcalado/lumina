@@ -58,7 +58,7 @@ export async function generateThumbnails(jobData: ThumbnailJobData): Promise<{ t
       try {
         // Process image with automatic orientation correction
         let processedImage = sharp(imageBuffer, { 
-          failOnError: false,
+          failOn: 'none',
           limitInputPixels: false
         })
         .rotate(); // This automatically applies EXIF orientation and removes EXIF data

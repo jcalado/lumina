@@ -118,7 +118,7 @@ async function generateThumbnailsForPhoto(photoTask: PhotoTask): Promise<Thumbna
       try {
         // Process image with automatic orientation correction
         let processedImage = sharp(imageBuffer, { 
-          failOnError: false,
+          failOn: 'none',
           limitInputPixels: false
         }).rotate(); // Auto-applies EXIF orientation
         

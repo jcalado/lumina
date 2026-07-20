@@ -21,10 +21,6 @@ const nextConfig = {
   },
   // Enable standalone output for Docker
   output: 'standalone',
-  // Increase request size limits for file uploads
-  serverRuntimeConfig: {
-    maxRequestSize: '2gb',
-  },
   images: {
     minimumCacheTTL: 31536000, // 1 year - photos are immutable
     localPatterns: [

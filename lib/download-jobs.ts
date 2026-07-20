@@ -1,7 +1,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { prisma } from '@/lib/prisma';
 import { slugPathToPath } from '@/lib/slug-paths';
 import { S3Service } from '@/lib/s3';
@@ -137,7 +137,7 @@ async function writeZip(outPath: string, filename: string, items: Array<{ name: 
 
   await new Promise<void>((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
 
     output.on('close', () => resolve());
     archive.on('warning', (err) => {

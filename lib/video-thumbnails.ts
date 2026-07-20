@@ -106,7 +106,7 @@ export async function generateVideoThumbnails(jobData: VideoThumbnailJobData): P
         try {
           // Process frame image
           let processedImage = sharp(frameBuffer, { 
-            failOnError: false,
+            failOn: 'none',
             limitInputPixels: false
           });
           
