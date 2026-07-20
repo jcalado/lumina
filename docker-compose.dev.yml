@@ -56,9 +56,12 @@ services:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
       - NEXTAUTH_SECRET=your-super-secure-production-secret-key
-      - NEXTAUTH_URL=https://yourdomain.com
+      - NEXTAUTH_URL=http://localhost:3010
       - ADMIN_EMAIL=admin@yourdomain.com
       - ADMIN_PASSWORD=your-secure-admin-password
+      # Dev Auto-Login button (NODE_ENV=development) — matches the seeded admin
+      - NEXT_PUBLIC_DEV_ADMIN_EMAIL=admin@yourdomain.com
+      - NEXT_PUBLIC_DEV_ADMIN_PASSWORD=your-secure-admin-password
       - S3_ENDPOINT=https://s3.amazonaws.com
       - S3_BUCKET=your-production-bucket
       - S3_ACCESS_KEY=your-production-access-key
