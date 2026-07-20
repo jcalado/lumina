@@ -11,14 +11,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const body = await request.json();
 
+  // Validates an optional positive integer field; returns a 400 response on bad input.
+  const badInt = (v: unknown, opts: { allowNull?: boolean } = {}) =>
+    !(v === undefined || (opts.allowNull && v === null) || (typeof v === 'number' && Number.isInteger(v) && v > 0));
+
   const data: Record<string, unknown> = {};
   if (typeof body.name === 'string') data.name = body.name;
   if ('destinationAlbumId' in body) data.destinationAlbumId = body.destinationAlbumId || null;
   if ('enabled' in body) data.enabled = !!body.enabled;
   if ('expiresAt' in body) data.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
-  if ('maxUploads' in body) data.maxUploads = body.maxUploads ?? null;
-  if ('maxFilesPerSubmission' in body) data.maxFilesPerSubmission = body.maxFilesPerSubmission;
-  if ('maxFileSizeBytes' in body) data.maxFileSizeBytes = body.maxFileSizeBytes;
+  if ('maxUploads' in body) {
+    if (badInt(body.maxUploads, { allowNull: true })) return NextResponse.json({ error: 'maxUploads must be a positive integer or null' }, { status: 400 });
+    data.maxUploads = body.maxUploads ?? null;
+  }
+  if ('maxFilesPerSubmission' in body) {
+    if (badInt(body.maxFilesPerSubmission)) return NextResponse.json({ error: 'maxFilesPerSubmission must be a positive integer' }, { status: 400 });
+    data.maxFilesPerSubmission = body.maxFilesPerSubmission;
+  }
+  if ('maxFileSizeBytes' in body) {
+    if (badInt(body.maxFileSizeBytes)) return NextResponse.json({ error: 'maxFileSizeBytes must be a positive integer' }, { status: 400 });
+    data.maxFileSizeBytes = body.maxFileSizeBytes;
+  }
   if ('allowVideos' in body) data.allowVideos = !!body.allowVideos;
   if (body.rotateToken === true) data.token = generateDropboxToken();
   if ('passphrase' in body) data.passphraseHash = body.passphrase ? await hashPassphrase(body.passphrase) : null;

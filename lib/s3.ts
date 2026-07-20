@@ -107,7 +107,9 @@ export class S3Service {
     this.initializeBucket();
     const command = new CopyObjectCommand({
       Bucket: this.bucket,
-      CopySource: `${this.bucket}/${encodeURIComponent(srcKey)}`,
+      // Encode each path segment but preserve '/' separators — S3/MinIO look up
+      // the source by literal key, and encoding '/' to %2F would 404 (NoSuchKey).
+      CopySource: `${this.bucket}/${srcKey.split('/').map(encodeURIComponent).join('/')}`,
       Key: destKey,
     });
     await getS3Client().send(command);

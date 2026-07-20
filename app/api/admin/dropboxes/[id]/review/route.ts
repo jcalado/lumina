@@ -9,6 +9,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const { action, fileIds, destinationAlbumId, reason } = await request.json();
 
+  if (action !== 'approve' && action !== 'reject') {
+    return NextResponse.json({ error: "action must be 'approve' or 'reject'" }, { status: 400 });
+  }
   if (!Array.isArray(fileIds) || fileIds.length === 0) {
     return NextResponse.json({ error: 'fileIds required' }, { status: 400 });
   }

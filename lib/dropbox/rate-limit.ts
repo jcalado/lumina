@@ -7,8 +7,16 @@ function getRedis(): IORedis {
   return redis;
 }
 
+const PLACEHOLDER_SALT = 'change-me-to-a-long-random-string';
+
 export function hashIp(ip: string): string {
   const salt = process.env.DROPBOX_IP_HASH_SALT || '';
+  // Fail closed in production: an empty/placeholder salt makes the hash trivially
+  // reversible over the IPv4 space, defeating the "IP stored only as a salted hash"
+  // guarantee. In dev we tolerate it.
+  if ((!salt || salt === PLACEHOLDER_SALT) && process.env.NODE_ENV === 'production') {
+    throw new Error('DROPBOX_IP_HASH_SALT must be set to a non-placeholder value in production');
+  }
   return createHash('sha256').update(`${salt}:${ip}`).digest('hex');
 }
 
