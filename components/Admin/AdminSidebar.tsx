@@ -16,6 +16,7 @@ import {
   Camera,
   LogOut,
   ChevronsUpDown,
+  Inbox,
 } from "lucide-react"
 import {
   Sidebar,
@@ -47,6 +48,7 @@ const allNavigationItems: NavItem[] = [
   { key: "jobs", href: "/admin/jobs", icon: Activity, adminOnly: true },
   { key: "logs", href: "/admin/logs", icon: FileText, adminOnly: true },
   { key: "analytics", href: "/admin/analytics", icon: BarChart3, adminOnly: true },
+  { key: "dropboxes", href: "/admin/dropboxes", icon: Inbox, adminOnly: true },
   { key: "users", href: "/admin/users", icon: Users, adminOnly: true },
   { key: "settings", href: "/admin/settings", icon: Settings, adminOnly: true },
 ]
