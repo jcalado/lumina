@@ -5,6 +5,7 @@ import { verifyPassphrase } from '@/lib/dropbox/passphrase';
 import { checkRateLimit, hashIp, getClientIp } from '@/lib/dropbox/rate-limit';
 import { validateDeclaredFiles, resolveMediaKind, sanitizeFilename, submissionMetaSchema, type DeclaredFile } from '@/lib/dropbox/validation';
 import { getS3Service } from '@/lib/s3';
+import { getContentType } from '@/lib/utils';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -29,7 +30,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const meta = submissionMetaSchema.safeParse(body?.meta ?? {});
   if (!meta.success) return NextResponse.json({ error: 'Invalid submission details' }, { status: 400 });
 
-  const files = (body?.files ?? []) as DeclaredFile[];
+  const rawFiles = body?.files;
+  if (
+    !Array.isArray(rawFiles) ||
+    rawFiles.some((f) => !f || typeof f !== 'object' || typeof f.filename !== 'string' || typeof f.size !== 'number')
+  ) {
+    return NextResponse.json({ error: 'Invalid files' }, { status: 400 });
+  }
+  const files = rawFiles as DeclaredFile[];
   const validation = validateDeclaredFiles(files, {
     maxFiles: dropbox.maxFilesPerSubmission,
     maxFileSizeBytes: dropbox.maxFileSizeBytes,
@@ -53,10 +61,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     files.map(async (f) => {
       const safe = sanitizeFilename(f.filename);
       const kind = resolveMediaKind(f.filename)!; // validated above
+      // Derive content-type server-side from the (validated) extension — never
+      // trust the client's declared contentType, which is locked into the
+      // presigned PUT and persisted.
+      const contentType = getContentType(safe);
       const s3Key = `_dropbox/${dropbox.id}/${submission.id}/${crypto.randomUUID()}_${safe}`;
-      const presignedUrl = await s3.getPresignedUploadUrl(s3Key, f.contentType, 900);
+      const presignedUrl = await s3.getPresignedUploadUrl(s3Key, contentType, 900);
       await prisma.dropboxFile.create({
-        data: { submissionId: submission.id, filename: safe, s3Key, contentType: f.contentType, fileSize: f.size, kind },
+        data: { submissionId: submission.id, filename: safe, s3Key, contentType, fileSize: f.size, kind },
       });
       return { filename: safe, s3Key, presignedUrl };
     })
