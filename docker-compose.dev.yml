@@ -38,7 +38,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
-    command: sh -c "npx prisma db push --skip-generate"
+    command: sh -c "npx prisma db push"
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
     depends_on:
