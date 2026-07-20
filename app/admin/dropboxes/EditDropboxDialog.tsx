@@ -5,6 +5,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const NO_ALBUM = '__none';
 
 type Album = { id: string; name: string };
 
@@ -89,10 +94,13 @@ export function EditDropboxDialog({
         <DialogHeader><DialogTitle>{t('editTitle')}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           <Input placeholder={t('name')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <select className="rounded-md border p-2" value={form.destinationAlbumId} onChange={(e) => setForm({ ...form, destinationAlbumId: e.target.value })}>
-            <option value="">{t('noDestinationOption')}</option>
-            {albums.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
+          <Select value={form.destinationAlbumId || NO_ALBUM} onValueChange={(v) => setForm({ ...form, destinationAlbumId: v === NO_ALBUM ? '' : v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_ALBUM}>{t('noDestinationOption')}</SelectItem>
+              {albums.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Input type="number" placeholder={t('maxUploadsPlaceholder')} value={form.maxUploads} onChange={(e) => setForm({ ...form, maxUploads: e.target.value })} />
           <label className="text-xs text-muted-foreground">{t('maxFilesLabel')}
             <Input type="number" value={form.maxFilesPerSubmission} onChange={(e) => setForm({ ...form, maxFilesPerSubmission: e.target.value })} />
@@ -103,12 +111,21 @@ export function EditDropboxDialog({
           <label className="text-xs text-muted-foreground">{t('expiryLabel')}
             <Input type="datetime-local" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} />
           </label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.allowVideos} onChange={(e) => setForm({ ...form, allowVideos: e.target.checked })} /> {t('allowVideos')}</label>
+          <div className="flex items-center gap-2">
+            <Checkbox id="edit-allow-videos" checked={form.allowVideos} onCheckedChange={(v) => setForm({ ...form, allowVideos: v === true })} />
+            <Label htmlFor="edit-allow-videos">{t('allowVideos')}</Label>
+          </div>
           <Input type="password" placeholder={t('newPassphrase')} value={form.newPassphrase} disabled={form.removePassphrase} onChange={(e) => setForm({ ...form, newPassphrase: e.target.value })} />
           {dropbox.hasPassphrase && (
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.removePassphrase} onChange={(e) => setForm({ ...form, removePassphrase: e.target.checked })} /> {t('removePassphrase')}</label>
+            <div className="flex items-center gap-2">
+              <Checkbox id="edit-remove-passphrase" checked={form.removePassphrase} onCheckedChange={(v) => setForm({ ...form, removePassphrase: v === true })} />
+              <Label htmlFor="edit-remove-passphrase">{t('removePassphrase')}</Label>
+            </div>
           )}
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.rotateToken} onChange={(e) => setForm({ ...form, rotateToken: e.target.checked })} /> {t('rotateToken')}</label>
+          <div className="flex items-center gap-2">
+            <Checkbox id="edit-rotate-token" checked={form.rotateToken} onCheckedChange={(v) => setForm({ ...form, rotateToken: v === true })} />
+            <Label htmlFor="edit-rotate-token">{t('rotateToken')}</Label>
+          </div>
           <Button disabled={saving || !form.name} onClick={save}>{t('save')}</Button>
         </div>
       </DialogContent>

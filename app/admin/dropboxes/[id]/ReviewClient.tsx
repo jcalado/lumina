@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type File = { id: string; filename: string; kind: 'IMAGE' | 'VIDEO'; status: string; previewUrl: string | null };
 type Submission = { id: string; uploaderName: string | null; uploaderEmail: string | null; message: string | null; createdAt: string; files: File[] };
@@ -41,10 +42,12 @@ export function ReviewClient({ dropboxId, dropboxName, destinationAlbumId, album
     <div className="flex flex-col gap-4 p-6">
       <h1 className="text-2xl font-semibold">{dropboxName}</h1>
       <div className="sticky top-0 flex items-center gap-2 bg-background py-2">
-        <select className="rounded-md border p-2" value={albumId} onChange={(e) => setAlbumId(e.target.value)}>
-          <option value="">{t('destinationAlbum')}</option>
-          {albums.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        <Select value={albumId} onValueChange={setAlbumId}>
+          <SelectTrigger className="w-56"><SelectValue placeholder={t('destinationAlbum')} /></SelectTrigger>
+          <SelectContent>
+            {albums.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button disabled={selected.size === 0} onClick={() => review('approve')}>{t('approve')}{selected.size ? ` ${selected.size}` : ''}</Button>
         <Button variant="destructive" disabled={selected.size === 0} onClick={() => review('reject')}>{t('reject')}{selected.size ? ` ${selected.size}` : ''}</Button>
         <span className="ml-auto text-sm text-muted-foreground">{t('pendingCount', { count: pending.length })}</span>

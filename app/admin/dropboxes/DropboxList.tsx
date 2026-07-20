@@ -5,7 +5,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EditDropboxDialog } from './EditDropboxDialog';
+
+const NO_ALBUM = '__none';
 
 type Album = { id: string; name: string };
 type Dropbox = {
@@ -70,13 +75,19 @@ export function DropboxList({ albums }: { albums: Album[] }) {
             <DialogHeader><DialogTitle>{t('newDropbox')}</DialogTitle></DialogHeader>
             <div className="flex flex-col gap-3">
               <Input placeholder={t('name')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <select className="rounded-md border p-2" value={form.destinationAlbumId} onChange={(e) => setForm({ ...form, destinationAlbumId: e.target.value })}>
-                <option value="">{t('chooseDestinationLater')}</option>
-                {albums.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <Select value={form.destinationAlbumId || NO_ALBUM} onValueChange={(v) => setForm({ ...form, destinationAlbumId: v === NO_ALBUM ? '' : v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_ALBUM}>{t('chooseDestinationLater')}</SelectItem>
+                  {albums.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <Input type="number" placeholder={t('maxUploadsPlaceholder')} value={form.maxUploads} onChange={(e) => setForm({ ...form, maxUploads: e.target.value })} />
               <Input type="password" placeholder={t('passphraseOptional')} value={form.passphrase} onChange={(e) => setForm({ ...form, passphrase: e.target.value })} />
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.allowVideos} onChange={(e) => setForm({ ...form, allowVideos: e.target.checked })} /> {t('allowVideos')}</label>
+              <div className="flex items-center gap-2">
+                <Checkbox id="create-allow-videos" checked={form.allowVideos} onCheckedChange={(v) => setForm({ ...form, allowVideos: v === true })} />
+                <Label htmlFor="create-allow-videos">{t('allowVideos')}</Label>
+              </div>
               <Button disabled={!form.name} onClick={create}>{t('createButton')}</Button>
             </div>
           </DialogContent>
