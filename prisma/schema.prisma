@@ -27,6 +27,7 @@ model Album {
   photos                Photo[]
   videos                Video[]
   groupAlbums           GroupAlbum[]
+  dropboxes             Dropbox[]
 
   @@map("albums")
 }
@@ -150,6 +151,7 @@ model AdminUser {
   creator   AdminUser? @relation("AdminUserCreatedBy", fields: [createdBy], references: [id])
   created   AdminUser[] @relation("AdminUserCreatedBy")
   groups    UserGroup[]
+  dropboxes Dropbox[]
 
   @@map("admin_users")
 }
@@ -220,5 +222,76 @@ model UserGroup {
   @@index([userId])
   @@index([groupId])
   @@map("user_groups")
+}
+
+model Dropbox {
+  id                    String   @id @default(cuid())
+  token                 String   @unique
+  name                  String
+  destinationAlbumId    String?
+  enabled               Boolean  @default(true)
+  expiresAt             DateTime?
+  passphraseHash        String?
+  maxUploads            Int?
+  acceptedCount         Int      @default(0)
+  maxFilesPerSubmission Int      @default(50)
+  maxFileSizeBytes      Int      @default(52428800)
+  allowVideos           Boolean  @default(true)
+  createdById           String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  destinationAlbum      Album?              @relation(fields: [destinationAlbumId], references: [id], onDelete: SetNull)
+  createdBy             AdminUser           @relation(fields: [createdById], references: [id])
+  submissions           DropboxSubmission[]
+  @@index([token])
+  @@map("dropboxes")
+}
+
+model DropboxSubmission {
+  id            String        @id @default(cuid())
+  dropboxId     String
+  uploaderName  String?
+  uploaderEmail String?
+  message       String?       @db.Text
+  ipHash        String?
+  userAgent     String?
+  reviewedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  dropbox       Dropbox       @relation(fields: [dropboxId], references: [id], onDelete: Cascade)
+  files         DropboxFile[]
+  @@index([dropboxId, createdAt])
+  @@map("dropbox_submissions")
+}
+
+model DropboxFile {
+  id              String            @id @default(cuid())
+  submissionId    String
+  filename        String
+  s3Key           String
+  contentType     String
+  fileSize        Int
+  kind            MediaKind
+  status          DropboxFileStatus @default(PENDING)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  promotedPhotoId String?
+  promotedVideoId String?
+  rejectionReason String?
+  createdAt       DateTime          @default(now())
+  submission      DropboxSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  @@index([submissionId])
+  @@index([status])
+  @@map("dropbox_files")
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum DropboxFileStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
