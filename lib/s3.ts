@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, HeadObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -94,12 +94,22 @@ export class S3Service {
 
   async deleteObject(key: string): Promise<void> {
     this.initializeBucket();
-    
+
     const command = new DeleteObjectCommand({
       Bucket: this.bucket,
       Key: key,
     });
 
+    await getS3Client().send(command);
+  }
+
+  async copyObject(srcKey: string, destKey: string): Promise<void> {
+    this.initializeBucket();
+    const command = new CopyObjectCommand({
+      Bucket: this.bucket,
+      CopySource: `${this.bucket}/${encodeURIComponent(srcKey)}`,
+      Key: destKey,
+    });
     await getS3Client().send(command);
   }
 
