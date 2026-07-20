@@ -64,6 +64,9 @@ services:
       - S3_ACCESS_KEY=your-production-access-key
       - S3_SECRET_KEY=your-production-secret-key
       - S3_REGION=us-east-1
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+      - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+      - DROPBOX_IP_HASH_SALT=change-me-to-a-long-random-string
     ports:
       - "3010:3000"
     depends_on:
