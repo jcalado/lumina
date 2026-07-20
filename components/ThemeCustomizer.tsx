@@ -39,14 +39,23 @@ export function ThemeCustomizer({ accentColor }: ThemeCustomizerProps) {
     };
 
     const hsl = hexToHsl(accentColor);
-    
+
+    // Choose a neutral, readable text color from the accent's *perceived*
+    // brightness (BT.601 luma). HSL lightness misjudges hues like blue as
+    // "light", which produced near-black text on dark-blue accents.
+    const rr = parseInt(accentColor.slice(1, 3), 16);
+    const gg = parseInt(accentColor.slice(3, 5), 16);
+    const bb = parseInt(accentColor.slice(5, 7), 16);
+    const brightness = (rr * 299 + gg * 587 + bb * 114) / 1000; // 0..255
+    const foreground = brightness > 140 ? '0 0% 10%' : '0 0% 98%';
+
     // Set CSS custom properties for the accent color
     document.documentElement.style.setProperty('--primary', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
-    document.documentElement.style.setProperty('--primary-foreground', `${hsl.h} ${hsl.s}% ${hsl.l > 50 ? 10 : 90}%`);
-    
+    document.documentElement.style.setProperty('--primary-foreground', foreground);
+
     // Create variations of the accent color
     document.documentElement.style.setProperty('--accent', `${hsl.h} ${Math.max(hsl.s - 10, 0)}% ${Math.min(hsl.l + 5, 95)}%`);
-    document.documentElement.style.setProperty('--accent-foreground', `${hsl.h} ${hsl.s}% ${hsl.l > 50 ? 10 : 90}%`);
+    document.documentElement.style.setProperty('--accent-foreground', foreground);
     
     // Ring color for focus states
     document.documentElement.style.setProperty('--ring', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
