@@ -425,6 +425,18 @@
         "failed": "Falhou",
         "anonymous": "Anónimo",
         "linkCopied": "Ligação copiada",
-        "copyFailed": "Não foi possível copiar a ligação"
+        "copyFailed": "Não foi possível copiar a ligação",
+        "edit": "Editar",
+        "editTitle": "Editar Dropbox",
+        "save": "Guardar",
+        "saved": "Dropbox atualizado",
+        "saveFailed": "Não foi possível guardar as alterações",
+        "maxFilesLabel": "Máximo de ficheiros por envio",
+        "maxFileSizeLabel": "Tamanho máximo por ficheiro (MB)",
+        "expiryLabel": "Expiração (opcional)",
+        "newPassphrase": "Nova palavra-passe (em branco = manter)",
+        "removePassphrase": "Remover palavra-passe",
+        "rotateToken": "Rodar ligação (invalida a atual)",
+        "noDestinationOption": "Sem destino"
     }
 }

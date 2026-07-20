@@ -5,15 +5,22 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { EditDropboxDialog } from './EditDropboxDialog';
 
 type Album = { id: string; name: string };
-type Dropbox = { id: string; name: string; token: string; enabled: boolean; pendingCount: number; acceptedCount: number; maxUploads: number | null; hasPassphrase: boolean; destinationAlbum: { name: string } | null };
+type Dropbox = {
+  id: string; name: string; token: string; enabled: boolean; pendingCount: number; acceptedCount: number;
+  maxUploads: number | null; hasPassphrase: boolean; destinationAlbum: { name: string } | null;
+  destinationAlbumId: string | null; allowVideos: boolean; expiresAt: string | null;
+  maxFilesPerSubmission: number; maxFileSizeBytes: number;
+};
 
 export function DropboxList({ albums }: { albums: Album[] }) {
   const t = useTranslations('dropbox');
   const { toast } = useToast();
   const [dropboxes, setDropboxes] = useState<Dropbox[]>([]);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Dropbox | null>(null);
   const [form, setForm] = useState({ name: '', destinationAlbumId: '', maxUploads: '', passphrase: '', allowVideos: true });
 
   async function load() {
@@ -89,12 +96,23 @@ export function DropboxList({ albums }: { albums: Album[] }) {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => copyLink(d)}>{t('copyLink')}</Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(d)}>{t('edit')}</Button>
               <Button variant="outline" size="sm" onClick={() => toggle(d)}>{d.enabled ? t('disable') : t('enable')}</Button>
               <Button variant="destructive" size="sm" onClick={() => remove(d)}>{t('delete')}</Button>
             </div>
           </div>
         ))}
       </div>
+
+      {editing && (
+        <EditDropboxDialog
+          key={editing.id}
+          dropbox={editing}
+          albums={albums}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
     </div>
   );
 }

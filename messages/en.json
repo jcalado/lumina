@@ -356,6 +356,18 @@
     "failed": "Failed",
     "anonymous": "Anonymous",
     "linkCopied": "Link copied",
-    "copyFailed": "Couldn't copy the link"
+    "copyFailed": "Couldn't copy the link",
+    "edit": "Edit",
+    "editTitle": "Edit dropbox",
+    "save": "Save",
+    "saved": "Dropbox updated",
+    "saveFailed": "Couldn't save changes",
+    "maxFilesLabel": "Max files per submission",
+    "maxFileSizeLabel": "Max file size (MB)",
+    "expiryLabel": "Expiry (optional)",
+    "newPassphrase": "New passphrase (blank = keep)",
+    "removePassphrase": "Remove passphrase",
+    "rotateToken": "Rotate link (invalidates current)",
+    "noDestinationOption": "No destination"
   }
 }
