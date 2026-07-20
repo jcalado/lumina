@@ -354,6 +354,8 @@
     "pendingCount": "{count, plural, one {# pending} other {# pending}}",
     "pickDestinationFirst": "Pick a destination album first",
     "failed": "Failed",
-    "anonymous": "Anonymous"
+    "anonymous": "Anonymous",
+    "linkCopied": "Link copied",
+    "copyFailed": "Couldn't copy the link"
   }
 }

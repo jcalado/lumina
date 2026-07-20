@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -10,6 +11,7 @@ type Dropbox = { id: string; name: string; token: string; enabled: boolean; pend
 
 export function DropboxList({ albums }: { albums: Album[] }) {
   const t = useTranslations('dropbox');
+  const { toast } = useToast();
   const [dropboxes, setDropboxes] = useState<Dropbox[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', destinationAlbumId: '', maxUploads: '', passphrase: '', allowVideos: true });
@@ -41,6 +43,14 @@ export function DropboxList({ albums }: { albums: Album[] }) {
   async function remove(d: Dropbox) {
     if (!confirm(t('deleteConfirm', { name: d.name }))) return;
     await fetch(`/api/admin/dropboxes/${d.id}`, { method: 'DELETE' }); load();
+  }
+  async function copyLink(d: Dropbox) {
+    try {
+      await navigator.clipboard.writeText(`${location.origin}/submit/${d.token}`);
+      toast({ title: t('linkCopied') });
+    } catch {
+      toast({ title: t('copyFailed'), variant: 'destructive' });
+    }
   }
 
   return (
@@ -78,7 +88,7 @@ export function DropboxList({ albums }: { albums: Album[] }) {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(`${location.origin}/submit/${d.token}`)}>{t('copyLink')}</Button>
+              <Button variant="outline" size="sm" onClick={() => copyLink(d)}>{t('copyLink')}</Button>
               <Button variant="outline" size="sm" onClick={() => toggle(d)}>{d.enabled ? t('disable') : t('enable')}</Button>
               <Button variant="destructive" size="sm" onClick={() => remove(d)}>{t('delete')}</Button>
             </div>

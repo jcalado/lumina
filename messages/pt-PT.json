@@ -423,6 +423,8 @@
         "pendingCount": "{count, plural, one {# pendente} other {# pendentes}}",
         "pickDestinationFirst": "Escolha primeiro um álbum de destino",
         "failed": "Falhou",
-        "anonymous": "Anónimo"
+        "anonymous": "Anónimo",
+        "linkCopied": "Ligação copiada",
+        "copyFailed": "Não foi possível copiar a ligação"
     }
 }
