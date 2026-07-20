@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import { generateSlug, getParentPath } from '../lib/slugs';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   console.log('Populating slugs for all albums (parent-scoped)...');

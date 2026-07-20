@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { Worker, isMainThread, parentPort, workerData } from 'worker_threads';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
@@ -123,7 +123,7 @@ if (!isMainThread) {
 
 // Main thread code
 else {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient();
 
   function validateEnvironment(): string | null {
     const requiredEnvVars = {

@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import { generateUniqueSlug } from '../lib/slugs';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   console.log('Creating test albums with different slug scenarios...');

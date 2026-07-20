@@ -9,6 +9,8 @@ const nextConfig = {
   serverExternalPackages: [
     'sharp',
     '@prisma/client',
+    '@prisma/adapter-pg',
+    'pg',
     'bullmq',
     'ioredis',
     'canvas',

@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function testLocalFilePreference() {
   console.log('🧪 Testing local file preference for blurhash worker...\n');

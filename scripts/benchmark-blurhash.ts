@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 
 import { performance } from 'perf_hooks';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 
 // Import both versions
 import { startBlurhashJob } from './blurhash-worker';
 // Note: We'll need to export the parallel function from the worker-thread file
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function benchmarkBlurhashProcessing() {
   console.log('🧪 Blurhash Processing Benchmark');

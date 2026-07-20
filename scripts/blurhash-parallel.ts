@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { Worker } from 'worker_threads';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import * as path from 'path';
 import * as os from 'os';
 import * as dotenv from 'dotenv';
@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 // Load environment variables
 dotenv.config();
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 // Global flag to control job stopping
 let shouldStopJob = false;

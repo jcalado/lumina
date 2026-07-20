@@ -1,8 +1,8 @@
 import { config } from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 
 config();
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function deleteAllPhotos() {
   try {

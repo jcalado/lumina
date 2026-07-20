@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../lib/prisma-client';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
 import fs from 'fs';
@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function generateBlurhashFromFile(imagePath: string): Promise<string> {
   try {
