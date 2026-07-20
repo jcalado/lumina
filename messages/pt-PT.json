@@ -437,6 +437,7 @@
         "newPassphrase": "Nova palavra-passe (em branco = manter)",
         "removePassphrase": "Remover palavra-passe",
         "rotateToken": "Rodar ligação (invalida a atual)",
-        "noDestinationOption": "Sem destino"
+        "noDestinationOption": "Sem destino",
+        "destinationLabel": "Álbum de destino"
     }
 }

@@ -368,6 +368,7 @@
     "newPassphrase": "New passphrase (blank = keep)",
     "removePassphrase": "Remove passphrase",
     "rotateToken": "Rotate link (invalidates current)",
-    "noDestinationOption": "No destination"
+    "noDestinationOption": "No destination",
+    "destinationLabel": "Destination album"
   }
 }
