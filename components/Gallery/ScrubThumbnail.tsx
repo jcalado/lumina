@@ -52,7 +52,7 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
 
   if (thumbnails.length === 0) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+      <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-muted to-muted-foreground/10">
         <Folder className="w-12 h-12 text-muted-foreground/50" />
       </div>
     );

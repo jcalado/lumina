@@ -37,7 +37,7 @@ export function SubAlbumGrid({ subAlbums }: SubAlbumGridProps) {
             <Link href={`/albums/${subAlbum.slugPath || encodeURIComponent(subAlbum.path)}`}>
               <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
                 <CardContent className="p-0">
-                  <div className="aspect-[4/3] bg-muted relative overflow-hidden rounded-t-lg">
+                  <div className="aspect-4/3 bg-muted relative overflow-hidden rounded-t-lg">
                     <ScrubThumbnail
                       thumbnails={subAlbum.thumbnails.map(t => ({
                         mediaId: t.mediaId,
@@ -73,7 +73,7 @@ export function SubAlbumGrid({ subAlbums }: SubAlbumGridProps) {
                     <div className="flex items-start justify-between mb-1">
                       <h3 className="font-medium text-sm line-clamp-2 flex-1">{subAlbum.name}</h3>
                       {subAlbum.dateRange && formatDateRange(subAlbum.dateRange) && (
-                        <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                        <span className="text-xs text-muted-foreground ml-2 shrink-0">
                           {formatDateRange(subAlbum.dateRange)}
                         </span>
                       )}

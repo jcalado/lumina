@@ -31,7 +31,7 @@ export function AlbumHeader({ album, onDownload, isDownloading, hasPhotos }: Alb
       {hasPhotos && (
         <div className="flex gap-2">
           <button
-            className="border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-sm h-9 px-4 py-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+            className="border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-xs h-9 px-4 py-2 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
             onClick={onDownload}
             disabled={isDownloading}
           >

@@ -160,7 +160,7 @@ export default function FavoritesPage() {
                 </div>
                 
                 {/* Photo info overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
                   <p className="text-white text-sm font-medium truncate">
                     {photo.filename}
                   </p>

@@ -148,7 +148,7 @@ export default function AdminAlbumsPage() {
               <div className="w-6" />
             )}
             
-            <Folder className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            <Folder className="h-4 w-4 text-blue-600 shrink-0" />
             
             <div className="min-w-0 flex-1">
               <div className="font-medium truncate">{album.name}</div>

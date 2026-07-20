@@ -94,7 +94,7 @@ export function CoverPhotoPicker({
                     <button
                       key={photo.id}
                       type="button"
-                      className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring ${
+                      className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all hover:opacity-90 focus:outline-hidden focus:ring-2 focus:ring-ring ${
                         selectedId === photo.id
                           ? "border-primary ring-2 ring-primary/30"
                           : "border-transparent"

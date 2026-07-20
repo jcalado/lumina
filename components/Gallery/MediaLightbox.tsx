@@ -241,7 +241,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
   };
 
   return (
-    <div className="fixed inset-0 z-50 !mt-0 !mb-0 bg-black bg-opacity-95 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 mt-0! mb-0! bg-black bg-opacity-95 flex items-center justify-center">
       {/* Background overlay */}
       <div 
         className="absolute inset-0" 
@@ -249,7 +249,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
       />
       
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-linear-to-b from-black/50 to-transparent">
         <div className="flex items-center justify-between text-white">
           {isMobile ? (
             <>
@@ -374,7 +374,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
       )}
 
       {/* Main media container */}
-      <div {...swipeHandlers} className="relative max-w-screen-lg max-h-screen w-full h-full flex items-center justify-center p-4">
+      <div {...swipeHandlers} className="relative max-w-(--breakpoint-lg) max-h-screen w-full h-full flex items-center justify-center p-4">
         {mediaLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
@@ -481,7 +481,7 @@ export function MediaLightbox({ media, currentIndex, isOpen, onClose, onNavigate
                 metadata: currentMedia.metadata || null,
                 orientation: currentMedia.orientation,
               }}
-              className="!w-full md:!w-96 !max-h-[50vh] md:!max-h-[80vh] rounded-b-none md:rounded-b-lg"
+              className="w-full! md:w-96! max-h-[50vh]! md:max-h-[80vh]! rounded-b-none md:rounded-b-lg"
             />
           )}
         </div>

@@ -449,7 +449,7 @@ export default function LogsPage() {
                   key={log.id}
                   className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex-shrink-0 mt-0.5">
+                  <div className="shrink-0 mt-0.5">
                     {getLogIcon(log.level)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -467,11 +467,11 @@ export default function LogsPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-foreground break-words">
+                    <p className="text-sm font-medium text-foreground wrap-break-word">
                       {log.message}
                     </p>
                     {log.details && (
-                      <p className="text-xs text-muted-foreground mt-1 break-words">
+                      <p className="text-xs text-muted-foreground mt-1 wrap-break-word">
                         {log.details}
                       </p>
                     )}
@@ -532,7 +532,7 @@ export default function LogsPage() {
                   key={log.id}
                   className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex-shrink-0 mt-0.5">
+                  <div className="shrink-0 mt-0.5">
                     {getLogIcon(log.level)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -550,11 +550,11 @@ export default function LogsPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-foreground break-words">
+                    <p className="text-sm font-medium text-foreground wrap-break-word">
                       {log.message}
                     </p>
                     {log.details && (
-                      <p className="text-xs text-muted-foreground mt-1 break-words">
+                      <p className="text-xs text-muted-foreground mt-1 wrap-break-word">
                         {log.details}
                       </p>
                     )}

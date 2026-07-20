@@ -259,7 +259,7 @@ export default function GroupDetailPage() {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`flex-shrink-0 rounded-md p-2 ${
+                    <div className={`shrink-0 rounded-md p-2 ${
                       p.enabled
                         ? p.iconBg
                         : "bg-muted text-muted-foreground/50"

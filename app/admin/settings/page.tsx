@@ -184,7 +184,7 @@ export default function AdminSettingsPage() {
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Settings sidebar nav */}
-        <nav className="md:w-56 flex-shrink-0">
+        <nav className="md:w-56 shrink-0">
           <div className="flex md:flex-col gap-1">
             {sidebarItems.map((item) => {
               const Icon = item.icon
@@ -199,7 +199,7 @@ export default function AdminSettingsPage() {
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   )}
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
                 </button>
               )
@@ -341,7 +341,7 @@ function AppearanceSection({
                   key={color}
                   type="button"
                   className={cn(
-                    "w-8 h-8 rounded-md border-2 shadow-sm hover:scale-110 transition-transform",
+                    "w-8 h-8 rounded-md border-2 shadow-xs hover:scale-110 transition-transform",
                     settings.accentColor === color
                       ? "border-foreground ring-2 ring-ring ring-offset-2 ring-offset-background"
                       : "border-transparent"

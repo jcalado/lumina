@@ -150,7 +150,7 @@ async function DashboardStats() {
                   <div className="text-3xl font-bold tabular-nums">{stat.value}</div>
                   <p className="text-xs text-muted-foreground">{stat.description}</p>
                 </div>
-                <div className={`flex-shrink-0 rounded-lg p-2.5 ${stat.iconBg} ${stat.iconColor}`}>
+                <div className={`shrink-0 rounded-lg p-2.5 ${stat.iconBg} ${stat.iconColor}`}>
                   <Icon className="h-5 w-5" />
                 </div>
               </div>
@@ -167,7 +167,7 @@ async function DashboardStats() {
               <div className="text-3xl font-bold tabular-nums">{storageValue}</div>
               <p className="text-xs text-muted-foreground">{storageDesc}</p>
             </div>
-            <div className="flex-shrink-0 rounded-lg p-2.5 bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400">
+            <div className="shrink-0 rounded-lg p-2.5 bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400">
               <HardDrive className="h-5 w-5" />
             </div>
           </div>
@@ -255,7 +255,7 @@ async function SystemStatus() {
             return (
               <div key={svc.name} className={`rounded-lg border p-3 ${style.tile}`}>
                 <div className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 rounded-md p-2 ${style.iconBg}`}>
+                  <div className={`shrink-0 rounded-md p-2 ${style.iconBg}`}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -342,7 +342,7 @@ function QuickActions() {
                 className={`group relative rounded-lg border p-3 transition-all duration-150 ${action.hoverBorder} ${action.hoverBg}`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`flex-shrink-0 rounded-md p-2 ${action.iconBg} ${action.iconColor}`}>
+                  <div className={`shrink-0 rounded-md p-2 ${action.iconBg} ${action.iconColor}`}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">

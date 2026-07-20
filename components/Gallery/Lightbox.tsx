@@ -108,7 +108,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 !mt-0 !mb-0 bg-black bg-opacity-95 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 mt-0! mb-0! bg-black bg-opacity-95 flex items-center justify-center">
       {/* Background overlay */}
       <div 
         className="absolute inset-0" 
@@ -116,7 +116,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
       />
       
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-linear-to-b from-black/50 to-transparent">
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-medium truncate">
@@ -195,7 +195,7 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
       )}
 
       {/* Main image container */}
-      <div className="relative max-w-screen-lg max-h-screen w-full h-full flex items-center justify-center p-4">
+      <div className="relative max-w-(--breakpoint-lg) max-h-screen w-full h-full flex items-center justify-center p-4">
         {imageLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
@@ -219,13 +219,13 @@ export function Lightbox({ photos, currentIndex, isOpen, onClose, onNavigate }: 
       )}
 
       {/* Footer with thumbnails - disabled */}
-      {/* <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/50 to-transparent">
+      {/* <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-linear-to-t from-black/50 to-transparent">
         <div className="flex gap-2 overflow-x-auto justify-center">
           {photos.map((photo, index) => (
             <button
               key={photo.id}
               onClick={() => onNavigate(index)}
-              className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
+              className={`shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
                 index === currentIndex 
                   ? 'border-white' 
                   : 'border-transparent hover:border-gray-400'

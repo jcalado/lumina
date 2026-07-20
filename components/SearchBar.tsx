@@ -176,11 +176,11 @@ export function SearchBar() {
                 `}
                 onClick={() => handleSelectResult(result)}
               >
-                <div className="flex-shrink-0 mt-0.5">
+                <div className="shrink-0 mt-0.5">
                   <Folder className="h-4 w-4 text-gray-500" />
                 </div>
                 
-                <div className="flex-grow min-w-0">
+                <div className="grow min-w-0">
                   <div className="font-medium text-sm leading-tight">
                     {highlightMatch(result.name, query)}
                   </div>

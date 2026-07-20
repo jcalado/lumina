@@ -83,11 +83,11 @@ export default function HomePage() {
           <div className="h-5 w-72 bg-muted animate-pulse rounded mx-auto mt-3" />
           <div className="h-4 w-20 bg-muted animate-pulse rounded mx-auto mt-2" />
         </div>
-        <div className="rounded-2xl aspect-[21/9] bg-muted animate-pulse" />
+        <div className="rounded-2xl aspect-21/9 bg-muted animate-pulse" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-xl overflow-hidden bg-card ring-1 ring-border/50">
-              <div className="aspect-[4/3] bg-muted animate-pulse" />
+              <div className="aspect-4/3 bg-muted animate-pulse" />
               <div className="p-4 space-y-3">
                 <div className="h-4 bg-muted animate-pulse rounded w-3/4" />
                 <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
@@ -121,7 +121,7 @@ export default function HomePage() {
           className="block group animate-fade-in-up opacity-0 mb-2"
         >
           <div className="relative rounded-2xl overflow-hidden hover:shadow-2xl transition-shadow duration-300">
-            <div className="aspect-[21/9] bg-muted relative overflow-hidden">
+            <div className="aspect-21/9 bg-muted relative overflow-hidden">
               {featuredAlbum.coverThumbnailUrl ? (
                 <img
                   src={featuredAlbum.coverThumbnailUrl}
@@ -129,11 +129,11 @@ export default function HomePage() {
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+                <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-muted to-muted-foreground/10">
                   <Folder className="w-16 h-16 text-muted-foreground/50" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/30 to-transparent" />
               <div className="absolute bottom-0 left-0 p-6 sm:p-8">
                 <span className="text-xs uppercase tracking-widest text-white/80">
                   {t('featured')}
@@ -174,14 +174,14 @@ export default function HomePage() {
                 style={{ animationDelay: `${Math.min(index * 75, 600)}ms` }}
               >
                 {/* Thumbnail Image */}
-                <div className="aspect-[4/3] bg-muted relative overflow-hidden">
+                <div className="aspect-4/3 bg-muted relative overflow-hidden">
                   {album.thumbnails && album.thumbnails.length > 0 ? (
                     <ScrubThumbnail
                       thumbnails={album.thumbnails}
                       albumName={album.name}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/10">
+                    <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-muted to-muted-foreground/10">
                       <Folder className="w-12 h-12 text-muted-foreground/50" />
                     </div>
                   )}
@@ -190,13 +190,13 @@ export default function HomePage() {
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
                     <div className="absolute bottom-2 left-2 flex gap-1 pointer-events-auto">
                       {album.totalPhotoCount && album.totalPhotoCount > 0 && (
-                        <span className="inline-flex items-center backdrop-blur-sm bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
+                        <span className="inline-flex items-center backdrop-blur-xs bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
                           <Image className="w-3 h-3 mr-1" />
                           {album.totalPhotoCount}
                         </span>
                       )}
                       {album.subAlbumsCount && album.subAlbumsCount > 0 && (
-                        <span className="inline-flex items-center backdrop-blur-sm bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
+                        <span className="inline-flex items-center backdrop-blur-xs bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
                           <Folder className="w-3 h-3 mr-1" />
                           {album.subAlbumsCount}
                         </span>
