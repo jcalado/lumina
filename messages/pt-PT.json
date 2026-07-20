@@ -51,7 +51,9 @@
         "longitude": "Longitude",
         "viewOnGoogleMaps": "Ver no Google Maps",
         "imageDetails": "Detalhes da Imagem",
-        "colorSpace": "Espaço de cor",
+        "colorSpace": {
+            "sRGB": "sRGB"
+        },
         "resolution": "Resolução",
         "copyrightInfo": "Informações de Copyright",
         "copyright": "Copyright",
@@ -69,9 +71,6 @@
             "mirroredHorizontalRotated90": "Espelhado horizontalmente, rodado 90°",
             "rotated270CW": "Rodado 270° sentido horário",
             "unknown": "Desconhecido"
-        },
-        "colorSpace": {
-            "sRGB": "sRGB"
         },
         "fileSizeUnits": {
             "B": "B",
@@ -381,5 +380,49 @@
         "error_invalid_credentials": "Credenciais inválidas",
         "error_login_failed": "Falha no início de sessão",
         "error_generic": "Ocorreu um erro durante o início de sessão"
+    },
+    "dropbox": {
+        "unavailable": "Indisponível",
+        "linkExpired": "Esta ligação de envio expirou.",
+        "linkFull": "Esta ligação de envio já não aceita ficheiros.",
+        "linkNotFound": "Esta ligação de envio não foi encontrada.",
+        "uploadPromptPhotos": "Envie as suas fotografias abaixo.",
+        "uploadPromptPhotosVideos": "Envie as suas fotografias e vídeos abaixo.",
+        "completeChallenge": "Por favor, complete o desafio de verificação",
+        "uploadFailed": "Falha no envio",
+        "finalizeFailed": "Não foi possível concluir o envio",
+        "thankYou": "Obrigado!",
+        "received": "O seu envio foi recebido e aguarda revisão.",
+        "passphrase": "Palavra-passe",
+        "namePlaceholder": "O seu nome (opcional)",
+        "emailPlaceholder": "O seu email (opcional)",
+        "messagePlaceholder": "Mensagem (opcional)",
+        "uploading": "A enviar…",
+        "uploadButton": "Enviar {count, plural, =0 {ficheiros} one {# ficheiro} other {# ficheiros}}",
+        "title": "Caixas de Entrada",
+        "create": "Criar caixa",
+        "newDropbox": "Nova caixa de entrada",
+        "name": "Nome",
+        "chooseDestinationLater": "Escolher destino mais tarde",
+        "maxUploadsPlaceholder": "Máximo de envios totais (opcional)",
+        "passphraseOptional": "Palavra-passe (opcional)",
+        "allowVideos": "Permitir vídeos",
+        "createButton": "Criar",
+        "empty": "Ainda não existem caixas de entrada.",
+        "noDestination": "sem destino",
+        "accepted": "aceites",
+        "pendingLabel": "pendentes",
+        "copyLink": "Copiar ligação",
+        "disable": "Desativar",
+        "enable": "Ativar",
+        "delete": "Eliminar",
+        "deleteConfirm": "Eliminar \"{name}\" e todos os seus envios pendentes?",
+        "destinationAlbum": "Álbum de destino…",
+        "approve": "Aprovar",
+        "reject": "Rejeitar",
+        "pendingCount": "{count, plural, one {# pendente} other {# pendentes}}",
+        "pickDestinationFirst": "Escolha primeiro um álbum de destino",
+        "failed": "Falhou",
+        "anonymous": "Anónimo"
     }
 }

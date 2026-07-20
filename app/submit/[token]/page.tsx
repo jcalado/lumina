@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/prisma';
+import { getTranslations } from 'next-intl/server';
 import { DropboxUploader } from './DropboxUploader';
 
 export default async function SubmitPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const t = await getTranslations('dropbox');
   const dropbox = await prisma.dropbox.findUnique({ where: { token } });
 
   let state: 'open' | 'notfound' | 'expired' | 'full' = 'open';
@@ -11,12 +13,12 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
   else if (dropbox.maxUploads !== null && dropbox.acceptedCount >= dropbox.maxUploads) state = 'full';
 
   if (state !== 'open' || !dropbox) {
-    const msg = state === 'expired' ? 'This upload link has expired.'
-      : state === 'full' ? 'This upload link is no longer accepting files.'
-      : 'This upload link was not found.';
+    const msg = state === 'expired' ? t('linkExpired')
+      : state === 'full' ? t('linkFull')
+      : t('linkNotFound');
     return (
       <main className="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-2 p-6 text-center">
-        <h1 className="text-xl font-semibold">Unavailable</h1>
+        <h1 className="text-xl font-semibold">{t('unavailable')}</h1>
         <p className="text-muted-foreground">{msg}</p>
       </main>
     );
@@ -26,7 +28,9 @@ export default async function SubmitPage({ params }: { params: Promise<{ token: 
     <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-6 p-6">
       <div>
         <h1 className="text-2xl font-semibold">{dropbox.name}</h1>
-        <p className="text-muted-foreground">Upload your photos{dropbox.allowVideos ? ' and videos' : ''} below.</p>
+        <p className="text-muted-foreground">
+          {dropbox.allowVideos ? t('uploadPromptPhotosVideos') : t('uploadPromptPhotos')}
+        </p>
       </div>
       <DropboxUploader
         token={token}
