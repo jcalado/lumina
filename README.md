@@ -10,7 +10,7 @@
 
 > ⚠️ **VIBE CODING WARNING**
 > 
-> This project is a "VIBE CODING" app — the result of guiding copilot with Claude Sonnet 4. It depleted 47% of my monthly "premium" copilot requests budget. Expect experimental, whimsical design choices and rapidly changing APIs. Use for inspiration and fun; not guaranteed production-ready.
+> This project is a "VIBE CODING" app. Expect experimental, whimsical design choices and rapidly changing APIs. Use for inspiration and fun; not guaranteed production-ready.
 
 *Designed for photographers and photo enthusiasts to organize and share their work*
 
