@@ -34,7 +34,8 @@
     "docker:build:prod:fast": "docker compose -f docker-compose.prod.yml build --parallel --no-cache-filter builder",
     "docker:up:prod": "docker compose -f docker-compose.prod.yml up -d",
     "worker:all": "concurrently \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:blurhash\"",
-    "seed:admin": "tsx scripts/create-initial-admin.ts"
+    "seed:admin": "tsx scripts/create-initial-admin.ts",
+    "dropbox:cleanup": "tsx scripts/cleanup-dropbox-staging.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1090.0",
