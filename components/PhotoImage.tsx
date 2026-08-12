@@ -116,6 +116,10 @@ export function PhotoImage({
           src={imageUrl}
           alt={alt || filename}
           fill
+          // Both branches above resolve to a pre-generated thumbnail already sized
+          // for this slot, so the optimizer would only re-encode an image we sized
+          // ourselves -- at the cost of a second copy in .next/cache/images.
+          unoptimized
           className="object-cover"
           style={{
             transform: getOrientationTransform(orientation),

@@ -25,6 +25,11 @@ const nextConfig = {
   output: 'standalone',
   images: {
     minimumCacheTTL: 31536000, // 1 year - photos are immutable
+    // Left unset, Next sizes the optimizer's disk LRU at 50% of free disk, so with a
+    // 1-year TTL nothing is ever evicted. On boot the LRU is rebuilt by reading every
+    // cached entry off disk, serially, and the first cache write blocks on that scan --
+    // which is what took the optimizer down in production once the cache had grown.
+    maximumDiskCacheSize: 512 * 1024 * 1024, // 512MB
     // Dev only: the optimizer fetches thumbnails from the MinIO container, whose
     // address is private. Left off in production, where storage is public HTTPS.
     dangerouslyAllowLocalIP: process.env.NODE_ENV !== 'production',
