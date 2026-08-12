@@ -67,7 +67,8 @@ COPY package.json package-lock.json* ./
 COPY tsconfig.json ./
 COPY next.config.js ./
 COPY middleware.ts ./
-COPY tailwind.config.ts ./
+# No tailwind.config.ts: v4 is configured from CSS (@import 'tailwindcss')
+# plus the PostCSS plugin below.
 COPY postcss.config.js ./
 COPY components.json ./
 
