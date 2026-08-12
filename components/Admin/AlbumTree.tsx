@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useMemo, useEffect, useState } from "react"
+import Link from "next/link"
 import { useTree } from "@headless-tree/react"
 import {
   syncDataLoaderFeature,
@@ -306,7 +307,16 @@ export function AlbumTree({
                   <Folder className="h-4 w-4 text-blue-600 shrink-0" />
 
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{album.name}</div>
+                    {/* A real link, so middle/modifier-click and the context
+                        menu work. stopPropagation keeps the row's own click
+                        handler from toggling expansion on the way past. */}
+                    <Link
+                      href={`/admin/albums/${album.id}/photos`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block font-medium truncate rounded-sm hover:underline underline-offset-2 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {album.name}
+                    </Link>
                     {level > 0 && (
                       <div className="text-xs text-muted-foreground truncate">
                         {(() => {
