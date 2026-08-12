@@ -264,7 +264,6 @@
     "toastUpdateFailed": "Failed to update group",
     "toastGroupDeleted": "Group deleted",
     "toastDeleteFailed": "Failed to delete group",
-    "backToGroups": "Back to Groups",
     "groupNotFound": "Group not found",
     "loadingGroup": "Loading group...",
     "albumAccess": "Album Access",
@@ -308,7 +307,8 @@
     "settings": "Settings",
     "photos": "Photos",
     "logOut": "Log out",
-    "breadcrumbHome": "Lumina Admin"
+    "breadcrumbHome": "Lumina Admin",
+    "backTo": "Back to {label}"
   },
   "login": {
     "welcome_back": "Welcome back",

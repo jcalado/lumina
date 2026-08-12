@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Plus, Trash2, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus, Check, X, ShieldCheck } from "lucide-react"
+import { Plus, Trash2, UsersRound, FolderOpen, Upload, Pencil, TrashIcon, FolderPlus, Check, X, ShieldCheck } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { useTranslations } from "next-intl"
 
@@ -124,12 +123,6 @@ export default function GroupDetailPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin/groups">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {t("backToGroups")}
-          </Link>
-        </Button>
         <div className="text-sm text-muted-foreground">{t("loadingGroup")}</div>
       </div>
     )
@@ -138,12 +131,6 @@ export default function GroupDetailPage() {
   if (!group) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin/groups">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {t("backToGroups")}
-          </Link>
-        </Button>
         <Card>
           <CardContent className="p-12 text-center">
             <h3 className="text-lg font-medium mb-2">{t("groupNotFound")}</h3>
@@ -202,12 +189,6 @@ export default function GroupDetailPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin/groups">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {t("backToGroups")}
-          </Link>
-        </Button>
         <div>
           <h1 className="text-2xl font-semibold">{group.name}</h1>
           {group.description && (

@@ -3,7 +3,10 @@
 import React from "react"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
+import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   Breadcrumb,
@@ -104,15 +107,39 @@ export default function AdminHeader() {
       crumbs.push({ label: staticLabels[segment] || segment, href })
     }
 
-    return crumbs
+    // The album crumb already points at the photos page, so a trailing
+    // "Photos" crumb repeats both the label's destination and its React key.
+    return crumbs.filter(
+      (crumb, i) => i === 0 || crumb.href !== crumbs[i - 1].href
+    )
   }
 
   const crumbs = buildBreadcrumbs()
+
+  // Detail pages (an album, a group) get a back control here rather than one
+  // pushed into each page body. The trail already knows where "back" is.
+  const parentCrumb = crumbs.length >= 3 ? crumbs[crumbs.length - 2] : null
 
   return (
     <header className="flex sticky top-0 z-50 h-14 items-center gap-2 border-b bg-background px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" className="mr-2 h-4" />
+      {parentCrumb && (
+        <>
+          <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+            {/* Icon only; the destination is right there in the trail. The
+                label survives as the accessible name and the tooltip. */}
+            <Link
+              href={parentCrumb.href}
+              aria-label={t("backTo", { label: parentCrumb.label })}
+              title={t("backTo", { label: parentCrumb.label })}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Separator orientation="vertical" className="mr-2 h-4" />
+        </>
+      )}
       <Breadcrumb>
         <BreadcrumbList>
           {crumbs.map((crumb, i) => {

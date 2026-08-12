@@ -325,7 +325,6 @@
         "toastUpdateFailed": "Falha ao atualizar grupo",
         "toastGroupDeleted": "Grupo eliminado",
         "toastDeleteFailed": "Falha ao eliminar grupo",
-        "backToGroups": "Voltar aos Grupos",
         "groupNotFound": "Grupo não encontrado",
         "loadingGroup": "A carregar grupo...",
         "albumAccess": "Acesso ao Álbum",
@@ -369,7 +368,8 @@
         "settings": "Definições",
         "photos": "Fotos",
         "logOut": "Terminar sessão",
-        "breadcrumbHome": "Lumina Admin"
+        "breadcrumbHome": "Lumina Admin",
+        "backTo": "Voltar para {label}"
     },
     "login": {
         "welcome_back": "Bem-vindo de volta",

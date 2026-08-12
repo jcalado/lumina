@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Image, Trash2, Search, Calendar, HardDrive, Download, Upload } from "lucide-react"
+import { Image, Trash2, Search, Calendar, HardDrive, Download, Upload } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { PhotoImage } from "@/components/PhotoImage"
 import { FileUploadModal } from "@/components/Admin/FileUploadModal"
@@ -219,15 +219,6 @@ export default function AlbumPhotosPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <a href="/admin/albums">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Albums
-            </a>
-          </Button>
-        </div>
-        
         <div className="space-y-4">
           <div className="h-8 bg-gray-200 rounded animate-pulse"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -243,14 +234,6 @@ export default function AlbumPhotosPage() {
   if (!album) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <a href="/admin/albums">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Albums
-            </a>
-          </Button>
-        </div>
         <Card>
           <CardContent className="p-12 text-center">
             <h3 className="text-lg font-medium mb-2">Album not found</h3>
@@ -266,12 +249,6 @@ export default function AlbumPhotosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <a href="/admin/albums">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Albums
-            </a>
-          </Button>
           <div>
             <h1 className="text-3xl font-bold">{album.name}</h1>
             <p className="text-muted-foreground">{album.path}</p>
