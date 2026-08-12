@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Folder, Image } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
+import { AlbumCardOverlay } from '@/components/Album/AlbumCardOverlay';
 
 interface Album {
   id: string;
@@ -86,12 +87,8 @@ export default function HomePage() {
         <div className="rounded-2xl aspect-21/9 bg-muted animate-pulse" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="rounded-xl overflow-hidden bg-card ring-1 ring-border/50">
+            <div key={i} className="rounded-xl overflow-hidden ring-1 ring-border/50">
               <div className="aspect-4/3 bg-muted animate-pulse" />
-              <div className="p-4 space-y-3">
-                <div className="h-4 bg-muted animate-pulse rounded w-3/4" />
-                <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
-              </div>
             </div>
           ))}
         </div>
@@ -173,7 +170,7 @@ export default function HomePage() {
                 className="h-full rounded-xl overflow-hidden bg-card ring-1 ring-border/50 hover:-translate-y-1 hover:shadow-xl hover:ring-border transition-all duration-300 ease-out cursor-pointer group animate-fade-in-up opacity-0"
                 style={{ animationDelay: `${Math.min(index * 75, 600)}ms` }}
               >
-                {/* Thumbnail Image */}
+                {/* Thumbnail with the title laid over it */}
                 <div className="aspect-4/3 bg-muted relative overflow-hidden">
                   {album.thumbnails && album.thumbnails.length > 0 ? (
                     <ScrubThumbnail
@@ -186,40 +183,30 @@ export default function HomePage() {
                     </div>
                   )}
 
-                  {/* Badges - bottom-left with frosted glass */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
-                    <div className="absolute bottom-2 left-2 flex gap-1 pointer-events-auto">
-                      {album.totalPhotoCount && album.totalPhotoCount > 0 && (
-                        <span className="inline-flex items-center backdrop-blur-xs bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
-                          <Image className="w-3 h-3 mr-1" />
-                          {album.totalPhotoCount}
-                        </span>
-                      )}
-                      {album.subAlbumsCount && album.subAlbumsCount > 0 && (
-                        <span className="inline-flex items-center backdrop-blur-xs bg-black/40 text-white text-[11px] rounded-full px-2 py-0.5">
-                          <Folder className="w-3 h-3 mr-1" />
-                          {album.subAlbumsCount}
-                        </span>
-                      )}
-                    </div>
+                  {/* Counts sit top-right; the bottom belongs to the title. */}
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    {album.totalPhotoCount && album.totalPhotoCount > 0 && (
+                      <span className="inline-flex items-center backdrop-blur-xs bg-black/50 text-white text-[11px] rounded-full px-2 py-0.5">
+                        <Image className="w-3 h-3 mr-1" />
+                        {album.totalPhotoCount}
+                      </span>
+                    )}
+                    {album.subAlbumsCount && album.subAlbumsCount > 0 && (
+                      <span className="inline-flex items-center backdrop-blur-xs bg-black/50 text-white text-[11px] rounded-full px-2 py-0.5">
+                        <Folder className="w-3 h-3 mr-1" />
+                        {album.subAlbumsCount}
+                      </span>
+                    )}
                   </div>
-                </div>
 
-                {/* Album Details */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-base line-clamp-2 mb-1">
-                    {album.name}
-                  </h3>
-                  {album.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                      {album.description}
-                    </p>
-                  )}
-                  <div className="text-xs text-muted-foreground">
-                    <span>
-                      {new Date(album.updatedAt).toLocaleString('default', { month: 'long', year: 'numeric' })}
-                    </span>
-                  </div>
+                  <AlbumCardOverlay
+                    name={album.name}
+                    description={album.description}
+                    meta={new Date(album.updatedAt).toLocaleString('default', {
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  />
                 </div>
               </div>
             </Link>

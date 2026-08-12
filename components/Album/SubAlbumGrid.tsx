@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Image, Folder, Images } from 'lucide-react';
 import { ScrubThumbnail } from '@/components/Gallery/ScrubThumbnail';
+import { AlbumCardOverlay } from '@/components/Album/AlbumCardOverlay';
 import type { SubAlbumData } from '@/lib/types/album';
 
 // Utility function to format date range
@@ -35,9 +36,9 @@ export function SubAlbumGrid({ subAlbums }: SubAlbumGridProps) {
         {subAlbums.map((subAlbum) => (
           <div key={subAlbum.id} className="relative">
             <Link href={`/albums/${subAlbum.slugPath || encodeURIComponent(subAlbum.path)}`}>
-              <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+              <Card className="h-full overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group">
                 <CardContent className="p-0">
-                  <div className="aspect-4/3 bg-muted relative overflow-hidden rounded-t-lg">
+                  <div className="aspect-4/3 bg-muted relative overflow-hidden rounded-lg">
                     <ScrubThumbnail
                       thumbnails={subAlbum.thumbnails.map(t => ({
                         mediaId: t.mediaId,
@@ -47,40 +48,32 @@ export function SubAlbumGrid({ subAlbums }: SubAlbumGridProps) {
                       }))}
                       albumName={subAlbum.name}
                     />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none">
-                      <div className="absolute top-2 left-2 pointer-events-auto">
-                        <div className="bg-black/60 rounded-full p-1.5">
-                          <Images className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                      <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
-                        {subAlbum.totalPhotoCount > 0 && (
-                          <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
-                            <Image className="w-3 h-3 mr-1" />
-                            {subAlbum.totalPhotoCount}
-                          </Badge>
-                        )}
-                        {subAlbum.subAlbumsCount > 0 && (
-                          <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
-                            <Folder className="w-3 h-3 mr-1" />
-                            {subAlbum.subAlbumsCount}
-                          </Badge>
-                        )}
+                    <div className="absolute top-2 left-2">
+                      <div className="bg-black/60 rounded-full p-1.5">
+                        <Images className="w-4 h-4 text-white" />
                       </div>
                     </div>
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-1">
-                      <h3 className="font-medium text-sm line-clamp-2 flex-1">{subAlbum.name}</h3>
-                      {subAlbum.dateRange && formatDateRange(subAlbum.dateRange) && (
-                        <span className="text-xs text-muted-foreground ml-2 shrink-0">
-                          {formatDateRange(subAlbum.dateRange)}
-                        </span>
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      {subAlbum.totalPhotoCount > 0 && (
+                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                          <Image className="w-3 h-3 mr-1" />
+                          {subAlbum.totalPhotoCount}
+                        </Badge>
+                      )}
+                      {subAlbum.subAlbumsCount > 0 && (
+                        <Badge className="bg-black/60 text-white text-xs hover:bg-black/60">
+                          <Folder className="w-3 h-3 mr-1" />
+                          {subAlbum.subAlbumsCount}
+                        </Badge>
                       )}
                     </div>
-                    {subAlbum.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{subAlbum.description}</p>
-                    )}
+
+                    <AlbumCardOverlay
+                      size="compact"
+                      name={subAlbum.name}
+                      description={subAlbum.description}
+                      meta={subAlbum.dateRange ? formatDateRange(subAlbum.dateRange) : null}
+                    />
                   </div>
                 </CardContent>
               </Card>

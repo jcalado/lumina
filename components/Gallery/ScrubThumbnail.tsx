@@ -107,9 +107,10 @@ export function ScrubThumbnail({ thumbnails, albumName }: ScrubThumbnailProps) {
     >
       {renderMediaImage()}
 
-      {/* Progress indicator - only show when hovering and multiple images */}
+      {/* Progress indicator - only show when hovering and multiple images.
+          Stays in the album title overlay's bottom padding, below its text. */}
       {isHovering && thumbnails.length > 1 && (
-        <div className="absolute bottom-2 left-2 right-2 pointer-events-none">
+        <div className="absolute bottom-2 left-2 right-2 z-10 pointer-events-none">
           <div className="flex gap-1">
             {thumbnails.map((_, index) => (
               <div
