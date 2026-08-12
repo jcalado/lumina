@@ -23,6 +23,5 @@ temp
 temp_query.sql
 CLAUDE.md
 docs
-prisma/migrations
 prisma/dev.db
 public/models

@@ -183,9 +183,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Bring in dev dependencies so prisma CLI is available
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 
-# Copy schema and package for potential prisma resolution
-COPY --from=builder --chown=node:node /app/prisma ./prisma
-COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder --chown=node:node /app/package.json ./package.json
+# Straight from the build context, not from builder: migrations have no use
+# for the Next build, and taking them from there made this image wait on it.
+COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node prisma.config.ts ./prisma.config.ts
+COPY --chown=node:node package.json ./package.json
 
 USER node
