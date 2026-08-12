@@ -97,7 +97,8 @@
     "noCoverPhoto": "No cover photo selected (auto-selected)",
     "photosFromAlbum": "Photos from {album}",
     "saveCover": "Save",
-    "noPhotosFound": "No photos found in this album or its sub-albums."
+    "noPhotosFound": "No photos found in this album or its sub-albums.",
+    "disabledBadge": "Disabled"
   },
   "fileUpload": {
     "title": "Upload Photos to {album}",

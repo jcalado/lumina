@@ -31,7 +31,18 @@ import {
   Settings,
   ExternalLink,
   Plus,
+  Globe,
+  Lock,
+  Star,
+  PowerOff,
+  type LucideIcon,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useTranslations } from "next-intl"
 
 interface Album {
@@ -75,6 +86,41 @@ interface AlbumTreeProps {
 type TreeItemData = {
   album: Album
   children: string[]
+}
+
+/**
+ * A status badge carrying only its icon. The label stays for screen readers
+ * and on hover — the column is narrow and the same few states repeat down
+ * every row, so the words earn less than the space they cost.
+ * Badge renders a plain div, hence the span for the tooltip to hold a ref to.
+ */
+function IconBadge({
+  icon: Icon,
+  label,
+  iconClassName,
+}: {
+  icon: LucideIcon
+  label: string
+  iconClassName: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          {/* Neutral shell for every state so a row of badges reads as one
+              set; the icon's colour is what distinguishes them. */}
+          <Badge
+            variant="secondary"
+            className="border-transparent bg-muted px-1.5 py-1 hover:bg-muted"
+          >
+            <Icon className={cn("h-3.5 w-3.5", iconClassName)} />
+            <span className="sr-only">{label}</span>
+          </Badge>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function AlbumTree({
@@ -247,6 +293,7 @@ export function AlbumTree({
   }, [dataMap, tree])
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="relative" ref={tree.registerElement}>
       <div {...tree.getContainerProps("Album tree")}>
         {tree.getItems().map((item) => {
@@ -355,23 +402,32 @@ export function AlbumTree({
 
                 {/* Status Badges */}
                 <div className="col-span-3 md:col-span-2 flex items-center gap-1.5 flex-wrap">
-                  <Badge
-                    variant={
-                      album.status === "PUBLIC" ? "default" : "secondary"
-                    }
-                    className="text-xs"
-                  >
-                    {album.status === "PUBLIC" ? t("public") : t("private")}
-                  </Badge>
+                  {album.status === "PUBLIC" ? (
+                    <IconBadge
+                      icon={Globe}
+                      label={t("public")}
+                      iconClassName="text-emerald-600 dark:text-emerald-400"
+                    />
+                  ) : (
+                    <IconBadge
+                      icon={Lock}
+                      label={t("private")}
+                      iconClassName="text-slate-500 dark:text-slate-400"
+                    />
+                  )}
                   {!album.enabled && (
-                    <Badge variant="destructive" className="text-xs">
-                      Off
-                    </Badge>
+                    <IconBadge
+                      icon={PowerOff}
+                      label={t("disabledBadge")}
+                      iconClassName="text-rose-600 dark:text-rose-400"
+                    />
                   )}
                   {album.featured && (
-                    <Badge className="bg-yellow-500/15 text-yellow-600 border-yellow-500/30 text-xs">
-                      {t("featuredToggle")}
-                    </Badge>
+                    <IconBadge
+                      icon={Star}
+                      label={t("featuredToggle")}
+                      iconClassName="text-amber-500 dark:text-amber-400"
+                    />
                   )}
                 </div>
 
@@ -456,5 +512,6 @@ export function AlbumTree({
         })}
       </div>
     </div>
+    </TooltipProvider>
   )
 }

@@ -158,7 +158,8 @@
         "noCoverPhoto": "Nenhuma foto de capa selecionada (seleção automática)",
         "photosFromAlbum": "Fotos de {album}",
         "saveCover": "Guardar",
-        "noPhotosFound": "Nenhuma foto encontrada neste álbum ou nos seus sub-álbuns."
+        "noPhotosFound": "Nenhuma foto encontrada neste álbum ou nos seus sub-álbuns.",
+        "disabledBadge": "Inativo"
     },
     "fileUpload": {
         "title": "Carregar Fotos para {album}",
