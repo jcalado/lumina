@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Image, Trash2, Search, Calendar, HardDrive, Download, Upload } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
@@ -305,35 +304,33 @@ export default function AlbumPhotosPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Photos</CardTitle>
             {filteredPhotos.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="select-all-photos"
-                    checked={selectedPhotos.size === filteredPhotos.length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                  <label
-                    htmlFor="select-all-photos"
-                    className="text-sm font-medium cursor-pointer"
-                  >
-                    Select All ({filteredPhotos.length})
-                  </label>
-                </div>
-
-                {/* Acting on a selection belongs beside the control that makes
-                    one, not in the stats bar above. */}
+              /* One segmented toolbar: selecting and acting on the selection
+                 are the same job. Ghost cells rather than solid buttons —
+                 --accent here is close enough to --primary that a filled
+                 hover would read as "selected". */
+              <div className="flex items-center overflow-hidden rounded-md border shadow-xs">
                 {selectedPhotos.size > 0 && (
                   <>
-                    <Separator orientation="vertical" className="h-5" />
-                    <Button variant="default" size="sm" onClick={handleDownloadSelected} disabled={downloadingSelected}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-none px-2.5 hover:bg-muted-foreground/10 hover:text-foreground"
+                      onClick={handleDownloadSelected}
+                      disabled={downloadingSelected}
+                    >
                       <Download className="h-4 w-4 mr-2" />
-                      {downloadingSelected ? 'Starting…' : `Download Selected (${selectedPhotos.size})`}
+                      {downloadingSelected ? 'Starting…' : `Download (${selectedPhotos.size})`}
                     </Button>
                     {canDelete && <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" disabled={deletingPhotos}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 rounded-none border-l px-2.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={deletingPhotos}
+                        >
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Selected ({selectedPhotos.size})
+                          Delete ({selectedPhotos.size})
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -371,6 +368,21 @@ export default function AlbumPhotosPage() {
                     </AlertDialog>}
                   </>
                 )}
+
+                {/* The whole cell is the label, so anywhere in it toggles. */}
+                <label
+                  htmlFor="select-all-photos"
+                  className={`flex h-8 cursor-pointer items-center gap-2 px-2.5 text-sm font-medium ${
+                    selectedPhotos.size > 0 ? "border-l" : ""
+                  }`}
+                >
+                  <Checkbox
+                    id="select-all-photos"
+                    checked={selectedPhotos.size === filteredPhotos.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  Select All ({filteredPhotos.length})
+                </label>
               </div>
             )}
           </div>
