@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Image, Trash2, Search, Calendar, HardDrive, Download, Upload } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
@@ -269,67 +270,14 @@ export default function AlbumPhotosPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <Image className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{photos.length}</span>
-                <span className="text-muted-foreground">total photos</span>
-              </div>
-              {selectedPhotos.size > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{selectedPhotos.size}</span>
-                  <span className="text-muted-foreground">selected</span>
-                </div>
-              )}
+            {/* The selection count lives on the action buttons now. */}
+            <div className="flex items-center gap-2 text-sm">
+              <Image className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{photos.length}</span>
+              <span className="text-muted-foreground">total photos</span>
             </div>
 
             <div className="flex items-center gap-2">
-              {selectedPhotos.size > 0 && (
-                <>
-                  <Button variant="default" size="sm" onClick={handleDownloadSelected} disabled={downloadingSelected}>
-                    <Download className="h-4 w-4 mr-2" />
-                    {downloadingSelected ? 'Starting…' : `Download Selected (${selectedPhotos.size})`}
-                  </Button>
-                  {canDelete && <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" disabled={deletingPhotos}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Selected ({selectedPhotos.size})
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Photos</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete {selectedPhotos.size} photo(s)?
-                          <br />
-                          <br />
-                          <strong>This action will:</strong>
-                          <ul className="list-disc list-inside mt-2 space-y-1">
-                            <li>Remove the photos from the database</li>
-                            <li>Delete the files from local storage</li>
-                            <li>Delete the files from remote storage (S3)</li>
-                            <li>Remove all associated thumbnails</li>
-                          </ul>
-                          <br />
-                          <strong className="text-destructive">This action cannot be undone.</strong>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleDeletePhotos}
-                          className="bg-destructive hover:bg-destructive/90"
-                          disabled={deletingPhotos}
-                        >
-                          {deletingPhotos ? "Deleting..." : "Delete Photos"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>}
-                </>
-              )}
-              
               {canUpload && (
                 <Button size="sm" onClick={() => setUploadModalOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
@@ -354,17 +302,75 @@ export default function AlbumPhotosPage() {
       {/* Photos Grid */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Photos</CardTitle>
             {filteredPhotos.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={selectedPhotos.size === filteredPhotos.length}
-                  onCheckedChange={toggleSelectAll}
-                />
-                <label className="text-sm font-medium">
-                  Select All ({filteredPhotos.length})
-                </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all-photos"
+                    checked={selectedPhotos.size === filteredPhotos.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  <label
+                    htmlFor="select-all-photos"
+                    className="text-sm font-medium cursor-pointer"
+                  >
+                    Select All ({filteredPhotos.length})
+                  </label>
+                </div>
+
+                {/* Acting on a selection belongs beside the control that makes
+                    one, not in the stats bar above. */}
+                {selectedPhotos.size > 0 && (
+                  <>
+                    <Separator orientation="vertical" className="h-5" />
+                    <Button variant="default" size="sm" onClick={handleDownloadSelected} disabled={downloadingSelected}>
+                      <Download className="h-4 w-4 mr-2" />
+                      {downloadingSelected ? 'Starting…' : `Download Selected (${selectedPhotos.size})`}
+                    </Button>
+                    {canDelete && <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" disabled={deletingPhotos}>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Selected ({selectedPhotos.size})
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Photos</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {selectedPhotos.size} photo(s)?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        {/* Outside the description: that renders a <p>, which
+                            cannot legally contain a <ul>. */}
+                        <div className="space-y-2 text-sm text-muted-foreground">
+                          <p><strong>This action will:</strong></p>
+                          <ul className="list-disc list-inside space-y-1">
+                            <li>Remove the photos from the database</li>
+                            <li>Delete the files from local storage</li>
+                            <li>Delete the files from remote storage (S3)</li>
+                            <li>Remove all associated thumbnails</li>
+                          </ul>
+                          <p>
+                            <strong className="text-destructive">This action cannot be undone.</strong>
+                          </p>
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleDeletePhotos}
+                            className="bg-destructive hover:bg-destructive/90"
+                            disabled={deletingPhotos}
+                          >
+                            {deletingPhotos ? "Deleting..." : "Delete Photos"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>}
+                  </>
+                )}
               </div>
             )}
           </div>
