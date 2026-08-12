@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "5442:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lumina_user -d lumina_production"]
       interval: 10s
@@ -23,7 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6389:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -31,6 +31,45 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # MinIO — local S3-compatible storage for dev
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      default:
+        aliases:
+          # next/image fetches remote images server-side, so the browser and the
+          # app container must agree on one hostname. Browsers resolve *.localhost
+          # to 127.0.0.1 (published port below); this alias covers the container.
+          - minio.localhost
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console (minioadmin / minioadmin)
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Create the dev bucket on first boot (one-off job)
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/lumina-dev &&
+      mc anonymous set download local/lumina-dev
+      "
+    restart: "no"
 
   # Prisma migrations (one-off job)
   migrate:
@@ -62,10 +101,12 @@ services:
       # Dev Auto-Login button (NODE_ENV=development) — matches the seeded admin
       - NEXT_PUBLIC_DEV_ADMIN_EMAIL=admin@yourdomain.com
       - NEXT_PUBLIC_DEV_ADMIN_PASSWORD=your-secure-admin-password
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
+      - S3_ENDPOINT=http://minio:9000
+      # Browser-facing host for MinIO (the container name doesn't resolve there)
+      - S3_PUBLIC_ENDPOINT=http://minio.localhost:9000
+      - S3_BUCKET=lumina-dev
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
       - S3_REGION=us-east-1
       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
       - TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
@@ -78,6 +119,8 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
     volumes:
       - .:/app
@@ -100,10 +143,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=lumina-dev
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
       - S3_REGION=us-east-1
     depends_on:
       postgres:
@@ -111,6 +154,8 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
@@ -127,10 +172,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=https://s3.amazonaws.com
-      - S3_BUCKET=your-production-bucket
-      - S3_ACCESS_KEY=your-production-access-key
-      - S3_SECRET_KEY=your-production-secret-key
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=lumina-dev
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
       - S3_REGION=us-east-1
     depends_on:
       postgres:
@@ -138,6 +183,8 @@ services:
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
     volumes:
       - ./temp:/app/temp
@@ -147,3 +194,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  minio_data:

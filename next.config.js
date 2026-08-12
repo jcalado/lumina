@@ -25,6 +25,9 @@ const nextConfig = {
   output: 'standalone',
   images: {
     minimumCacheTTL: 31536000, // 1 year - photos are immutable
+    // Dev only: the optimizer fetches thumbnails from the MinIO container, whose
+    // address is private. Left off in production, where storage is public HTTPS.
+    dangerouslyAllowLocalIP: process.env.NODE_ENV !== 'production',
     localPatterns: [
       {
         pathname: '/api/photos/**',
@@ -35,6 +38,13 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**',
       },
+      // Dev only: local MinIO serves thumbnails over plain http on localhost.
+      ...(process.env.NODE_ENV === 'production'
+        ? []
+        : [
+            { protocol: 'http', hostname: 'localhost' },
+            { protocol: 'http', hostname: '*.localhost' },
+          ]),
     ],
     formats: ['image/webp', 'image/avif'],
   },

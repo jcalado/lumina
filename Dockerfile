@@ -94,6 +94,9 @@ RUN npm run build
 FROM build-base AS dev
 WORKDIR /app
 
+# Fonts so librsvg can rasterise text in SVGs (used by the mock-data seeder).
+RUN apk add --no-cache font-dejavu fontconfig
+
 # Install all dependencies for development
 COPY --chown=node:node package.json package-lock.json* ./
 RUN npm ci

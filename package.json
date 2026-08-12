@@ -35,6 +35,7 @@
     "docker:up:prod": "docker compose -f docker-compose.prod.yml up -d",
     "worker:all": "concurrently \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:blurhash\"",
     "seed:admin": "tsx scripts/create-initial-admin.ts",
+    "seed:mock": "tsx scripts/seed-mock-albums.ts",
     "dropbox:cleanup": "tsx scripts/cleanup-dropbox-staging.ts"
   },
   "dependencies": {

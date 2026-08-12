@@ -193,7 +193,11 @@ export class S3Service {
    */
   getPublicUrl(key: string): string {
     this.initializeBucket();
-    return `${process.env.S3_ENDPOINT}/${this.bucket}/${key}`;
+    // S3_ENDPOINT is how *this process* reaches storage, which in local dev is
+    // an internal Docker hostname the browser cannot resolve. S3_PUBLIC_ENDPOINT
+    // overrides the host used for browser-facing URLs.
+    const endpoint = process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT;
+    return `${endpoint}/${this.bucket}/${key}`;
   }
 
   generateKey(albumPath: string, filename: string, type: 'original' | 'thumbnail' = 'original'): string {
