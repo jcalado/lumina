@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useEffect } from "react"
+import React, { useMemo, useEffect, useState } from "react"
 import { useTree } from "@headless-tree/react"
 import {
   syncDataLoaderFeature,
@@ -172,7 +172,14 @@ export function AlbumTree({
     return { dataMap: map, recursiveCounts: counts }
   }, [albums])
 
+  // Expansion is ours to hold rather than the tree's: rebuilding after the
+  // album list changes (create, delete, move) drops the tree's own copy, which
+  // collapsed the parent you had just added a sub-album to.
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
+
   const tree = useTree<TreeItemData>({
+    state: { expandedItems },
+    setExpandedItems,
     rootItemId: "root",
     getItemName: (item) => item.getItemData().album.name,
     // Treat every album as a folder so it can receive drops
@@ -231,7 +238,9 @@ export function AlbumTree({
     features: [syncDataLoaderFeature, dragAndDropFeature, hotkeysCoreFeature],
   })
 
-  // Rebuild tree when the underlying album data changes
+  // Rebuild when the underlying album data changes. Immediate rather than
+  // scheduled: this runs after commit, so dataMap is already current, and
+  // rebuilding here also triggers the re-render that shows the new items.
   useEffect(() => {
     tree.rebuildTree()
   }, [dataMap, tree])
@@ -365,7 +374,15 @@ export function AlbumTree({
                         <span className="sr-only">{t("actions")}</span>
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    {/* The menu is portalled, but React events still bubble
+                        through the React tree to the row — whose click handler
+                        toggles expansion. Without this, picking any action
+                        collapsed the album you were acting on. */}
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-48"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <DropdownMenuItem
                         onClick={() =>
                           window.open(
