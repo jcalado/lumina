@@ -379,6 +379,9 @@
     "removePassphrase": "Remove passphrase",
     "rotateToken": "Rotate link (invalidates current)",
     "noDestinationOption": "No destination",
-    "destinationLabel": "Destination album"
+    "destinationLabel": "Destination album",
+    "cancel": "Cancel",
+    "maxUploadsLabel": "Max uploads",
+    "maxUploadsHelp": "Blank = unlimited"
   }
 }

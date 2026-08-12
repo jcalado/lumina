@@ -4,14 +4,15 @@ import { useTranslations } from 'next-intl';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlbumSelectItems, type SelectableAlbum } from '@/components/Admin/AlbumSelectItems';
 
 const NO_ALBUM = '__none';
 
-type Album = { id: string; name: string };
+type Album = SelectableAlbum;
 
 export type EditableDropbox = {
   id: string;
@@ -104,7 +105,7 @@ export function EditDropboxDialog({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_ALBUM}>{t('noDestinationOption')}</SelectItem>
-                {albums.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                <AlbumSelectItems albums={albums} />
               </SelectContent>
             </Select>
           </div>
@@ -152,8 +153,11 @@ export function EditDropboxDialog({
             </div>
           </div>
 
-          <Button disabled={saving || !form.name} onClick={save}>{t('save')}</Button>
         </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t('cancel')}</Button>
+          <Button disabled={saving || !form.name} onClick={save}>{t('save')}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
