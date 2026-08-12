@@ -80,10 +80,12 @@ export function ResponsiveBreadcrumb({ items, className }: ResponsiveBreadcrumbP
     
     return (
       <React.Fragment key={item.path}>
-        {index > 0 && <BreadcrumbSeparator />}
-        <BreadcrumbItem>
+        {index > 0 && <BreadcrumbSeparator className="shrink-0" />}
+        {/* min-w-0 lets the truncating label shrink below its content width
+            instead of pushing the row past the viewport. */}
+        <BreadcrumbItem className="min-w-0">
           {isLast ? (
-            <BreadcrumbPage>
+            <BreadcrumbPage className="flex items-center">
               <Icon className="h-4 w-4 mr-1 shrink-0" />
               <span className={cn("truncate", maxWidthClass)}>{item.name}</span>
             </BreadcrumbPage>
@@ -102,12 +104,12 @@ export function ResponsiveBreadcrumb({ items, className }: ResponsiveBreadcrumbP
     <Breadcrumb className={cn("mb-4", className)}>
       <BreadcrumbList>
         {/* Mobile view: ellipsize middle items, keep last 2 items readable */}
-        <div className="flex items-center sm:hidden">
+        <div className="flex min-w-0 max-w-full items-center sm:hidden">
           {renderMobileBreadcrumb()}
         </div>
         
         {/* Desktop view: show all items with reasonable truncation */}
-        <div className="hidden sm:flex sm:items-center">
+        <div className="hidden min-w-0 max-w-full sm:flex sm:items-center">
           {renderDesktopBreadcrumb()}
         </div>
       </BreadcrumbList>
