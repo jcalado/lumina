@@ -67,6 +67,9 @@ COPY package.json package-lock.json* ./
 COPY tsconfig.json ./
 COPY next.config.js ./
 COPY middleware.ts ./
+# Prisma 7 reads the datasource URL from here, not from schema.prisma, so the
+# CLI needs it wherever migrations run.
+COPY prisma.config.ts ./
 # No tailwind.config.ts: v4 is configured from CSS (@import 'tailwindcss')
 # plus the PostCSS plugin below.
 COPY postcss.config.js ./
@@ -182,6 +185,7 @@ COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 
 # Copy schema and package for potential prisma resolution
 COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
 USER node
