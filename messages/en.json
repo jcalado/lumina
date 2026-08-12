@@ -1,6 +1,15 @@
 {
   "albums": {
-    "photos_in_this_album": "{count, plural, =0 {No photos} =1 {one photo} other {# photos}} in this album."
+    "photos_in_this_album": "{count, plural, =0 {No photos} =1 {one photo} other {# photos}} in this album.",
+    "download_album": "Download",
+    "downloading": "Downloading...",
+    "favorites_only": "Favorites",
+    "newest_first": "Newest first",
+    "oldest_first": "Oldest first",
+    "photos": "photos",
+    "show_all_photos": "Show all photos",
+    "show_favorites_only": "Show favorites only",
+    "sort_by_date": "Sort by date"
   },
   "home": {
     "title": "Lumina Gallery",

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { Folder, Heart, Home } from 'lucide-react';
 import { AlbumHeader } from '@/components/Album/AlbumHeader';
-import { SortFilterControls } from '@/components/Album/SortFilterControls';
+import { AlbumToolbar } from '@/components/Album/AlbumToolbar';
 import { SubAlbumGrid } from '@/components/Album/SubAlbumGrid';
 import { MediaGrid } from '@/components/Album/MediaGrid';
 import { MediaLightbox } from '@/components/Gallery/MediaLightbox';
@@ -178,20 +178,17 @@ export function AlbumClient({ initialData, slugPath }: AlbumClientProps) {
       <ResponsiveBreadcrumb items={breadcrumbItems} />
 
       {/* Header */}
-      <AlbumHeader
-        album={initialData.album}
-        onDownload={handleDownload}
-        isDownloading={isDownloading}
-        hasPhotos={hasPhotos}
-      />
+      <AlbumHeader album={initialData.album} />
 
-      {/* Sort & Filter Controls */}
+      {/* Download + view controls */}
       {hasPhotos && (
-        <SortFilterControls
+        <AlbumToolbar
           sortOrder={sortOrder}
           onSortChange={handleSortChange}
           showFavoritesOnly={showFavoritesOnly}
           onFavoritesToggle={setShowFavoritesOnly}
+          onDownload={handleDownload}
+          isDownloading={isDownloading}
         />
       )}
 
