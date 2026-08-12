@@ -83,8 +83,8 @@ async function getDashboardStats() {
 
 function DashboardStatsLoading() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div className="grid gap-4 @xl/dash:grid-cols-2 @4xl/dash:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
         <Card key={i} className="animate-pulse">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="h-4 bg-muted rounded w-20" />
@@ -138,7 +138,7 @@ async function DashboardStats() {
     : t("loadingStorageData")
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 @xl/dash:grid-cols-2 @4xl/dash:grid-cols-4">
       {statCards.map((stat) => {
         const Icon = stat.icon
         return (
@@ -146,7 +146,7 @@ async function DashboardStats() {
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{stat.title}</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground text-balance">{stat.title}</p>
                   <div className="text-3xl font-bold tabular-nums">{stat.value}</div>
                   <p className="text-xs text-muted-foreground">{stat.description}</p>
                 </div>
@@ -163,7 +163,7 @@ async function DashboardStats() {
         <CardContent className="p-5">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("storageUsage")}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground text-balance">{t("storageUsage")}</p>
               <div className="text-3xl font-bold tabular-nums">{storageValue}</div>
               <p className="text-xs text-muted-foreground">{storageDesc}</p>
             </div>
@@ -209,8 +209,8 @@ function SystemStatusLoading() {
         <CardTitle>{t("systemStatus")}</CardTitle>
         <CardDescription>{t("currentSystemHealth")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
+      <CardContent className="@container/panel">
+        <div className="grid gap-3 @sm/panel:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-lg border p-3 animate-pulse">
               <div className="flex items-start gap-3">
@@ -247,8 +247,8 @@ async function SystemStatus() {
         <CardTitle>{t("systemStatus")}</CardTitle>
         <CardDescription>{t("currentSystemHealth")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
+      <CardContent className="@container/panel">
+        <div className="grid gap-3 @sm/panel:grid-cols-2">
           {services.map((svc) => {
             const Icon = svc.icon
             const style = statusStyles[svc.result.status]
@@ -331,8 +331,8 @@ function QuickActions() {
         <CardTitle>{t("quickActions")}</CardTitle>
         <CardDescription>{t("commonAdminTasks")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
+      <CardContent className="@container/panel">
+        <div className="grid gap-3 @sm/panel:grid-cols-2">
           {actions.map((action) => {
             const Icon = action.icon
             return (
@@ -417,12 +417,14 @@ async function RecentActivity() {
               <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">{t("updatedAlbums")}</h4>
               <div className="space-y-2">
                 {recentAlbums.map((album) => (
-                  <div key={album.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="truncate max-w-[200px]">{album.name}</span>
+                  <div key={album.id} className="flex items-center justify-between gap-3 text-sm">
+                    {/* min-w-0 lets the name truncate instead of forcing the
+                        timestamp to wrap onto a second line. */}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{album.name}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                       {formatDistanceToNow(album.updatedAt, { addSuffix: true })}
                     </span>
                   </div>
@@ -442,21 +444,27 @@ async function RecentActivity() {
 
 export default function AdminDashboardPage() {
   return (
-    <div className="space-y-6">
+    // Breakpoints are container-based, not viewport-based: this content sits
+    // beside a sidebar that collapses, so the viewport is a poor proxy for the
+    // width actually available here.
+    <div className="@container/dash space-y-6">
       <Suspense fallback={<DashboardStatsLoading />}>
         <DashboardStats />
       </Suspense>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 @2xl/dash:grid-cols-2 @6xl/dash:grid-cols-3">
         <Suspense fallback={<SystemStatusLoading />}>
           <SystemStatus />
         </Suspense>
 
         <QuickActions />
 
-        <Suspense fallback={<RecentActivityLoading />}>
-          <RecentActivity />
-        </Suspense>
+        {/* Odd one out in a two-up row: span it rather than leave a gap. */}
+        <div className="@2xl/dash:col-span-2 @6xl/dash:col-span-1">
+          <Suspense fallback={<RecentActivityLoading />}>
+            <RecentActivity />
+          </Suspense>
+        </div>
       </div>
     </div>
   )

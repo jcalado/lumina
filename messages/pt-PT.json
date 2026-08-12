@@ -199,7 +199,7 @@
         "visibleToVisitors": "Visíveis para visitantes",
         "totalMedia": "Total de Média",
         "photosAndVideos": "{photos} fotos, {videos} vídeos",
-        "storageUsage": "Uso de Armazenamento",
+        "storageUsage": "Armazenamento",
         "objectsInS3": "{count} objetos no S3",
         "loadingStorageData": "A carregar dados de armazenamento...",
         "systemStatus": "Estado do Sistema",
