@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { prisma } from '@/lib/prisma';
 import { getS3Service } from '@/lib/s3';
 import { getPhotoOrientation } from '@/lib/photo-orientation';
@@ -18,11 +19,17 @@ import type {
  * Replaces the client-side API route with direct Prisma calls, batched
  * sub-album queries (N+1 eliminated), inline breadcrumbs, and direct
  * S3 URLs embedded in thumbnail data.
+ *
+ * Wrapped in React `cache()` so generateMetadata() and the page component share
+ * one result per request — Next only dedupes fetch(), not Prisma calls, so this
+ * otherwise runs the whole pipeline twice per album view. Note the memo keys on
+ * argument identity: callers passing an `options` object literal will not share
+ * a cache entry with each other.
  */
-export async function getAlbumPageData(
+export const getAlbumPageData = cache(async (
   slugPath: string,
   options?: { sortBy?: 'asc' | 'desc'; page?: number; limit?: number }
-): Promise<AlbumPageData | null> {
+): Promise<AlbumPageData | null> => {
   const s3 = getS3Service();
   const sortBy = options?.sortBy ?? 'asc';
 
@@ -642,4 +649,4 @@ export async function getAlbumPageData(
     },
     breadcrumbs,
   };
-}
+});

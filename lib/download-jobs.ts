@@ -137,7 +137,11 @@ async function writeZip(outPath: string, filename: string, items: Array<{ name: 
 
   await new Promise<void>((resolve, reject) => {
     const output = fs.createWriteStream(outPath);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
+    // Album contents are JPEG/PNG originals — already entropy-coded, so deflate
+    // buys ~0% while capping throughput at ~40 MB/s. Storing instead runs at
+    // ~200 MB/s, which also keeps the archiver queue from backing up behind the
+    // S3 producer. Matches app/api/albums/download/route.ts.
+    const archive = new ZipArchive({ zlib: { level: 0 } });
 
     output.on('close', () => resolve());
     archive.on('warning', (err) => {
