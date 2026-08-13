@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
+import {
+  resolveThumbnail,
+  IMMUTABLE_CACHE_CONTROL,
+  PROVISIONAL_CACHE_CONTROL,
+} from '@/lib/thumbnail-resolution';
 
 interface Params {
   id: string;
@@ -34,18 +39,30 @@ export async function GET(
       return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
     }
 
-    let s3Key = photo.s3Key; // Default to original photo
-
-    // Try to find a thumbnail of the requested size
-    if (size !== 'original') {
-      const thumbnail = photo.thumbnails.find((t: any) => t.size.toLowerCase() === size.toLowerCase());
-      if (thumbnail) {
-        s3Key = thumbnail.s3Key;
-      }
-    }
-
-    // Get the image data directly from S3
     const s3Service = new S3Service();
+
+    let s3Key: string;
+    let cacheControl: string;
+
+    if (size === 'original') {
+      s3Key = photo.s3Key;
+      cacheControl = IMMUTABLE_CACHE_CONTROL;
+    } else {
+      const resolved = resolveThumbnail(photo.thumbnails, size);
+      if (!resolved) {
+        // No thumbnails exist yet (pre-generation, or the worker is behind). Redirect to
+        // a presigned URL rather than buffering a multi-MB original through Node, and
+        // keep the TTL short so clients pick up the real thumbnail once it lands.
+        const url = await s3Service.getSignedUrl(photo.s3Key, 3600);
+        return NextResponse.redirect(url, {
+          headers: { 'Cache-Control': PROVISIONAL_CACHE_CONTROL },
+        });
+      }
+      s3Key = resolved.s3Key;
+      // Only cache long-term when the bytes are the size that was actually requested;
+      // a substituted size must not be pinned for a year.
+      cacheControl = resolved.exact ? IMMUTABLE_CACHE_CONTROL : PROVISIONAL_CACHE_CONTROL;
+    }
     
     try {
       // Get the image data from S3
@@ -67,7 +84,7 @@ export async function GET(
       return new NextResponse(new Uint8Array(imageBuffer), {
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cache-Control': cacheControl,
         },
       });
     } catch (s3Error) {
