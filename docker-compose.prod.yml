@@ -67,6 +67,11 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    environment:
+      # Shared with the worker container, which builds the zips this tier serves.
+      # Must not be /tmp: that is a per-container tmpfs here, so archives would be RAM
+      # and invisible across containers.
+      - DOWNLOAD_DIR=/app/temp/downloads
     volumes:
       - ./temp:/app/temp
       - next_cache:/app/.next/cache
@@ -127,6 +132,9 @@ services:
     command: npm run worker:all
     env_file:
       - .env
+    environment:
+      # Shared with the app container, which serves the zips this tier builds.
+      - DOWNLOAD_DIR=/app/temp/downloads
     networks:
       - lumina-network
     depends_on:

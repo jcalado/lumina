@@ -30,10 +30,11 @@
     "worker:thumbnails:all": "tsx scripts/thumbnail-queue-worker-all.ts",
     "worker:blurhash": "tsx scripts/blurhash-worker.ts",
     "worker:exif": "tsx scripts/exif-worker.ts",
+    "worker:downloads": "tsx scripts/download-worker.ts",
     "docker:build:prod": "docker compose -f docker-compose.prod.yml build --parallel",
     "docker:build:prod:fast": "docker compose -f docker-compose.prod.yml build --parallel --no-cache-filter builder",
     "docker:up:prod": "docker compose -f docker-compose.prod.yml up -d",
-    "worker:all": "concurrently \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:blurhash\"",
+    "worker:all": "concurrently \"npm:worker:thumbnails:all\" \"npm:worker:exif\" \"npm:worker:blurhash\" \"npm:worker:downloads\"",
     "seed:admin": "tsx scripts/create-initial-admin.ts",
     "seed:mock": "tsx scripts/seed-mock-albums.ts",
     "dropbox:cleanup": "tsx scripts/cleanup-dropbox-staging.ts"
