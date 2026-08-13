@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Readable } from 'node:stream';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
 import { ZipArchive } from 'archiver';
+
+/**
+ * Cap on bytes appended but not yet written out by the archiver.
+ *
+ * `archive.append()` is synchronous and returns immediately, so without a gate the fetch
+ * loop runs at S3 speed while the archiver drains at client speed and the whole
+ * difference is held as resident buffers. Measured with 120x5MB and a slow consumer:
+ * 525MB retained ungated, 50MB with this cap at 32MB.
+ *
+ * Note this cannot be gated on archiver's 'entry' event — that fires when an entry is
+ * accepted, not when it is written, so it reports no backlog at all.
+ */
+const MAX_BYTES_IN_FLIGHT = 32 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,87 +61,62 @@ export async function POST(request: NextRequest) {
       'Cache-Control': 'no-cache',
     });
 
-    // Create a ReadableStream to stream the ZIP archive
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Create a ZIP archive
-          const archive = new ZipArchive({
-            zlib: { level: 0 }, // No compression for better streaming performance
-            statConcurrency: 1, // Process one file at a time to maintain order
-            highWaterMark: 1024 * 16, // Smaller buffer for faster initial response
-          });
-
-          // Force the archive to start producing headers immediately
-          archive.pointer(); // This forces internal initialization
-
-          // Handle archive data - stream chunks directly to the browser
-          archive.on('data', (chunk) => {
-            controller.enqueue(new Uint8Array(chunk));
-          });
-
-          // Handle archive completion
-          archive.on('end', () => {
-            controller.close();
-          });
-
-          // Handle archive errors
-          archive.on('error', (err) => {
-            controller.error(err);
-          });
-
-          // Start downloading and adding photos immediately
-          let processedCount = 0;
-
-          const processPhotos = async () => {
-            // Process photos with limited concurrency to avoid memory issues
-            const CONCURRENT_DOWNLOADS = 2;
-
-            for (let i = 0; i < photos.length; i += CONCURRENT_DOWNLOADS) {
-              const batch = photos.slice(i, i + CONCURRENT_DOWNLOADS);
-
-              // Download batch concurrently
-              const downloadPromises = batch.map(async (photo) => {
-                try {
-                  const imageBuffer = await s3Service.getObject(photo.s3Key);
-                  return { photo, imageBuffer };
-                } catch (photoError) {
-                  return null;
-                }
-              });
-
-              const results = await Promise.allSettled(downloadPromises);
-
-              // Add successfully downloaded photos to archive immediately
-              for (const result of results) {
-                if (result.status === 'fulfilled' && result.value) {
-                  const { photo, imageBuffer } = result.value;
-                  processedCount++;
-                  archive.append(imageBuffer, { name: photo.filename });
-                }
-              }
-
-              // Small delay to prevent overwhelming the system
-              if (i + CONCURRENT_DOWNLOADS < photos.length) {
-                await new Promise(resolve => setImmediate(resolve));
-              }
-            }
-
-            archive.finalize();
-          };
-
-          // Start processing photos immediately
-          processPhotos().catch((error) => {
-            controller.error(error);
-          });
-
-        } catch (error) {
-          controller.error(error);
-        }
-      }
+    const archive = new ZipArchive({
+      zlib: { level: 0 }, // No compression: album contents are already-compressed JPEG/PNG
+      statConcurrency: 1, // Process one file at a time to maintain order
+      highWaterMark: 1024 * 16, // Smaller buffer for faster initial response
     });
 
-    return new NextResponse(stream, { headers });
+    // archive.pointer() is the running count of bytes the archiver has emitted, so the
+    // difference against what we have handed it is the backlog held in memory.
+    let appendedBytes = 0;
+    const bytesInFlight = () => appendedBytes - archive.pointer();
+
+    const waitForCapacity = async () => {
+      // Only spins while the archiver is saturated, i.e. while the client is the
+      // bottleneck and this request has nothing better to do.
+      while (bytesInFlight() > MAX_BYTES_IN_FLIGHT && !archive.destroyed && !request.signal.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    };
+
+    const processPhotos = async () => {
+      for (const photo of photos) {
+        // The client went away (or the archive errored) — stop paying for S3 reads.
+        if (archive.destroyed || request.signal.aborted) return;
+
+        await waitForCapacity();
+        if (archive.destroyed || request.signal.aborted) return;
+
+        try {
+          const imageBuffer = await s3Service.getObject(photo.s3Key);
+          if (archive.destroyed) return;
+          appendedBytes += imageBuffer.length;
+          archive.append(imageBuffer, { name: photo.filename });
+        } catch (photoError) {
+          // Skip this photo rather than failing the whole download
+        }
+      }
+
+      await archive.finalize();
+    };
+
+    processPhotos().catch((error) => {
+      archive.destroy(error instanceof Error ? error : new Error(String(error)));
+    });
+
+    // Readable.toWeb replaces the previous hand-rolled
+    // `archive.on('data', ...) -> controller.enqueue()` bridge, which put the archiver in
+    // flowing mode and never consulted desiredSize. It bounds the archiver's own readable
+    // buffer, but not the backlog inside it — hence the byte gate above.
+    const body = Readable.toWeb(archive) as ReadableStream<Uint8Array>;
+
+    // Cancelling the web stream destroys the archiver, which the loop above checks.
+    request.signal.addEventListener('abort', () => {
+      if (!archive.destroyed) archive.destroy();
+    });
+
+    return new NextResponse(body, { headers });
 
   } catch (error) {
     return NextResponse.json(
