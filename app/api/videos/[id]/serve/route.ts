@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { S3Service } from '@/lib/s3';
+import {
+  resolveThumbnail,
+  IMMUTABLE_CACHE_CONTROL,
+  PROVISIONAL_CACHE_CONTROL,
+} from '@/lib/thumbnail-resolution';
 
 interface Params {
   id: string;
@@ -34,20 +39,31 @@ export async function GET(
       return NextResponse.json({ error: 'Video not found' }, { status: 404 });
     }
 
-    let s3Key = video.s3Key; // Default to original video
-    let isVideoThumbnail = false;
-
-    // Try to find a thumbnail of the requested size
-    if (size !== 'original') {
-      const thumbnail = video.thumbnails.find((t: any) => t.size.toLowerCase() === size.toLowerCase());
-      if (thumbnail) {
-        s3Key = thumbnail.s3Key;
-        isVideoThumbnail = true;
-      }
-    }
-
-    // Get the video data directly from S3
     const s3Service = new S3Service();
+
+    let s3Key: string;
+    let isVideoThumbnail = false;
+    let cacheControl: string;
+
+    if (size === 'original') {
+      s3Key = video.s3Key;
+      cacheControl = IMMUTABLE_CACHE_CONTROL;
+    } else {
+      const resolved = resolveThumbnail(video.thumbnails, size);
+      if (!resolved) {
+        // No poster generated yet. Previously this buffered the entire video file into
+        // memory and served it as video/mp4 into an <Image> tag; redirect to a presigned
+        // URL instead so the bytes never pass through Node, with a short TTL so the real
+        // poster is picked up once the worker generates it.
+        const url = await s3Service.getSignedUrl(video.s3Key, 3600);
+        return NextResponse.redirect(url, {
+          headers: { 'Cache-Control': PROVISIONAL_CACHE_CONTROL },
+        });
+      }
+      s3Key = resolved.s3Key;
+      isVideoThumbnail = true;
+      cacheControl = resolved.exact ? IMMUTABLE_CACHE_CONTROL : PROVISIONAL_CACHE_CONTROL;
+    }
     
     try {
       // Get the video data from S3
@@ -87,7 +103,7 @@ export async function GET(
       return new NextResponse(new Uint8Array(videoBuffer), {
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cache-Control': cacheControl,
           'Accept-Ranges': 'bytes', // Important for video seeking
         },
       });
