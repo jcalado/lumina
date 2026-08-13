@@ -38,6 +38,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
+      - DOWNLOAD_DIR=/app/temp/downloads
       - NEXTAUTH_SECRET=your-super-secure-production-secret-key
       - NEXTAUTH_URL=https://yourdomain.com
       - ADMIN_EMAIL=admin@yourdomain.com
@@ -96,6 +97,29 @@ services:
     environment:
       - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
       - REDIS_URL=redis://redis:6379
+      - S3_ENDPOINT=https://s3.amazonaws.com
+      - S3_BUCKET=your-production-bucket
+      - S3_ACCESS_KEY=your-production-access-key
+      - S3_SECRET_KEY=your-production-secret-key
+      - S3_REGION=us-east-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./temp:/app/temp
+    deploy:
+      replicas: 1
+  worker-downloads:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run worker:downloads
+    environment:
+      - DATABASE_URL=postgresql://lumina_user:secure_password_change_this@postgres:5432/lumina_production
+      - REDIS_URL=redis://redis:6379
+      - DOWNLOAD_DIR=/app/temp/downloads
       - S3_ENDPOINT=https://s3.amazonaws.com
       - S3_BUCKET=your-production-bucket
       - S3_ACCESS_KEY=your-production-access-key

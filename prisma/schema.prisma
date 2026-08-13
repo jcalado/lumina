@@ -127,6 +127,32 @@ model BlurhashJob {
 
 // ThumbnailJob removed (migrated to BullMQ queues)
 
+/// Album/photo zip builds. Previously an in-process Map in lib/download-jobs.ts, which
+/// meant status was invisible to any process other than the one that started the build.
+/// Persisting it is what lets the worker generate the zip and the web tier report on it.
+model DownloadJob {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  /// album:<id>:<updatedAt> | photos:<sha256 of sorted ids> — lets repeat clicks reuse a build
+  dedupeKey String
+  type      String // 'album' | 'photos'
+  albumPath String?
+  photoIds  String?   @db.Text // JSON array, for type='photos'
+  status    JobStatus @default(PENDING)
+  total     Int       @default(0)
+  processed Int       @default(0)
+  filename  String?
+  filePath  String?
+  error     String?   @db.Text
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([dedupeKey, status])
+  @@index([expiresAt])
+  @@map("download_jobs")
+}
+
 model SiteSettings {
   id        String   @id @default(cuid())
   key       String   @unique
