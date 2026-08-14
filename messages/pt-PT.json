@@ -388,6 +388,7 @@
         "linkExpired": "Esta ligação de envio expirou.",
         "linkFull": "Esta ligação de envio já não aceita ficheiros.",
         "linkNotFound": "Esta ligação de envio não foi encontrada.",
+        "uploadsUnavailable": "Os envios estão temporariamente indisponíveis. Tente novamente mais tarde.",
         "uploadPromptPhotos": "Envie as suas fotografias abaixo.",
         "uploadPromptPhotosVideos": "Envie as suas fotografias e vídeos abaixo.",
         "completeChallenge": "Por favor, complete o desafio de verificação",

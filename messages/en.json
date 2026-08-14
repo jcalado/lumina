@@ -327,6 +327,7 @@
     "linkExpired": "This upload link has expired.",
     "linkFull": "This upload link is no longer accepting files.",
     "linkNotFound": "This upload link was not found.",
+    "uploadsUnavailable": "Uploads are temporarily unavailable. Please try again later.",
     "uploadPromptPhotos": "Upload your photos below.",
     "uploadPromptPhotosVideos": "Upload your photos and videos below.",
     "completeChallenge": "Please complete the verification challenge",

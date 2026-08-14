@@ -48,11 +48,17 @@ WORKDIR /app
 ARG DATABASE_URL=postgresql://build:build@localhost:5432/build
 ARG NEXTAUTH_SECRET=build-time-placeholder
 ARG NEXTAUTH_URL=http://localhost:3000
+# NEXT_PUBLIC_* is inlined by `next build`, including in server components, and
+# .dockerignore keeps .env out of the build context. Without this arg the site
+# key compiles to "", no Turnstile widget renders, and every upload is rejected
+# with "Verification failed" by the secret that IS present at runtime.
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 
 # Set environment variables for the build process
 ENV DATABASE_URL=$DATABASE_URL
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ENV NEXTAUTH_URL=$NEXTAUTH_URL
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
 COPY --from=deps /app/node_modules ./node_modules
 

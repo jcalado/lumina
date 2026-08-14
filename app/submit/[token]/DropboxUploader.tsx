@@ -10,7 +10,15 @@ type Props = {
   maxFiles: number; maxFileSizeBytes: number; turnstileSiteKey: string;
 };
 
-declare global { interface Window { turnstile?: { getResponse: (id?: string) => string } } }
+declare global {
+  interface Window {
+    turnstile?: {
+      getResponse: (id?: string) => string | undefined;
+      reset: (id?: string) => void;
+      isExpired: (id?: string) => boolean;
+    };
+  }
+}
 
 export function DropboxUploader(props: Props) {
   const t = useTranslations('dropbox');
@@ -26,6 +34,10 @@ export function DropboxUploader(props: Props) {
   async function onSubmit() {
     setError(''); setStatus('uploading');
     try {
+      // Tokens are single-use and expire after 300s, so a stale one from a
+      // previous attempt (or a slow file pick) is rejected server-side. Take a
+      // fresh one whenever the widget says the current token is spent.
+      if (props.turnstileSiteKey && window.turnstile?.isExpired?.()) window.turnstile.reset();
       const turnstileToken = window.turnstile?.getResponse();
       if (props.turnstileSiteKey && !turnstileToken) throw new Error(t('completeChallenge'));
 
@@ -50,6 +62,10 @@ export function DropboxUploader(props: Props) {
       if (!confirmRes.ok) throw new Error((await confirmRes.json()).error || t('finalizeFailed'));
       setStatus('done');
     } catch (e) {
+      // The attempt burned the token even if it failed later (bad passphrase,
+      // oversized file). Without a reset every retry replays a spent token and
+      // comes back as a verification failure.
+      if (props.turnstileSiteKey) window.turnstile?.reset?.();
       setError(e instanceof Error ? e.message : t('uploadFailed')); setStatus('error');
     }
   }

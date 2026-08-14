@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { verifyTurnstile } from './turnstile';
+import { verifyTurnstile, turnstileConfig } from './turnstile';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -22,5 +22,36 @@ describe('verifyTurnstile', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('TURNSTILE_SECRET_KEY', '');
     expect(await verifyTurnstile('tok')).toBe(false);
+  });
+  it('forwards a real client IP but not the "unknown" placeholder', async () => {
+    vi.stubEnv('TURNSTILE_SECRET_KEY', 'x');
+    const sent: Array<string | null> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: { body: URLSearchParams }) => {
+      expect(url).toContain('/siteverify');
+      sent.push(init.body.get('remoteip'));
+      return { json: async () => ({ success: true }) };
+    }));
+
+    await verifyTurnstile('tok', '203.0.113.7');
+    await verifyTurnstile('tok', 'unknown');
+    expect(sent).toEqual(['203.0.113.7', null]);
+  });
+});
+
+describe('turnstileConfig', () => {
+  it('flags a secret configured without a site key', () => {
+    vi.stubEnv('TURNSTILE_SECRET_KEY', 'x');
+    vi.stubEnv('NEXT_PUBLIC_TURNSTILE_SITE_KEY', '');
+    expect(turnstileConfig().misconfigured).toBe(true);
+  });
+  it('is not misconfigured when both keys are present', () => {
+    vi.stubEnv('TURNSTILE_SECRET_KEY', 'x');
+    vi.stubEnv('NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'site');
+    expect(turnstileConfig().misconfigured).toBe(false);
+  });
+  it('is not misconfigured when Turnstile is fully disabled', () => {
+    vi.stubEnv('TURNSTILE_SECRET_KEY', '');
+    vi.stubEnv('NEXT_PUBLIC_TURNSTILE_SITE_KEY', '');
+    expect(turnstileConfig().misconfigured).toBe(false);
   });
 });

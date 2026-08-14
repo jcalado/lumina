@@ -53,6 +53,8 @@ services:
         DATABASE_URL: ${DATABASE_URL}
         NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
         NEXTAUTH_URL: ${NEXTAUTH_URL}
+        # Baked into the bundle at build time, unlike the env_file values below.
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
     image: lumina-app:latest
     env_file:
       - .env
