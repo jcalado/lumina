@@ -6,6 +6,11 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const dropbox = await prisma.dropbox.findUnique({ where: { id }, include: { destinationAlbum: { select: { id: true, name: true } } } });
   if (!dropbox) notFound();
-  const albums = await prisma.album.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+  // Ordered by path so each album follows its parent, which is what lets the
+  // picker render the hierarchy from a flat list.
+  const albums = await prisma.album.findMany({
+    select: { id: true, name: true, path: true },
+    orderBy: { path: 'asc' },
+  });
   return <ReviewClient dropboxId={id} dropboxName={dropbox.name} destinationAlbumId={dropbox.destinationAlbumId} albums={albums} />;
 }
