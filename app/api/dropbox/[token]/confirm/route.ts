@@ -4,7 +4,16 @@ import { getS3Service } from '@/lib/s3';
 import { tryReserveCap } from '@/lib/dropbox/cap';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+  try {
+    return await confirm(request, await params);
+  } catch (e) {
+    // Keep the response JSON; an empty 500 body reads as a parse error client-side.
+    console.error('[dropbox/confirm] unhandled error:', e);
+    return NextResponse.json({ error: 'Upload could not be finalized' }, { status: 500 });
+  }
+}
+
+async function confirm(request: NextRequest, { token }: { token: string }) {
   const dropbox = await prisma.dropbox.findUnique({ where: { token } });
   if (!dropbox) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 

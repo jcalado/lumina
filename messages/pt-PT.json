@@ -394,6 +394,7 @@
         "completeChallenge": "Por favor, complete o desafio de verificação",
         "uploadFailed": "Falha no envio",
         "finalizeFailed": "Não foi possível concluir o envio",
+        "storageRejected": "{count, plural, one {# ficheiro} other {# ficheiros}} não puderam ser guardados (HTTP {status}). Tente novamente.",
         "thankYou": "Obrigado!",
         "received": "O seu envio foi recebido e aguarda revisão.",
         "passphrase": "Palavra-passe",

@@ -333,6 +333,7 @@
     "completeChallenge": "Please complete the verification challenge",
     "uploadFailed": "Upload failed",
     "finalizeFailed": "Could not finalize upload",
+    "storageRejected": "{count, plural, one {# file} other {# files}} could not be stored (HTTP {status}). Please try again.",
     "thankYou": "Thank you!",
     "received": "Your upload was received and is awaiting review.",
     "passphrase": "Passphrase",

@@ -31,6 +31,20 @@ export function DropboxUploader(props: Props) {
 
   const accept = props.allowVideos ? 'image/*,video/*' : 'image/*';
 
+  /**
+   * A crashed route handler answers with an empty body, so calling .json() on
+   * it throws "unexpected end of data" and buries the real status. Report what
+   * the server actually said instead.
+   */
+  async function errorFrom(res: Response, fallback: string): Promise<Error> {
+    const body = await res.text().catch(() => '');
+    try {
+      return new Error(JSON.parse(body).error || fallback);
+    } catch {
+      return new Error(`${fallback} (HTTP ${res.status})`);
+    }
+  }
+
   async function onSubmit() {
     setError(''); setStatus('uploading');
     try {
@@ -49,17 +63,21 @@ export function DropboxUploader(props: Props) {
           files: files.map((f) => ({ filename: f.name, contentType: f.type || 'application/octet-stream', size: f.size })),
         }),
       });
-      if (!presignRes.ok) throw new Error((await presignRes.json()).error || t('uploadFailed'));
+      if (!presignRes.ok) throw await errorFrom(presignRes, t('uploadFailed'));
       const { submissionId, uploads } = await presignRes.json();
 
-      await Promise.all(uploads.map((u: { presignedUrl: string }, i: number) =>
+      // A rejected PUT used to pass silently here, leaving confirm to discard
+      // the missing objects and report a bare "0 accepted".
+      const puts = await Promise.all(uploads.map((u: { presignedUrl: string }, i: number) =>
         fetch(u.presignedUrl, { method: 'PUT', body: files[i], headers: { 'Content-Type': files[i].type || 'application/octet-stream' } })
       ));
+      const failed = puts.filter((r) => !r.ok);
+      if (failed.length > 0) throw new Error(t('storageRejected', { count: failed.length, status: failed[0].status }));
 
       const confirmRes = await fetch(`/api/dropbox/${props.token}/confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId }),
       });
-      if (!confirmRes.ok) throw new Error((await confirmRes.json()).error || t('finalizeFailed'));
+      if (!confirmRes.ok) throw await errorFrom(confirmRes, t('finalizeFailed'));
       setStatus('done');
     } catch (e) {
       // The attempt burned the token even if it failed later (bad passphrase,

@@ -8,7 +8,19 @@ import { getS3Service } from '@/lib/s3';
 import { getContentType } from '@/lib/utils';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+  try {
+    return await presign(request, await params);
+  } catch (e) {
+    // An unhandled throw here answers with an empty body, which surfaces in the
+    // browser as a JSON parse error rather than anything actionable. Common
+    // causes: DROPBOX_IP_HASH_SALT unset in production, Redis unreachable, S3
+    // credentials missing.
+    console.error('[dropbox/presign] unhandled error:', e);
+    return NextResponse.json({ error: 'Upload could not be started' }, { status: 500 });
+  }
+}
+
+async function presign(request: NextRequest, { token }: { token: string }) {
   const dropbox = await prisma.dropbox.findUnique({ where: { token } });
   if (!dropbox || !dropbox.enabled) return NextResponse.json({ error: 'This dropbox is not available' }, { status: 404 });
   if (dropbox.expiresAt && dropbox.expiresAt < new Date()) return NextResponse.json({ error: 'This dropbox has expired' }, { status: 410 });
